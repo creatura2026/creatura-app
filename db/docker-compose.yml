@@ -1,0 +1,26 @@
+# =============================================================================
+# CREATURA - Base de données locale (AS-42)
+#
+#   cp .env.example .env        (Windows : Copy-Item .env.example .env)
+#   docker compose up -d        démarre la base, initialisée au 1er lancement
+#   docker compose ps           doit afficher "healthy"
+#   docker compose down -v      supprime tout (pour repartir de zéro)
+#
+# Le back se connecte avec : postgres://creatura:creatura@localhost:5432/creatura
+# =============================================================================
+name: creatura-db
+
+services:
+  db:
+    build: .
+    image: creatura-db:local
+    container_name: creatura-db
+    env_file: .env
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - creatura-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  creatura-db-data:
