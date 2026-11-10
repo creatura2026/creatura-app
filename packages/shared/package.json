@@ -1,0 +1,23 @@
+{
+  "name": "@creatura/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Thème, composants et types partagés entre la PWA joueur et le dashboard admin",
+  "exports": {
+    "./theme.css": "./src/theme.css",
+    "./ui/*": "./src/ui/*",
+    "./assets/*": "./src/assets/*",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "generate:api": "openapi-typescript ../../creatura-api.openapi.yaml -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/pixelify-sans": "^5.3.0"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  }
+}
