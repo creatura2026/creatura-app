@@ -15,19 +15,29 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
+      workbox: {
+        // Illustrations et polices (sous-ensembles latins) disponibles hors ligne.
+        globPatterns: ['**/*.{js,css,html,ico,svg}', 'assets/*.png', 'assets/*-latin-*.woff2'],
+        navigateFallback: '/index.html',
+      },
       manifest: {
         name: 'Créatura',
         short_name: 'Créatura',
         description: 'Collectionne et échange des cartes de créatures',
         lang: 'fr',
         display: 'standalone',
-        theme_color: '#1f7a4d',
-        background_color: '#ffffff',
+        theme_color: '#25334b',
+        background_color: '#fff7e7',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          {
+            src: 'maskable-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
     }),

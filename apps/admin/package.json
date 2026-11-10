@@ -17,6 +17,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@creatura/shared": "workspace:*",
     "@tanstack/vue-query": "^5.107.1",
     "@vee-validate/zod": "^4.15.1",
     "echarts": "^6.1.0",
