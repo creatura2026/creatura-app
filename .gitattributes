@@ -1,0 +1,7 @@
+# Fins de ligne Linux (LF) pour les fichiers exécutés dans les conteneurs :
+# un script shell avec des fins de ligne Windows (CRLF) plante sous Linux.
+*.sh        text eol=lf
+*.sql       text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+*.png       binary
