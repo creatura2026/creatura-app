@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  vue-demi: true
+
+peerDependencyRules:
+  allowedVersions:
+    openapi-typescript>typescript: "6"

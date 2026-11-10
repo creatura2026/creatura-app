@@ -1,0 +1,20 @@
+# Dépendances
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+coverage/
+
+# Variables d'environnement (ne jamais commiter de secrets)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Éditeurs et système
+.idea/
+.DS_Store
+Thumbs.db
