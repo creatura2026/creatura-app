@@ -4,6 +4,12 @@
  * Un compte joueur peut se connecter, mais reçoit 403 sur toutes les routes /admin (preuve qualité 02).
  */
 import type { AdminApi } from '@creatura/shared/api/contract'
+import {
+  MAX_CARDS_PER_BOOSTER,
+  MIN_CARDS_PER_BOOSTER,
+  readMockBoosterSettings,
+  writeMockBoosterSettings,
+} from '@creatura/shared/api/mock-settings'
 import type {
   DailyCount,
   PlayerSummary,
@@ -353,6 +359,31 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
           observedRate: total ? (totals[r.code] ?? 0) / total : 0,
         })),
       }
+    },
+
+    async getBoosterSettings() {
+      await delay(100, 220)
+      admin()
+      return clone(readMockBoosterSettings())
+    },
+
+    async updateBoosterSettings(body) {
+      await delay()
+      const account = admin()
+      const n = body.cardsPerBooster
+      if (!Number.isInteger(n) || n < MIN_CARDS_PER_BOOSTER || n > MAX_CARDS_PER_BOOSTER) {
+        const message = `Choisissez entre ${MIN_CARDS_PER_BOOSTER} et ${MAX_CARDS_PER_BOOSTER} cartes.`
+        throw problem('VALIDATION_ERROR', message, {
+          errors: [{ field: 'cardsPerBooster', message }],
+        })
+      }
+      const settings = {
+        cardsPerBooster: n,
+        updatedAt: new Date().toISOString(),
+        updatedBy: { id: account.id, pseudo: account.pseudo },
+      }
+      writeMockBoosterSettings(settings)
+      return clone(settings)
     },
   }
 }

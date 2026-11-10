@@ -56,6 +56,8 @@ export type Period = Schemas['Period']
 export type DailyCount = Schemas['DailyCount']
 export type AdminStats = Schemas['AdminStats']
 export type RarityDistribution = Schemas['RarityDistribution']
+export type BoosterSettings = Schemas['BoosterSettings']
+export type UpdateBoosterSettingsRequest = Schemas['UpdateBoosterSettingsRequest']
 
 /** Erreur levée par les clients API (réelle ou simulée), porteuse du Problem Details du serveur. */
 export class ApiError extends Error {

@@ -64,7 +64,7 @@ const LOOP = [
           <img
             :src="boosterUrl"
             alt="Un booster de cartes Créatura"
-            class="pixelated mx-auto hidden w-56 animate-float lg:block xl:w-64"
+            class="pixelated mx-auto hidden w-[150px] animate-float lg:block xl:w-[225px]"
           />
         </div>
 

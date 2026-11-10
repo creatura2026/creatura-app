@@ -9,6 +9,7 @@ import type {
   AdminTradesQuery,
   AuthTokens,
   Booster,
+  BoosterSettings,
   BoosterToday,
   CollectionPage,
   CollectionQuery,
@@ -29,6 +30,7 @@ import type {
   Trade,
   TradeableCards,
   TradePage,
+  UpdateBoosterSettingsRequest,
   User,
 } from './types'
 
@@ -63,4 +65,6 @@ export interface AdminApi extends AuthApi {
   getAdminStats(query?: AdminStatsQuery): Promise<AdminStats>
   listAdminTrades(query?: AdminTradesQuery): Promise<TradePage>
   getRarityDistribution(query?: RarityDistributionQuery): Promise<RarityDistribution>
+  getBoosterSettings(): Promise<BoosterSettings>
+  updateBoosterSettings(body: UpdateBoosterSettingsRequest): Promise<BoosterSettings>
 }

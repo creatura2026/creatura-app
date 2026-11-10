@@ -57,7 +57,7 @@ const onSubmit = handleSubmit(async (values) => {
   <main class="flex min-h-dvh flex-col bg-ink px-4 py-6 text-cream">
     <BrandMark tone="light" suffix="Admin" />
     <div class="mx-auto my-auto w-full max-w-md py-10">
-      <img :src="boosterUrl" alt="" class="pixelated mx-auto mb-6 w-28" aria-hidden="true" />
+      <img :src="boosterUrl" alt="" class="pixelated mx-auto mb-6 w-[75px]" aria-hidden="true" />
       <p class="eyebrow text-center !text-sun">Piloter Créatura</p>
       <h1 class="mt-2 mb-6 text-center text-3xl font-bold sm:text-4xl">Dashboard administrateur</h1>
 

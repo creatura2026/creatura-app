@@ -18,11 +18,9 @@ import type {
 import { clone, delay, normalize, paginate, problem, uuid } from '@creatura/shared/api/mock-utils'
 import { compareCreatures, CREATURES, FAMILIES, RARITIES } from '@creatura/shared/fixtures/catalog'
 import { nextParisMidnight, parisToday } from '@creatura/shared/format'
+import { readMockBoosterSettings } from '@creatura/shared/api/mock-settings'
 
 import { loadDb, saveDb, type MockBooster, type MockUser } from './db'
-
-/** Nombre de cartes par booster — à valider au point client. */
-export const CARDS_PER_BOOSTER = 5
 
 const withoutUser = ({ id, claimDate, openedAt, cards }: MockBooster): Booster => ({
   id,
@@ -229,6 +227,8 @@ export function createMockPlayerApi({
         claimDate: parisToday(now()),
         available: !booster,
         nextAvailableAt: nextParisMidnight(now()),
+        // Réglé par l'administrateur (dashboard → Réglages du booster).
+        cardsPerBooster: readMockBoosterSettings().cardsPerBooster,
         booster: booster ? clone(withoutUser(booster)) : null,
       }
     },
@@ -251,7 +251,8 @@ export function createMockPlayerApi({
           .map(([id]) => id),
       )
       const cards: BoosterCard[] = []
-      for (let i = 0; i < CARDS_PER_BOOSTER; i++) {
+      const count = readMockBoosterSettings().cardsPerBooster
+      for (let i = 0; i < count; i++) {
         const id = drawCreatureId(random)
         cards.push({ creature: toSummary(id), isNew: !seen.has(id) })
         seen.add(id)
