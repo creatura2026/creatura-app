@@ -27,6 +27,11 @@
   --color-mist: #e7edf2; /* colonnes, fonds neutres */
   --color-line: #aab6bd; /* séparateurs de tableau */
 
+  /* Rareté des cartes : cadre affiché au survol */
+  --color-rarity-common: #9aa7b1;
+  --color-rarity-uncommon: #4776bc;
+  --color-rarity-rare: #f6cb67;
+
   /* Typographies : titres pixel, texte Inter */
   --font-pixel: 'Pixelify Sans', ui-monospace, monospace;
   --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
@@ -173,4 +178,53 @@
   .banner {
     @apply bg-ink px-5 py-4 text-cream;
   }
+}
+
+/*
+ * Cadre de rareté : au survol (ou au focus clavier) d'une carte, un liseré coloré indique sa rareté.
+ * Placer `rarity-frame` + `data-rarity="COMMON|UNCOMMON|RARE"` sur la carte ; le survol peut venir
+ * de la carte elle-même ou du lien / bouton qui l'entoure. `data-show-rarity` l'affiche en permanence.
+ */
+.rarity-frame {
+  --rarity: var(--color-line);
+  transition: box-shadow 140ms steps(2, end);
+}
+.rarity-frame[data-rarity='COMMON'] {
+  --rarity: var(--color-rarity-common);
+}
+.rarity-frame[data-rarity='UNCOMMON'] {
+  --rarity: var(--color-rarity-uncommon);
+}
+.rarity-frame[data-rarity='RARE'] {
+  --rarity: var(--color-rarity-rare);
+}
+.rarity-frame:hover,
+:is(a, button):is(:hover, :focus-visible) .rarity-frame,
+.rarity-frame[data-show-rarity] {
+  box-shadow:
+    0 0 0 4px var(--rarity),
+    0 0 0 6px var(--color-ink),
+    7px 7px 0 6px var(--color-ink);
+}
+/* Les rares scintillent, par paliers pour rester « pixel » */
+@media (prefers-reduced-motion: no-preference) {
+  .rarity-frame[data-rarity='RARE']:hover,
+  :is(a, button):is(:hover, :focus-visible) .rarity-frame[data-rarity='RARE'],
+  .rarity-frame[data-rarity='RARE'][data-show-rarity] {
+    animation: rare-glint 900ms steps(3, end) infinite;
+  }
+}
+@keyframes rare-glint {
+  0%,
+  100% {
+    --rarity: var(--color-rarity-rare);
+  }
+  50% {
+    --rarity: #fff3c4;
+  }
+}
+@property --rarity {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #aab6bd;
 }

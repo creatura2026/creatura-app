@@ -9,7 +9,7 @@ withDefaults(defineProps<{ tone?: 'light' | 'dark'; suffix?: string }>(), { tone
     class="inline-flex items-center gap-2"
     :class="tone === 'light' ? 'text-cream' : 'text-ink'"
   >
-    <img :src="boosterUrl" alt="" class="pixelated h-8 w-auto" aria-hidden="true" />
+    <img :src="boosterUrl" alt="" class="h-8 w-auto" aria-hidden="true" />
     <span class="font-pixel text-xl leading-none font-bold tracking-wide">CREATURA</span>
     <span
       v-if="suffix"

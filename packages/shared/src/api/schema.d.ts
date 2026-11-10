@@ -454,6 +454,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/settings/booster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consulter le réglage des boosters
+         * @description Réservé au rôle `ADMIN`.
+         */
+        get: operations["getBoosterSettings"];
+        /**
+         * Modifier le nombre de cartes par booster
+         * @description Réservé au rôle `ADMIN`. S'applique aux boosters ouverts après la modification ;
+         *     les boosters déjà ouverts ne changent pas.
+         */
+        put: operations["updateBoosterSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -605,7 +630,7 @@ export interface components {
             claimDate: string;
             /** Format: date-time */
             openedAt: string;
-            /** @description Cartes tirées (nombre exact à valider au point client) */
+            /** @description Cartes tirées ; leur nombre est celui réglé par l'administrateur au moment de l'ouverture */
             cards: components["schemas"]["BoosterCard"][];
         };
         BoosterToday: {
@@ -618,6 +643,11 @@ export interface components {
              * @description Prochain minuit, heure de Paris, exprimé en UTC
              */
             nextAvailableAt: string;
+            /**
+             * @description Nombre de cartes du prochain booster (réglé par l'administrateur, voir `/admin/settings/booster`)
+             * @example 5
+             */
+            cardsPerBooster: number;
             /** @description Booster déjà ouvert aujourd'hui, ou null */
             booster: components["schemas"]["Booster"] | null;
         };
@@ -719,6 +749,23 @@ export interface components {
                 inPeriod: number;
                 perDay: components["schemas"]["DailyCount"][];
             };
+        };
+        BoosterSettings: {
+            /**
+             * @description Nombre de cartes tirées à chaque ouverture de booster
+             * @example 5
+             */
+            cardsPerBooster: number;
+            /**
+             * Format: date-time
+             * @description Dernière modification ; null tant que la valeur par défaut n'a jamais été changée
+             */
+            updatedAt: string | null;
+            /** @description Administrateur auteur de la dernière modification, ou null */
+            updatedBy: components["schemas"]["PlayerSummary"] | null;
+        };
+        UpdateBoosterSettingsRequest: {
+            cardsPerBooster: number;
         };
         RarityDistribution: {
             period: components["schemas"]["Period"];
@@ -1574,6 +1621,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RarityDistribution"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getBoosterSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Réglage actuel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoosterSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateBoosterSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "cardsPerBooster": 6
+                 *     }
+                 */
+                "application/json": components["schemas"]["UpdateBoosterSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Réglage enregistré */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoosterSettings"];
                 };
             };
             400: components["responses"]["BadRequest"];

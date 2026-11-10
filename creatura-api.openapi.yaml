@@ -62,7 +62,7 @@ tags:
   - name: Échanges
     description: Propositions, décisions et historique (UC-09, UC-10, UC-11)
   - name: Administration
-    description: Dashboard, réservé au rôle ADMIN (UC-12, UC-13, UC-14)
+    description: Dashboard et réglages, réservés au rôle ADMIN (UC-12, UC-13, UC-14)
 
 paths:
   /health:
@@ -697,6 +697,52 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /admin/settings/booster:
+    get:
+      tags: [Administration]
+      summary: Consulter le réglage des boosters
+      description: Réservé au rôle `ADMIN`.
+      operationId: getBoosterSettings
+      responses:
+        '200':
+          description: Réglage actuel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoosterSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Administration]
+      summary: Modifier le nombre de cartes par booster
+      description: |
+        Réservé au rôle `ADMIN`. S'applique aux boosters ouverts après la modification ;
+        les boosters déjà ouverts ne changent pas.
+      operationId: updateBoosterSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBoosterSettingsRequest'
+            example:
+              cardsPerBooster: 6
+      responses:
+        '200':
+          description: Réglage enregistré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoosterSettings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1130,14 +1176,15 @@ components:
           format: date-time
         cards:
           type: array
-          description: Cartes tirées (nombre exact à valider au point client)
+          description: Cartes tirées ; leur nombre est celui réglé par l'administrateur au moment de l'ouverture
           minItems: 1
+          maxItems: 10
           items:
             $ref: '#/components/schemas/BoosterCard'
 
     BoosterToday:
       type: object
-      required: [claimDate, available, nextAvailableAt, booster]
+      required: [claimDate, available, nextAvailableAt, cardsPerBooster, booster]
       properties:
         claimDate:
           type: string
@@ -1149,6 +1196,12 @@ components:
           type: string
           format: date-time
           description: Prochain minuit, heure de Paris, exprimé en UTC
+        cardsPerBooster:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Nombre de cartes du prochain booster (réglé par l'administrateur, voir `/admin/settings/booster`)
+          examples: [5]
         booster:
           description: Booster déjà ouvert aujourd'hui, ou null
           oneOf:
@@ -1373,6 +1426,36 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/DailyCount'
+
+    BoosterSettings:
+      type: object
+      required: [cardsPerBooster, updatedAt, updatedBy]
+      properties:
+        cardsPerBooster:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Nombre de cartes tirées à chaque ouverture de booster
+          examples: [5]
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Dernière modification ; null tant que la valeur par défaut n'a jamais été changée
+        updatedBy:
+          description: Administrateur auteur de la dernière modification, ou null
+          oneOf:
+            - $ref: '#/components/schemas/PlayerSummary'
+            - type: 'null'
+
+    UpdateBoosterSettingsRequest:
+      type: object
+      required: [cardsPerBooster]
+      additionalProperties: false
+      properties:
+        cardsPerBooster:
+          type: integer
+          minimum: 1
+          maximum: 10
 
     RarityDistribution:
       type: object

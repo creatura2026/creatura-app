@@ -53,6 +53,12 @@ const router = createRouter({
           component: () => import('@/views/RaritiesView.vue'),
           meta: { title: 'Raretés' },
         },
+        {
+          path: 'reglages',
+          name: 'settings',
+          component: () => import('@/views/SettingsView.vue'),
+          meta: { title: 'Réglages du booster' },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

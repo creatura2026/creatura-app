@@ -13,8 +13,10 @@ const props = withDefaults(
     size?: 'sm' | 'md'
     /** Mise en avant (carte nouvelle, sélection). */
     highlight?: boolean
+    /** Cadre de rareté affiché en permanence (sinon seulement au survol). */
+    showRarity?: boolean
   }>(),
-  { missing: false, size: 'md', highlight: false },
+  { missing: false, size: 'md', highlight: false, showRarity: false },
 )
 
 const RARITY_PIPS: Record<string, number> = { COMMON: 1, UNCOMMON: 2, RARE: 3 }
@@ -26,10 +28,12 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
   <article
     class="relative flex h-full flex-col items-center bg-white text-center text-ink"
     :class="[
-      missing ? 'border-2 border-dashed border-ink' : 'card-pixel-sm',
+      missing ? 'border-2 border-dashed border-ink' : 'card-pixel-sm rarity-frame',
       size === 'sm' ? 'gap-1 px-2 pt-3 pb-2' : 'gap-1.5 px-3 pt-5 pb-3',
       highlight && !missing ? 'ring-4 ring-sun ring-offset-2 ring-offset-cream' : '',
     ]"
+    :data-rarity="missing ? undefined : creature.rarity.code"
+    :data-show-rarity="showRarity && !missing ? '' : undefined"
     :aria-label="missing ? `${creature.name}, non possédée` : creature.name"
   >
     <div

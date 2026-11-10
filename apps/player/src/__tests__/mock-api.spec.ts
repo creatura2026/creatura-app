@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { isApiError } from '@creatura/shared/api/types'
 
 import { clearDbCache, DEMO_PASSWORD } from '@/api/mock/db'
-import { CARDS_PER_BOOSTER, createMockPlayerApi } from '@/api/mock/server'
+import { createMockPlayerApi } from '@/api/mock/server'
+import {
+  DEFAULT_CARDS_PER_BOOSTER,
+  writeMockBoosterSettings,
+} from '@creatura/shared/api/mock-settings'
 
 const MOUSSOU = '0b6f2c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f'
 const BRUMEL = '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a'
@@ -25,6 +29,7 @@ async function quantity(api: ReturnType<typeof setup>['api'], creatureId: string
 beforeEach(() => {
   // Sous Node ≥ 25, `localStorage` peut être indéfini : la base simulée retombe alors en mémoire.
   globalThis.localStorage?.clear()
+  document.cookie = 'creatura_mock_booster=; path=/; max-age=0'
   clearDbCache()
 })
 
@@ -71,8 +76,8 @@ describe('API simulée — booster quotidien (UC-03, UC-04)', () => {
     const before = (await api.getMe()).progress.totalCards
 
     const booster = await api.claimBooster()
-    expect(booster.cards).toHaveLength(CARDS_PER_BOOSTER)
-    expect((await api.getMe()).progress.totalCards).toBe(before + CARDS_PER_BOOSTER)
+    expect(booster.cards).toHaveLength(DEFAULT_CARDS_PER_BOOSTER)
+    expect((await api.getMe()).progress.totalCards).toBe(before + DEFAULT_CARDS_PER_BOOSTER)
 
     const today = await api.getTodayBooster()
     expect(today.available).toBe(false)
@@ -81,7 +86,15 @@ describe('API simulée — booster quotidien (UC-03, UC-04)', () => {
     await expect(api.claimBooster()).rejects.toSatisfy((e) =>
       isApiError(e, 'BOOSTER_ALREADY_CLAIMED'),
     )
-    expect((await api.getMe()).progress.totalCards).toBe(before + CARDS_PER_BOOSTER)
+    expect((await api.getMe()).progress.totalCards).toBe(before + DEFAULT_CARDS_PER_BOOSTER)
+  })
+
+  it('tire le nombre de cartes réglé par l’administrateur', async () => {
+    writeMockBoosterSettings({ cardsPerBooster: 8, updatedAt: null, updatedBy: null })
+    const { api, loginAs } = setup()
+    await loginAs('demo')
+    expect((await api.getTodayBooster()).cardsPerBooster).toBe(8)
+    expect((await api.claimBooster()).cards).toHaveLength(8)
   })
 })
 

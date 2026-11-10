@@ -29,6 +29,9 @@ sur les routes admin) et renvoie les mêmes codes d'erreur que le contrat.
 
 - Joueur : données persistées dans le `localStorage` du navigateur (`apps/player/src/api/mock/`).
 - Admin : données fictives déterministes sur 120 jours (`apps/admin/src/api/mock.ts`).
+- Nombre de cartes par booster : réglé dans le dashboard (« Réglages booster »). Sans serveur, les deux
+  apps ne partagent pas de stockage : la simulation transmet ce réglage par un cookie
+  (`packages/shared/src/api/mock-settings.ts`), partagé entre les ports de `localhost`.
 
 Pour brancher le vrai serveur : remplacer `createMockPlayerApi` / `createMockAdminApi` dans
 `apps/*/src/api/index.ts` par une implémentation HTTP (openapi-fetch + `schema.d.ts`), puis passer

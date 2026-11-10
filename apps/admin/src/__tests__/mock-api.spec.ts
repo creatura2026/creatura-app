@@ -71,3 +71,32 @@ describe('API d’administration simulée', () => {
     )
   })
 })
+
+describe('Réglage des boosters (simulé)', () => {
+  it('permet à un administrateur de changer le nombre de cartes', async () => {
+    const { api, loginAs } = setup()
+    await loginAs('admin')
+    const saved = await api.updateBoosterSettings({ cardsPerBooster: 7 })
+    expect(saved.cardsPerBooster).toBe(7)
+    expect(saved.updatedBy?.pseudo).toBe('Admin')
+    expect((await api.getBoosterSettings()).cardsPerBooster).toBe(7)
+  })
+
+  it('refuse une valeur hors limites', async () => {
+    const { api, loginAs } = setup()
+    await loginAs('admin')
+    for (const n of [0, 11, 2.5]) {
+      await expect(api.updateBoosterSettings({ cardsPerBooster: n })).rejects.toSatisfy((e) =>
+        isApiError(e, 'VALIDATION_ERROR'),
+      )
+    }
+  })
+
+  it('réserve le réglage au rôle administrateur', async () => {
+    const { api, loginAs } = setup()
+    await loginAs('player')
+    await expect(api.updateBoosterSettings({ cardsPerBooster: 3 })).rejects.toSatisfy((e) =>
+      isApiError(e, 'FORBIDDEN'),
+    )
+  })
+})

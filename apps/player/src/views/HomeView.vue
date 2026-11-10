@@ -35,7 +35,7 @@ const pendingSent = computed(() => sent.value?.totalItems ?? 0)
           <img
             :src="boosterUrl"
             alt=""
-            class="pixelated w-24 shrink-0 sm:w-28 lg:w-40"
+            class="pixelated w-[75px] shrink-0 lg:w-[150px]"
             :class="
               me.boosterAvailableToday ? 'group-hover:animate-wiggle' : 'opacity-60 grayscale-[40%]'
             "
@@ -93,9 +93,7 @@ const pendingSent = computed(() => sent.value?.totalItems ?? 0)
           </p>
           <p class="mt-2 font-pixel text-3xl font-bold">{{ pendingReceived }}</p>
           <p class="text-sm">
-            {{
-              pendingReceived > 1 ? 'propositions reçues attendent' : 'proposition reçue attend'
-            }}
+            {{ pendingReceived > 1 ? 'propositions reçues attendent' : 'proposition reçue attend' }}
             votre réponse
           </p>
           <p class="mt-3 text-sm">{{ pendingSent }} envoyée(s) en attente</p>

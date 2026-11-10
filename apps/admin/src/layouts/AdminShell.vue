@@ -12,6 +12,7 @@ const NAV: { name: string; label: string; uc: string; icon: IconName }[] = [
   { name: 'dashboard', label: 'Statistiques', uc: 'UC-12', icon: 'chart' },
   { name: 'trades', label: 'Échanges', uc: 'UC-13', icon: 'trade' },
   { name: 'rarities', label: 'Raretés', uc: 'UC-14', icon: 'gem' },
+  { name: 'settings', label: 'Réglages booster', uc: '', icon: 'booster' },
 ]
 
 const auth = useAuthStore()
