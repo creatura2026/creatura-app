@@ -1,0 +1,1406 @@
+openapi: 3.1.0
+info:
+  title: API CREATURA
+  version: 1.0.0
+  summary: Contrat de l'API de la plateforme de collection et d'échange de cartes CREATURA.
+  description: |
+    Contrat entre le serveur (NestJS) et ses trois clients : la PWA joueur, le dashboard web et l'application Desktop.
+    Chaque opération indique le cas d'usage du sujet (UC-xx) et le ticket Jira correspondant (AS-xx).
+
+    ## Conventions
+    - **Préfixe** : toutes les routes commencent par `/api/v1`.
+    - **Format** : JSON en camelCase, dates en ISO 8601 (UTC), identifiants en UUID.
+    - **Authentification** : en-tête `Authorization: Bearer <accessToken>`. Le jeton d'accès (JWT) dure 15 minutes ;
+      il se renouvelle avec `POST /auth/refresh`.
+    - **Le serveur fait autorité** : le client n'envoie jamais de résultat de tirage ni de quantité gagnée.
+    - **Pagination** : paramètres `page` (à partir de 1) et `pageSize` (20 par défaut, 100 au maximum).
+      Réponse : `items`, `page`, `pageSize`, `totalItems`, `totalPages`.
+    - **Erreurs** : format *Problem Details* (RFC 9457), type `application/problem+json`, avec un `code` stable
+      que le client peut tester.
+    - **401 ou 403** : 401 = jeton absent, invalide ou expiré ; 403 = jeton valide mais droits insuffisants
+      (preuve qualité 02).
+    - **Jour du booster** : de minuit à minuit, fuseau `Europe/Paris`, calculé par le serveur (règle à valider au point client).
+
+    ## Codes d'erreur métier
+    | Code | HTTP | Signification |
+    |---|---|---|
+    | `VALIDATION_ERROR` | 400 | Corps ou paramètres invalides, détail dans `errors` |
+    | `INVALID_CREDENTIALS` | 401 | Identifiant ou mot de passe incorrect |
+    | `UNAUTHENTICATED` | 401 | Jeton absent, invalide ou expiré |
+    | `FORBIDDEN` | 403 | Rôle insuffisant, ou action réservée à un autre joueur |
+    | `NOT_FOUND` | 404 | Ressource inexistante |
+    | `LOGIN_ALREADY_USED` | 409 | Identifiant de connexion déjà pris |
+    | `PSEUDO_ALREADY_USED` | 409 | Pseudonyme déjà pris |
+    | `BOOSTER_ALREADY_CLAIMED` | 409 | Booster du jour déjà réclamé |
+    | `TRADE_NOT_PENDING` | 409 | Échange déjà accepté, refusé, annulé ou échoué |
+    | `CARDS_UNAVAILABLE` | 409 | Une carte n'est plus disponible à l'acceptation ; l'échange passe en `FAILED` |
+    | `CARDS_NOT_OWNED` | 422 | Proposition qui contient des cartes non possédées |
+    | `TRADE_WITH_SELF` | 422 | Échange proposé à soi-même |
+    | `RATE_LIMITED` | 429 | Trop de tentatives ; réessayer après le délai `Retry-After` |
+servers:
+  - url: https://app.creatura.fr/api/v1
+    description: Production (CloudFront, chemin /api/*)
+  - url: https://dev.creatura.fr/api/v1
+    description: Développement
+  - url: http://localhost:3000/api/v1
+    description: Poste local (docker compose)
+security:
+  - bearerAuth: []
+tags:
+  - name: Santé
+    description: Surveillance par le load balancer
+  - name: Authentification
+    description: Comptes et jetons (UC-01, UC-02)
+  - name: Catalogue
+    description: Toutes les créatures, possédées ou non (UC-05)
+  - name: Booster
+    description: Booster quotidien (UC-03, UC-04)
+  - name: Collection
+    description: Collection et progression du joueur connecté (UC-06, UC-07)
+  - name: Joueurs
+    description: Exploration des autres joueurs (UC-08)
+  - name: Échanges
+    description: Propositions, décisions et historique (UC-09, UC-10, UC-11)
+  - name: Administration
+    description: Dashboard, réservé au rôle ADMIN (UC-12, UC-13, UC-14)
+
+paths:
+  /health:
+    get:
+      tags: [Santé]
+      summary: Vérifier que l'API répond
+      description: Utilisé par le health check de l'ALB et par Kubernetes. Aucune authentification.
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: API opérationnelle
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+
+  /auth/register:
+    post:
+      tags: [Authentification]
+      summary: Créer un compte joueur (UC-01, AS-1)
+      description: Le compte créé a toujours le rôle `PLAYER`. Aucun compte administrateur ne peut être créé par cette route.
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Compte créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Identifiant ou pseudonyme déjà utilisé (`LOGIN_ALREADY_USED`, `PSEUDO_ALREADY_USED`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/login:
+    post:
+      tags: [Authentification]
+      summary: Se connecter (UC-02, AS-2)
+      description: Renvoie un jeton d'accès court et un refresh token révocable. Les tentatives sont limitées par IP et par identifiant.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Connexion réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Identifiant ou mot de passe incorrect (`INVALID_CREDENTIALS`). Le message ne précise pas lequel des deux est faux.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/refresh:
+    post:
+      tags: [Authentification]
+      summary: Renouveler les jetons
+      description: Rotation du refresh token. L'ancien refresh token est invalidé ; s'il est réutilisé, toute la session est révoquée.
+      operationId: refreshTokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Nouveaux jetons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [Authentification]
+      summary: Se déconnecter
+      description: Révoque le refresh token fourni. Le jeton d'accès expire de lui-même au bout de 15 minutes.
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: Session fermée
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me:
+    get:
+      tags: [Authentification]
+      summary: Consulter son profil et sa progression (UC-02, AS-2)
+      operationId: getMe
+      responses:
+        '200':
+          description: Profil du joueur connecté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /families:
+    get:
+      tags: [Catalogue]
+      summary: Lister les familles de créatures
+      operationId: listFamilies
+      responses:
+        '200':
+          description: Familles, pour alimenter les filtres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Family'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /rarities:
+    get:
+      tags: [Catalogue]
+      summary: Lister les raretés et leurs probabilités de tirage
+      description: Les probabilités sont publiques, pour la transparence du tirage.
+      operationId: listRarities
+      responses:
+        '200':
+          description: Raretés, de la plus commune à la plus rare
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Rarity'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /creatures:
+    get:
+      tags: [Catalogue]
+      summary: Consulter le catalogue (UC-05, AS-5)
+      operationId: listCreatures
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/FamilyFilter'
+        - $ref: '#/components/parameters/RarityFilter'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page du catalogue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreaturePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /creatures/{creatureId}:
+    get:
+      tags: [Catalogue]
+      summary: Consulter une créature (UC-05, AS-5)
+      operationId: getCreature
+      parameters:
+        - $ref: '#/components/parameters/CreatureId'
+      responses:
+        '200':
+          description: Fiche de la créature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Creature'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /me/boosters/today:
+    get:
+      tags: [Booster]
+      summary: Savoir si le booster du jour est disponible (UC-03, AS-3)
+      description: Si le booster a déjà été ouvert aujourd'hui, la réponse contient ses cartes. Le client peut ainsi les réafficher après une coupure réseau.
+      operationId: getTodayBooster
+      responses:
+        '200':
+          description: État du booster du jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoosterToday'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/boosters:
+    post:
+      tags: [Booster]
+      summary: Réclamer et ouvrir le booster du jour (UC-03 et UC-04, AS-3 et AS-4)
+      description: |
+        Une seule transaction côté serveur : vérification qu'aucun booster n'a été ouvert aujourd'hui, tirage, puis ajout
+        des cartes à la collection. Des requêtes simultanées ne donnent qu'un seul booster ; les autres reçoivent 409.
+        Aucun corps de requête : le client ne choisit rien. L'animation d'ouverture (UC-04) se fait côté client à partir de la réponse.
+      operationId: claimBooster
+      responses:
+        '201':
+          description: Booster ouvert, cartes ajoutées à la collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booster'
+              example:
+                id: 3f1c2a9e-5b7d-4c1e-9a2b-1d2e3f4a5b6c
+                claimDate: '2026-11-10'
+                openedAt: '2026-11-10T08:14:03Z'
+                cards:
+                  - creature:
+                      id: 0b6f2c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f
+                      name: Moussou
+                      family: { code: NATURE, label: Nature }
+                      rarity: { code: COMMON, label: Commun }
+                      imageUrl: https://app.creatura.fr/images/moussou.webp
+                    isNew: false
+                  - creature:
+                      id: 7c8d9e0f-1a2b-4c3d-9e8f-7a6b5c4d3e2f
+                      name: Cristille
+                      family: { code: CRISTAL, label: Cristal }
+                      rarity: { code: RARE, label: Rare }
+                      imageUrl: https://app.creatura.fr/images/cristille.webp
+                    isNew: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Booster du jour déjà réclamé (`BOOSTER_ALREADY_CLAIMED`). Aucune carte n'est donnée ; `boosterId` désigne le booster déjà ouvert.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://app.creatura.fr/problems/booster-already-claimed
+                title: Booster déjà réclamé
+                status: 409
+                code: BOOSTER_ALREADY_CLAIMED
+                detail: Le booster du 2026-11-10 a déjà été ouvert. Prochain booster à partir de minuit (heure de Paris).
+                boosterId: 3f1c2a9e-5b7d-4c1e-9a2b-1d2e3f4a5b6c
+
+  /me/collection:
+    get:
+      tags: [Collection]
+      summary: Voir sa collection, ses manques et ses doublons (UC-06 et UC-07, AS-6 et AS-7)
+      description: Renvoie toutes les créatures du catalogue avec la quantité possédée (0 = carte manquante), plus la progression globale.
+      operationId: getMyCollection
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/FamilyFilter'
+        - $ref: '#/components/parameters/RarityFilter'
+        - name: ownership
+          in: query
+          description: Restreindre aux cartes possédées ou manquantes
+          schema:
+            type: string
+            enum: [all, owned, missing]
+            default: all
+        - name: duplicatesOnly
+          in: query
+          description: Ne garder que les cartes possédées au moins en 2 exemplaires
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page de la collection, avec la progression
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /players:
+    get:
+      tags: [Joueurs]
+      summary: Rechercher des joueurs par pseudonyme (UC-08, AS-8)
+      operationId: searchPlayers
+      parameters:
+        - name: search
+          in: query
+          required: true
+          description: Début du pseudonyme recherché
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 20
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Joueurs trouvés (le joueur connecté est exclu)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /players/{playerId}/tradeable-cards:
+    get:
+      tags: [Joueurs]
+      summary: Voir les cartes qu'un joueur peut échanger (UC-08, AS-8)
+      description: |
+        Règle proposée, à valider au point client : seuls les doublons sont visibles, et un exemplaire de chaque carte
+        reste toujours au joueur. La quantité disponible vaut donc `quantité possédée - 1`.
+      operationId: getTradeableCards
+      parameters:
+        - $ref: '#/components/parameters/PlayerId'
+      responses:
+        '200':
+          description: Cartes échangeables du joueur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeableCards'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /trades:
+    post:
+      tags: [Échanges]
+      summary: Proposer un échange (UC-09, AS-9)
+      description: |
+        Une carte contre une carte au minimum. Les lots (plusieurs cartes de chaque côté) sont prévus par le contrat,
+        mais leur ouverture dans l'interface est à valider au point client.
+        Les cartes ne sont pas réservées : leur disponibilité est vérifiée de nouveau au moment de l'acceptation.
+      operationId: createTrade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTradeRequest'
+            example:
+              recipientId: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+              offered:
+                - creatureId: 0b6f2c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f
+                  quantity: 1
+              requested:
+                - creatureId: 5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a
+                  quantity: 1
+      responses:
+        '201':
+          description: Proposition créée, statut `PENDING`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Cartes proposées non possédées (`CARDS_NOT_OWNED`) ou échange avec soi-même (`TRADE_WITH_SELF`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      tags: [Échanges]
+      summary: Consulter l'historique de ses échanges (UC-11, AS-11)
+      operationId: listMyTrades
+      parameters:
+        - name: role
+          in: query
+          description: Échanges envoyés, reçus, ou les deux
+          schema:
+            type: string
+            enum: [all, sent, received]
+            default: all
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TradeStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Échanges du joueur connecté, du plus récent au plus ancien
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trades/{tradeId}:
+    get:
+      tags: [Échanges]
+      summary: Consulter un échange (UC-11, AS-11)
+      operationId: getTrade
+      parameters:
+        - $ref: '#/components/parameters/TradeId'
+      responses:
+        '200':
+          description: Détail de l'échange
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /trades/{tradeId}/accept:
+    post:
+      tags: [Échanges]
+      summary: Accepter un échange (UC-10, AS-10)
+      description: |
+        Réservé au destinataire. Transaction atomique : passage de `PENDING` à `ACCEPTED`, verrouillage des exemplaires
+        encore possédés, puis transfert dans les deux sens. Les deux collections changent ensemble, ou aucune.
+        Deux acceptations simultanées ne peuvent pas consommer le même exemplaire (preuve qualité 03).
+      operationId: acceptTrade
+      parameters:
+        - $ref: '#/components/parameters/TradeId'
+      responses:
+        '200':
+          description: Échange accepté, cartes transférées
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `TRADE_NOT_PENDING` : l'échange n'est plus en attente.
+            `CARDS_UNAVAILABLE` : une carte n'est plus disponible ; aucun transfert, l'échange passe en `FAILED`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://app.creatura.fr/problems/cards-unavailable
+                title: Cartes indisponibles
+                status: 409
+                code: CARDS_UNAVAILABLE
+                detail: Moussou n'est plus disponible chez le proposant. Aucune carte n'a été transférée.
+
+  /trades/{tradeId}/refuse:
+    post:
+      tags: [Échanges]
+      summary: Refuser un échange (UC-10, AS-10)
+      description: Réservé au destinataire. Aucun transfert.
+      operationId: refuseTrade
+      parameters:
+        - $ref: '#/components/parameters/TradeId'
+      responses:
+        '200':
+          description: Échange refusé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/TradeNotPending'
+
+  /trades/{tradeId}/cancel:
+    post:
+      tags: [Échanges]
+      summary: Annuler sa proposition (UC-09, AS-9)
+      description: Réservé au proposant, tant que l'échange est en attente.
+      operationId: cancelTrade
+      parameters:
+        - $ref: '#/components/parameters/TradeId'
+      responses:
+        '200':
+          description: Proposition annulée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/TradeNotPending'
+
+  /admin/stats:
+    get:
+      tags: [Administration]
+      summary: Consulter les statistiques sur une période (UC-12, AS-12)
+      description: Réservé au rôle `ADMIN` ; un joueur reçoit 403 (preuve qualité 02). Les jours sans activité apparaissent avec un compte à 0.
+      operationId: getAdminStats
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Statistiques de la période
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/trades:
+    get:
+      tags: [Administration]
+      summary: Filtrer les échanges (UC-13, AS-13)
+      description: Réservé au rôle `ADMIN`.
+      operationId: listAdminTrades
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TradeStatus'
+        - name: playerId
+          in: query
+          description: Échanges où ce joueur est proposant ou destinataire
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Échanges correspondant aux filtres
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/rarity-distribution:
+    get:
+      tags: [Administration]
+      summary: Analyser la distribution des raretés (UC-14, AS-14)
+      description: Compare, pour les cartes distribuées par les boosters sur la période, la répartition observée aux probabilités théoriques. Réservé au rôle `ADMIN`.
+      operationId: getRarityDistribution
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Répartition par rareté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RarityDistribution'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Jeton d'accès obtenu par `POST /auth/login` ou `POST /auth/refresh`.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Numéro de page, à partir de 1
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      description: Nombre d'éléments par page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Search:
+      name: search
+      in: query
+      description: Recherche sur le nom de la créature, sans tenir compte de la casse ni des accents
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 50
+    FamilyFilter:
+      name: family
+      in: query
+      description: Code de famille (voir `GET /families`)
+      schema:
+        type: string
+        examples: [NATURE]
+    RarityFilter:
+      name: rarity
+      in: query
+      description: Code de rareté (voir `GET /rarities`)
+      schema:
+        type: string
+        examples: [RARE]
+    From:
+      name: from
+      in: query
+      description: Premier jour inclus de la période (30 jours avant `to` par défaut)
+      schema:
+        type: string
+        format: date
+    To:
+      name: to
+      in: query
+      description: Dernier jour inclus de la période (aujourd'hui par défaut). Période de 366 jours au maximum.
+      schema:
+        type: string
+        format: date
+    CreatureId:
+      name: creatureId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PlayerId:
+      name: playerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TradeId:
+      name: tradeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Requête invalide (`VALIDATION_ERROR`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://app.creatura.fr/problems/validation-error
+            title: Requête invalide
+            status: 400
+            code: VALIDATION_ERROR
+            errors:
+              - field: password
+                message: Le mot de passe doit contenir au moins 12 caractères.
+    Unauthorized:
+      description: Jeton absent, invalide ou expiré (`UNAUTHENTICATED`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Droits insuffisants (`FORBIDDEN`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Ressource introuvable (`NOT_FOUND`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TradeNotPending:
+      description: L'échange n'est plus en attente (`TRADE_NOT_PENDING`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Trop de tentatives (`RATE_LIMITED`)
+      headers:
+        Retry-After:
+          description: Nombre de secondes à attendre avant de réessayer
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Problem:
+      type: object
+      description: Erreur au format RFC 9457 (Problem Details), complétée d'un code métier stable.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: URI qui identifie le type d'erreur
+        title:
+          type: string
+          description: Résumé lisible, identique pour toutes les erreurs du même type
+        status:
+          type: integer
+          description: Code HTTP
+        detail:
+          type: string
+          description: Explication propre à cette occurrence, affichable à l'utilisateur
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        errors:
+          type: array
+          description: Détail des champs invalides (`VALIDATION_ERROR` uniquement)
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+        boosterId:
+          type: string
+          format: uuid
+          description: Booster déjà ouvert aujourd'hui (`BOOSTER_ALREADY_CLAIMED` uniquement)
+
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - INVALID_CREDENTIALS
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - LOGIN_ALREADY_USED
+        - PSEUDO_ALREADY_USED
+        - BOOSTER_ALREADY_CLAIMED
+        - TRADE_NOT_PENDING
+        - CARDS_UNAVAILABLE
+        - CARDS_NOT_OWNED
+        - TRADE_WITH_SELF
+        - RATE_LIMITED
+
+    PageMeta:
+      type: object
+      required: [page, pageSize, totalItems, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalItems:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+
+    RegisterRequest:
+      type: object
+      required: [pseudo, login, password]
+      additionalProperties: false
+      properties:
+        pseudo:
+          type: string
+          description: Nom public, visible par les autres joueurs
+          minLength: 3
+          maxLength: 20
+          pattern: '^[A-Za-z0-9_-]+$'
+          examples: [Lina_42]
+        login:
+          type: string
+          description: Identifiant de connexion, privé, jamais affiché aux autres joueurs
+          minLength: 3
+          maxLength: 50
+          examples: [lina.martin]
+        password:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 128
+          writeOnly: true
+
+    LoginRequest:
+      type: object
+      required: [login, password]
+      additionalProperties: false
+      properties:
+        login:
+          type: string
+          maxLength: 50
+        password:
+          type: string
+          format: password
+          maxLength: 128
+          writeOnly: true
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+          description: JWT à envoyer dans l'en-tête `Authorization`
+        refreshToken:
+          type: string
+          description: Jeton opaque à usage unique, à conserver de façon sécurisée par le client
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          description: Durée de validité du jeton d'accès, en secondes
+          examples: [900]
+        user:
+          $ref: '#/components/schemas/User'
+
+    Role:
+      type: string
+      enum: [PLAYER, ADMIN]
+
+    User:
+      type: object
+      required: [id, pseudo, role, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        createdAt:
+          type: string
+          format: date-time
+
+    Me:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          required: [progress, boosterAvailableToday]
+          properties:
+            progress:
+              $ref: '#/components/schemas/CollectionProgress'
+            boosterAvailableToday:
+              type: boolean
+
+    CollectionProgress:
+      type: object
+      required: [ownedCreatures, totalCreatures, totalCards, completionPercent]
+      properties:
+        ownedCreatures:
+          type: integer
+          minimum: 0
+          description: Nombre de créatures différentes possédées
+        totalCreatures:
+          type: integer
+          minimum: 0
+          description: Nombre de créatures dans le catalogue
+        totalCards:
+          type: integer
+          minimum: 0
+          description: Nombre total d'exemplaires possédés, doublons compris
+        completionPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+
+    Family:
+      type: object
+      required: [code, label]
+      properties:
+        code:
+          type: string
+          examples: [NATURE]
+        label:
+          type: string
+          examples: [Nature]
+
+    RaritySummary:
+      type: object
+      required: [code, label]
+      properties:
+        code:
+          type: string
+          examples: [UNCOMMON]
+        label:
+          type: string
+          examples: [Peu commun]
+
+    Rarity:
+      allOf:
+        - $ref: '#/components/schemas/RaritySummary'
+        - type: object
+          required: [rank, dropRate]
+          properties:
+            rank:
+              type: integer
+              minimum: 1
+              description: Ordre d'affichage, 1 = la plus commune
+            dropRate:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Probabilité de tirage d'une carte de cette rareté (valeurs à valider au point client)
+              examples: [0.25]
+
+    CreatureSummary:
+      type: object
+      required: [id, name, family, rarity, imageUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          examples: [Flammille]
+        family:
+          $ref: '#/components/schemas/Family'
+        rarity:
+          $ref: '#/components/schemas/RaritySummary'
+        imageUrl:
+          type: string
+          format: uri
+
+    Creature:
+      allOf:
+        - $ref: '#/components/schemas/CreatureSummary'
+        - type: object
+          required: [description]
+          properties:
+            description:
+              type: string
+              examples: [Éclaire les sentiers.]
+
+    CreaturePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Creature'
+
+    BoosterCard:
+      type: object
+      required: [creature, isNew]
+      properties:
+        creature:
+          $ref: '#/components/schemas/CreatureSummary'
+        isNew:
+          type: boolean
+          description: Vrai si le joueur ne possédait pas encore cette créature
+
+    Booster:
+      type: object
+      required: [id, claimDate, openedAt, cards]
+      properties:
+        id:
+          type: string
+          format: uuid
+        claimDate:
+          type: string
+          format: date
+          description: Jour du booster, au sens du fuseau Europe/Paris
+        openedAt:
+          type: string
+          format: date-time
+        cards:
+          type: array
+          description: Cartes tirées (nombre exact à valider au point client)
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BoosterCard'
+
+    BoosterToday:
+      type: object
+      required: [claimDate, available, nextAvailableAt, booster]
+      properties:
+        claimDate:
+          type: string
+          format: date
+        available:
+          type: boolean
+          description: Vrai si le booster du jour peut encore être réclamé
+        nextAvailableAt:
+          type: string
+          format: date-time
+          description: Prochain minuit, heure de Paris, exprimé en UTC
+        booster:
+          description: Booster déjà ouvert aujourd'hui, ou null
+          oneOf:
+            - $ref: '#/components/schemas/Booster'
+            - type: 'null'
+
+    CollectionEntry:
+      type: object
+      required: [creature, quantity]
+      properties:
+        creature:
+          $ref: '#/components/schemas/CreatureSummary'
+        quantity:
+          type: integer
+          minimum: 0
+          description: Exemplaires possédés ; 0 = carte manquante
+
+    CollectionPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items, progress]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CollectionEntry'
+            progress:
+              $ref: '#/components/schemas/CollectionProgress'
+
+    PlayerSummary:
+      type: object
+      required: [id, pseudo]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+
+    PlayerPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/PlayerSummary'
+
+    TradeableCards:
+      type: object
+      required: [player, items]
+      properties:
+        player:
+          $ref: '#/components/schemas/PlayerSummary'
+        items:
+          type: array
+          items:
+            type: object
+            required: [creature, availableQuantity]
+            properties:
+              creature:
+                $ref: '#/components/schemas/CreatureSummary'
+              availableQuantity:
+                type: integer
+                minimum: 1
+
+    TradeItemInput:
+      type: object
+      required: [creatureId, quantity]
+      additionalProperties: false
+      properties:
+        creatureId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 10
+
+    CreateTradeRequest:
+      type: object
+      required: [recipientId, offered, requested]
+      additionalProperties: false
+      properties:
+        recipientId:
+          type: string
+          format: uuid
+        offered:
+          type: array
+          description: Cartes que le proposant donne
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/TradeItemInput'
+        requested:
+          type: array
+          description: Cartes que le proposant demande au destinataire
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/TradeItemInput'
+
+    TradeStatus:
+      type: string
+      enum: [PENDING, ACCEPTED, REFUSED, CANCELLED, FAILED]
+      description: |
+        PENDING : en attente de décision.
+        ACCEPTED : accepté, cartes transférées.
+        REFUSED : refusé par le destinataire.
+        CANCELLED : annulé par le proposant.
+        FAILED : acceptation impossible, une carte n'était plus disponible.
+
+    TradeItem:
+      type: object
+      required: [creature, quantity]
+      properties:
+        creature:
+          $ref: '#/components/schemas/CreatureSummary'
+        quantity:
+          type: integer
+          minimum: 1
+
+    Trade:
+      type: object
+      required: [id, status, proposer, recipient, offered, requested, createdAt, decidedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/TradeStatus'
+        proposer:
+          $ref: '#/components/schemas/PlayerSummary'
+        recipient:
+          $ref: '#/components/schemas/PlayerSummary'
+        offered:
+          type: array
+          items:
+            $ref: '#/components/schemas/TradeItem'
+        requested:
+          type: array
+          items:
+            $ref: '#/components/schemas/TradeItem'
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Date d'acceptation, de refus, d'annulation ou d'échec ; null tant que l'échange est en attente
+        failureReason:
+          type: [string, 'null']
+          description: Raison de l'échec quand le statut vaut FAILED
+          examples: [CARDS_UNAVAILABLE]
+
+    TradePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Trade'
+
+    Period:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+
+    DailyCount:
+      type: object
+      required: [date, count]
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+          minimum: 0
+
+    AdminStats:
+      type: object
+      required: [period, registrations, boostersOpenedPerDay, completedTrades]
+      properties:
+        period:
+          $ref: '#/components/schemas/Period'
+        registrations:
+          type: object
+          required: [total, inPeriod]
+          properties:
+            total:
+              type: integer
+              minimum: 0
+              description: Nombre total d'inscrits depuis le lancement
+            inPeriod:
+              type: integer
+              minimum: 0
+        boostersOpenedPerDay:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyCount'
+        completedTrades:
+          type: object
+          required: [inPeriod, perDay]
+          properties:
+            inPeriod:
+              type: integer
+              minimum: 0
+              description: Échanges acceptés sur la période
+            perDay:
+              type: array
+              items:
+                $ref: '#/components/schemas/DailyCount'
+
+    RarityDistribution:
+      type: object
+      required: [period, totalCardsDistributed, items]
+      properties:
+        period:
+          $ref: '#/components/schemas/Period'
+        totalCardsDistributed:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            type: object
+            required: [rarity, expectedRate, observedCount, observedRate]
+            properties:
+              rarity:
+                $ref: '#/components/schemas/RaritySummary'
+              expectedRate:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Probabilité théorique de tirage
+              observedCount:
+                type: integer
+                minimum: 0
+              observedRate:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Part réellement observée sur la période
