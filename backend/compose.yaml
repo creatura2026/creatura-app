@@ -1,0 +1,51 @@
+# Environnement local : Postgres + API.
+#   docker compose up -d --build     démarrer (ou reconstruire après modification du code)
+#   docker compose logs -f api       suivre les logs
+#   docker compose down              arrêter (les données restent dans le volume)
+#   docker compose down -v           arrêter et effacer la base (nécessaire après un
+#                                    changement des fichiers SQL de db/)
+#
+# Au premier démarrage, Postgres exécute les fichiers SQL de ../db (schéma + catalogue).
+# Valeurs de développement uniquement : en K8S, elles viennent d'un Secret.
+
+name: creatura
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: creatura
+      POSTGRES_PASSWORD: creatura-dev
+      POSTGRES_DB: creatura
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U creatura -d creatura"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://creatura:creatura-dev@db:5432/creatura
+      JWT_SECRET: dev-only-secret-change-me-in-production-please-0123456789
+      ADMIN_LOGIN: admin
+      ADMIN_PASSWORD: admin-dev
+      CORS_ORIGINS: "*"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
