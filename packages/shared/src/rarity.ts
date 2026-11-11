@@ -1,5 +1,5 @@
 /**
- * Couleur de cadre associée à chaque rareté (voir `.rarity-frame` dans theme.css).
+ * Couleur associée à chaque rareté (voir l'aura `.rarity-frame` dans theme.css).
  * Gris = commun, bleu = peu commun, or = rare : la convention des jeux de cartes.
  */
 export const RARITY_COLORS: Record<string, { color: string; name: string }> = {

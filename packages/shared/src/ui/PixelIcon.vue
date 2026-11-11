@@ -22,6 +22,11 @@ export type IconName =
   | 'lock'
   | 'filter'
   | 'refresh'
+  | 'sound'
+  | 'sound-off'
+
+const SPEAKER = 'M3 9h4l5-5v16l-5-5H3z'
+const WAVES = 'M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11'
 
 const PATHS: Record<IconName, string> = {
   home: 'M3 11 12 4l9 7M5 9.5V20h5v-6h4v6h5V9.5',
@@ -45,6 +50,9 @@ const PATHS: Record<IconName, string> = {
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   filter: 'M3 5h18l-7 8v6l-4 2v-8z',
   refresh: 'M20 5v5h-5M4 19v-5h5M18.5 10A7 7 0 0 0 6 7.5M5.5 14A7 7 0 0 0 18 16.5',
+  sound: `${SPEAKER}${WAVES}`,
+  // Même haut-parleur, barré en diagonale.
+  'sound-off': `${SPEAKER}${WAVES}M2 2l20 20`,
 }
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 22 })

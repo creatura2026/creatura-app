@@ -9,6 +9,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import boosterUrl from '@creatura/shared/assets/booster.png'
+import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
 
 /** Ce que la page reçoit à la fin : de quoi faire jaillir les vraies cartes du sachet. */
 export interface TearResult {
@@ -53,7 +54,8 @@ interface Particle {
 }
 
 const canvas = ref<HTMLCanvasElement | null>(null)
-const wrapper = ref<HTMLDivElement | null>(null)
+/** Zone disponible pour le sachet : le canvas s'adapte à elle, jamais l'inverse. */
+const stage = ref<HTMLDivElement | null>(null)
 const scale = ref(2)
 const progress = ref(0)
 const phase = ref<Phase>('loading')
@@ -579,10 +581,11 @@ function onKeydown(e: KeyboardEvent) {
 let observer: ResizeObserver | null = null
 
 function fit() {
-  const width = wrapper.value?.clientWidth ?? W * 2
-  const byWidth = Math.floor(width / W)
-  const byHeight = Math.floor((window.innerHeight * 0.62) / H)
-  scale.value = Math.max(1, Math.min(3, byWidth, byHeight))
+  const el = stage.value
+  if (!el) return
+  const raw = Math.min(el.clientWidth / W, el.clientHeight / H, 3)
+  // Grand écran : demi-pas pour des pixels réguliers. Petit écran : toute la place disponible.
+  scale.value = raw >= 2 ? Math.floor(raw * 2) / 2 : Math.max(0.5, raw)
 }
 
 onMounted(() => {
@@ -590,7 +593,7 @@ onMounted(() => {
   ctx!.imageSmoothingEnabled = false
   fit()
   observer = new ResizeObserver(fit)
-  if (wrapper.value) observer.observe(wrapper.value)
+  if (stage.value) observer.observe(stage.value)
   const img = new Image()
   img.onload = () => {
     prepare(img)
@@ -624,43 +627,59 @@ const status = computed(() => {
 </script>
 
 <template>
-  <div ref="wrapper" class="flex w-full flex-col items-center gap-3">
-    <div
-      class="relative cursor-grab select-none focus-visible:outline-offset-4 active:cursor-grabbing"
-      role="slider"
-      tabindex="0"
-      aria-label="Déchirer le haut du booster"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      :aria-valuenow="percent"
-      :aria-valuetext="`${percent} % déchiré`"
-      aria-describedby="tear-help"
-      @keydown="onKeydown"
-    >
-      <canvas
-        ref="canvas"
-        :width="W"
-        :height="H"
-        class="pixelated block touch-pan-y drop-shadow-[4px_4px_0_var(--color-ink)]"
-        :style="{ width: `${W * scale}px`, height: `${H * scale}px`, imageRendering: 'pixelated' }"
-        @pointerdown="onPointerDown"
-        @pointermove="onPointerMove"
-        @pointerup="onPointerUp"
-        @pointercancel="onPointerUp"
-        @lostpointercapture="onPointerUp"
-      />
+  <div class="relative flex min-h-0 w-full flex-col items-center gap-2">
+    <div ref="stage" class="flex min-h-0 w-full flex-1 items-center justify-center">
+      <div
+        class="relative cursor-grab select-none focus-visible:outline-offset-4 active:cursor-grabbing"
+        role="slider"
+        tabindex="0"
+        aria-label="Déchirer le haut du booster"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="percent"
+        :aria-valuetext="`${percent} % déchiré`"
+        aria-describedby="tear-help"
+        @keydown="onKeydown"
+      >
+        <canvas
+          ref="canvas"
+          :width="W"
+          :height="H"
+          class="pixelated block touch-pan-y drop-shadow-[4px_4px_0_var(--color-ink)]"
+          :style="{
+            width: `${W * scale}px`,
+            height: `${H * scale}px`,
+            imageRendering: 'pixelated',
+          }"
+          @pointerdown="onPointerDown"
+          @pointermove="onPointerMove"
+          @pointerup="onPointerUp"
+          @pointercancel="onPointerUp"
+          @lostpointercapture="onPointerUp"
+        />
+      </div>
     </div>
 
-    <p id="tear-help" class="max-w-xs text-center font-semibold" aria-live="polite">{{ status }}</p>
+    <!-- Hauteur fixe (2 lignes) : le texte qui change ne fait pas bouger le sachet -->
+    <p
+      id="tear-help"
+      class="flex min-h-12 max-w-xs items-center text-center font-semibold"
+      aria-live="polite"
+    >
+      {{ status }}
+    </p>
     <p class="sr-only">Au clavier : flèche droite ou gauche pour déchirer.</p>
 
+    <!-- Coin supérieur droit du cadre : bouton icône, haut-parleur barré quand le son est coupé -->
     <button
       type="button"
-      class="cursor-pointer text-xs font-semibold underline underline-offset-2"
+      class="absolute top-0 right-0 z-10 grid size-10 cursor-pointer place-items-center border-2 border-ink bg-cream shadow-[3px_3px_0_var(--color-ink)] transition-transform hover:-translate-y-0.5 active:translate-0.5 active:shadow-none"
       :aria-pressed="soundOn"
+      aria-label="Son"
+      :title="soundOn ? 'Couper le son' : 'Activer le son'"
       @click="soundOn = !soundOn"
     >
-      Son : {{ soundOn ? 'activé' : 'coupé' }}
+      <PixelIcon :name="soundOn ? 'sound' : 'sound-off'" :size="20" />
     </button>
   </div>
 </template>

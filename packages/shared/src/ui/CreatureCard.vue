@@ -1,11 +1,20 @@
 <script setup lang="ts">
+/**
+ * Face d'une carte de créature, utilisée partout (catalogue, collection, booster, échanges).
+ *
+ * Fenêtre d'illustration teintée par la famille (trame pixel + ombre au sol), puis le nom, la
+ * famille et la rareté, et des gemmes de rareté de la couleur de la rareté. Une carte non possédée
+ * montre la silhouette de la créature sur fond hachuré.
+ */
 import { computed } from 'vue'
 import type { CreatureSummary } from '../api/types'
+import { familyTint } from '../family'
+import RarityGems from './RarityGems.vue'
 
 const props = withDefaults(
   defineProps<{
     creature: CreatureSummary
-    /** Carte non possédée : fond hachuré et point d'interrogation, comme dans le document. */
+    /** Carte non possédée : silhouette sur fond hachuré, comme les manques du document. */
     missing?: boolean
     /** Quantité possédée à afficher sous la carte. */
     quantity?: number
@@ -13,68 +22,67 @@ const props = withDefaults(
     size?: 'sm' | 'md'
     /** Mise en avant (carte nouvelle, sélection). */
     highlight?: boolean
-    /** Cadre de rareté affiché en permanence (sinon seulement au survol). */
-    showRarity?: boolean
   }>(),
-  { missing: false, size: 'md', highlight: false, showRarity: false },
+  { missing: false, size: 'md', highlight: false },
 )
 
-const RARITY_PIPS: Record<string, number> = { COMMON: 1, UNCOMMON: 2, RARE: 3 }
-const pips = computed(() => RARITY_PIPS[props.creature.rarity.code] ?? 1)
 const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
 </script>
 
 <template>
   <article
-    class="relative flex h-full flex-col items-center bg-white text-center text-ink"
+    class="relative flex h-full flex-col bg-white text-ink"
     :class="[
       missing ? 'border-2 border-dashed border-ink' : 'card-pixel-sm rarity-frame',
-      size === 'sm' ? 'gap-1 px-2 pt-3 pb-2' : 'gap-1.5 px-3 pt-5 pb-3',
-      highlight && !missing ? 'ring-4 ring-sun ring-offset-2 ring-offset-cream' : '',
+      size === 'sm' ? 'gap-1.5 p-1.5 pb-2' : 'gap-2 p-2 pb-3',
+      highlight && !missing ? 'outline-4 outline-offset-2 outline-sun' : '',
     ]"
     :data-rarity="missing ? undefined : creature.rarity.code"
-    :data-show-rarity="showRarity && !missing ? '' : undefined"
     :aria-label="missing ? `${creature.name}, non possédée` : creature.name"
   >
+    <!-- Fenêtre d'illustration -->
     <div
-      class="flex w-full items-center justify-center"
-      :class="[size === 'sm' ? 'h-16' : 'h-24 sm:h-28', missing ? 'hatched' : '']"
+      class="card-window relative flex shrink-0 items-center justify-center overflow-hidden border-2"
+      :class="[
+        size === 'sm' ? 'h-16 sm:h-20' : 'h-24 sm:h-28',
+        missing ? 'hatched border-dashed border-ink/40' : 'border-ink',
+      ]"
+      :style="missing ? undefined : { backgroundColor: familyTint(creature.family.code) }"
     >
-      <span v-if="missing" class="font-pixel text-4xl font-bold" aria-hidden="true">?</span>
+      <span v-if="!missing" class="card-ground" aria-hidden="true" />
       <img
-        v-else
         :src="creature.imageUrl"
-        :alt="`Illustration de ${creature.name}`"
-        class="pixelated h-full w-auto object-contain"
-        :class="isEgg ? 'p-2' : ''"
+        :alt="missing ? '' : `Illustration de ${creature.name}`"
+        class="pixelated relative h-full w-auto object-contain"
+        :class="[isEgg ? 'p-2' : 'p-1', missing ? 'card-silhouette' : '']"
         loading="lazy"
         draggable="false"
       />
     </div>
 
-    <h3
-      class="mt-1 leading-tight font-bold"
-      :class="size === 'sm' ? 'text-sm' : 'text-base sm:text-lg'"
-    >
-      {{ creature.name }}
-    </h3>
-    <p class="text-xs text-ink/80 sm:text-sm">
-      {{ creature.family.label }} · {{ creature.rarity.label }}
-    </p>
-    <p class="flex gap-0.5" :aria-label="`Rareté : ${creature.rarity.label}`">
-      <span
-        v-for="i in 3"
-        :key="i"
-        class="size-2 border border-ink"
-        :class="i <= pips ? 'bg-sun' : 'bg-white'"
-        aria-hidden="true"
+    <div class="flex flex-1 flex-col items-center gap-1 px-1 text-center">
+      <h3
+        class="leading-tight font-bold"
+        :class="size === 'sm' ? 'text-sm' : 'text-base sm:text-lg'"
+      >
+        {{ creature.name }}
+      </h3>
+      <p class="text-xs leading-snug text-ink/80 sm:text-sm">
+        {{ creature.family.label }} · {{ creature.rarity.label }}
+      </p>
+      <RarityGems
+        :code="creature.rarity.code"
+        :label="creature.rarity.label"
+        :size="size === 'sm' ? 12 : 16"
       />
-    </p>
-    <p v-if="description" class="text-xs text-ink/80 sm:text-sm">{{ description }}</p>
-    <p v-if="missing" class="text-xs font-semibold">Non possédée</p>
-    <p v-else-if="quantity !== undefined" class="text-xs sm:text-sm">
-      Possédées : <strong>{{ quantity }}</strong>
-    </p>
+      <p v-if="description" class="text-xs leading-snug text-ink/80 sm:text-sm">
+        {{ description }}
+      </p>
+      <p v-if="missing" class="text-xs font-semibold">Non possédée</p>
+      <p v-else-if="quantity !== undefined" class="text-xs sm:text-sm">
+        Possédées : <strong>{{ quantity }}</strong>
+      </p>
+    </div>
     <slot />
   </article>
 </template>

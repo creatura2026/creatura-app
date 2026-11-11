@@ -3,7 +3,8 @@
 import { computed } from 'vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
-import { FAMILY_COLORS } from '@creatura/shared/fixtures/catalog'
+import RarityGems from '@creatura/shared/ui/RarityGems.vue'
+import { familyTint } from '@creatura/shared/family'
 import { formatPercent } from '@creatura/shared/format'
 
 import { useCollection, useCreature, useRarities } from '@/api/queries'
@@ -18,7 +19,6 @@ const quantity = computed(
   () => collection.value?.items.find((e) => e.creature.id === props.id)?.quantity ?? 0,
 )
 const rarity = computed(() => rarities.value?.find((r) => r.code === creature.value?.rarity.code))
-const bg = computed(() => FAMILY_COLORS[creature.value?.family.code ?? '']?.bg ?? 'bg-mist')
 const isEgg = computed(() => creature.value?.imageUrl.startsWith('data:') ?? false)
 </script>
 
@@ -29,15 +29,20 @@ const isEgg = computed(() => creature.value?.imageUrl.startsWith('data:') ?? fal
     </RouterLink>
 
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
-      <article v-if="creature" class="card-pixel grid overflow-hidden bg-white md:grid-cols-2">
+      <article
+        v-if="creature"
+        class="card-pixel rarity-frame relative grid bg-white md:grid-cols-2"
+        :data-rarity="creature.rarity.code"
+      >
         <div
-          class="flex items-center justify-center border-b-2 border-ink p-8 md:border-r-2 md:border-b-0"
-          :class="bg"
+          class="card-window relative flex items-center justify-center border-b-2 border-ink p-8 md:border-r-2 md:border-b-0"
+          :style="{ backgroundColor: familyTint(creature.family.code) }"
         >
+          <span class="card-ground !bottom-[12%] !h-3 !w-2/5" aria-hidden="true" />
           <img
             :src="creature.imageUrl"
             :alt="`Illustration de ${creature.name}`"
-            class="pixelated w-48 animate-float sm:w-64"
+            class="pixelated relative w-48 animate-float sm:w-64"
             :class="isEgg ? 'p-6' : ''"
           />
         </div>
@@ -52,7 +57,10 @@ const isEgg = computed(() => creature.value?.imageUrl.startsWith('data:') ?? fal
           <dl class="grid grid-cols-2 gap-3">
             <div class="border-2 border-ink bg-cream p-3">
               <dt class="text-xs font-bold tracking-wider uppercase">Rareté</dt>
-              <dd class="mt-1 font-semibold">{{ creature.rarity.label }}</dd>
+              <dd class="mt-1 flex items-center gap-2 font-semibold">
+                {{ creature.rarity.label }}
+                <RarityGems :code="creature.rarity.code" :label="creature.rarity.label" />
+              </dd>
               <dd v-if="rarity" class="text-sm">
                 Tirage : {{ formatPercent(rarity.dropRate * 100) }}
               </dd>
