@@ -70,7 +70,7 @@ const LOOP = [
 
         <ul class="mt-12 grid grid-cols-3 gap-2 sm:gap-4 md:max-w-3xl">
           <li v-for="c in showcase" :key="c.id">
-            <CreatureCard :creature="c" size="sm" class="!shadow-none sm:!shadow-pixel-sm" />
+            <CreatureCard :creature="c" class="!shadow-none sm:!shadow-pixel-sm" />
           </li>
         </ul>
       </div>

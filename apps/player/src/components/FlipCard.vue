@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Carte de booster : dos visible, puis retournée au toucher.
- * Au survol, le liseré de la carte prend la couleur de sa rareté (même face cachée).
+ * Les cartes peu communes et rares scintillent légèrement de la couleur de leur rareté, même face
+ * cachée (voir `.rarity-frame` dans theme.css).
  */
 import type { BoosterCard } from '@creatura/shared/api/types'
 import CreatureCard from '@creatura/shared/ui/CreatureCard.vue'
@@ -13,13 +14,12 @@ withDefaults(
     index: number
     /** Petite entrée en fondu ; désactivée quand la carte arrive en jaillissant du sachet. */
     intro?: boolean
+    /** Version compacte (petite illustration), quand la place manque. */
+    compact?: boolean
   }>(),
-  { intro: true },
+  { intro: true, compact: false },
 )
 defineEmits<{ reveal: [] }>()
-
-/** Écrans tactiles : pas de survol, on laisse le liseré visible une fois la carte retournée. */
-const noHover = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches
 </script>
 
 <template>
@@ -30,7 +30,8 @@ const noHover = typeof matchMedia === 'function' && matchMedia('(hover: none)').
   >
     <button
       type="button"
-      class="group relative block h-full min-h-60 w-full cursor-pointer transition-transform duration-500 transform-3d"
+      class="group relative block h-full w-full cursor-pointer transition-transform duration-500 transform-3d"
+      :style="{ minHeight: compact ? '190px' : '240px' }"
       :class="revealed ? 'rotate-y-180' : 'hover:-translate-y-1'"
       :aria-label="
         revealed
@@ -49,25 +50,17 @@ const noHover = typeof matchMedia === 'function' && matchMedia('(hover: none)').
         <span class="absolute inset-2 border-2 border-cream/80" />
         <span class="absolute top-3 left-3 size-3 border-t-4 border-l-4 border-leaf" />
         <span class="absolute right-3 bottom-3 size-3 border-r-4 border-b-4 border-leaf" />
-        <span class="font-pixel text-5xl font-bold text-cream">?</span>
-        <span
-          class="font-pixel text-xs tracking-widest text-cream/80 uppercase group-hover:hidden group-focus-visible:hidden"
+        <span class="font-pixel font-bold text-cream" :class="compact ? 'text-4xl' : 'text-5xl'"
+          >?</span
         >
-          Toucher
-        </span>
-        <!-- Le nom de la rareté double la couleur (lisible aussi sans distinguer les couleurs) -->
-        <span
-          class="hidden font-pixel text-xs tracking-widest text-(color:--rarity) uppercase group-hover:inline group-focus-visible:inline"
-        >
-          {{ card.creature.rarity.label }}
-        </span>
+        <span class="font-pixel text-xs tracking-widest text-cream/80 uppercase">Toucher</span>
       </span>
       <!-- Face -->
       <span class="absolute inset-0 rotate-y-180 backface-hidden">
         <CreatureCard
           :creature="card.creature"
           :highlight="card.isNew"
-          :show-rarity="noHover && revealed"
+          :size="compact ? 'sm' : 'md'"
           class="h-full"
         >
           <span

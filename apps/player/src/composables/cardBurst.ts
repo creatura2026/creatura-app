@@ -13,6 +13,8 @@ export async function burstFromPack(
   result: TearResult,
   cards: HTMLElement[],
   pack: HTMLElement | null,
+  /** Facteur `zoom` appliqué à la grille : les translations y sont exprimées avant zoom. */
+  zoom = 1,
 ): Promise<void> {
   const fallback = {
     x: result.rect.left + result.rect.width / 2,
@@ -24,10 +26,10 @@ export async function burstFromPack(
   const flights = cards.map((el, i) => {
     const from = result.cards[i] ?? middle
     const box = el.getBoundingClientRect()
-    const dx = from.x - (box.left + box.width / 2)
-    const dy = from.y - (box.top + box.height / 2)
+    const dx = (from.x - (box.left + box.width / 2)) / zoom
+    const dy = (from.y - (box.top + box.height / 2)) / zoom
     const s = result.cardWidth / box.width
-    const lift = box.height * s * 0.95 // de quoi sortir entièrement du sachet
+    const lift = (box.height * s * 0.95) / zoom // de quoi sortir entièrement du sachet
     const tilt = from.rot * 2
     return el.animate(
       [

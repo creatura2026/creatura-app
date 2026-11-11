@@ -14,9 +14,11 @@ describe('CreatureCard', () => {
     expect(wrapper.find('img').attributes('alt')).toBe('Illustration de Moussou')
   })
 
-  it('affiche une carte manquante sans illustration', () => {
+  it('affiche une carte manquante en silhouette décorative', () => {
     const wrapper = mount(CreatureCard, { props: { creature: moussou, missing: true } })
-    expect(wrapper.find('img').exists()).toBe(false)
+    const img = wrapper.find('img')
+    expect(img.classes()).toContain('card-silhouette')
+    expect(img.attributes('alt')).toBe('')
     expect(wrapper.text()).toContain('Non possédée')
     expect(wrapper.attributes('aria-label')).toBe('Moussou, non possédée')
   })

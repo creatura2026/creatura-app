@@ -96,6 +96,7 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
 
     <!-- Barre d'onglets mobile : actions accessibles au pouce -->
     <nav
+      data-bottom-nav
       class="fixed inset-x-0 bottom-0 z-30 border-t-2 border-ink bg-cream pb-[env(safe-area-inset-bottom)] md:hidden"
       aria-label="Navigation principale"
     >
