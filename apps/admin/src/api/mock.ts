@@ -175,6 +175,9 @@ function build(today: string): Dataset {
         recipient: { id: recipient.id, pseudo: recipient.pseudo },
         offered: [{ creature: summary(offered), quantity: 1 }],
         requested: [{ creature: summary(requested), quantity: 1 }],
+        // Un échange conclu a été validé par les deux joueurs.
+        proposerReady: status === 'ACCEPTED',
+        recipientReady: status === 'ACCEPTED',
         createdAt: createdAt.toISOString(),
         decidedAt,
         failureReason: status === 'FAILED' ? 'CARDS_UNAVAILABLE' : null,

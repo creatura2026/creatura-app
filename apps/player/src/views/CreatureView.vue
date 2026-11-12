@@ -7,6 +7,7 @@ import RarityGems from '@creatura/shared/ui/RarityGems.vue'
 import { familyTint } from '@creatura/shared/family'
 import { formatPercent } from '@creatura/shared/format'
 
+import CreatureOwners from '@/components/CreatureOwners.vue'
 import { useCollection, useCreature, useRarities } from '@/api/queries'
 
 const props = defineProps<{ id: string }>()
@@ -70,7 +71,6 @@ const isEgg = computed(() => creature.value?.imageUrl.startsWith('data:') ?? fal
               <dd class="mt-1 font-semibold">
                 {{ quantity ? `Possédées : ${quantity}` : 'Non possédée' }}
               </dd>
-              <dd v-if="quantity >= 2" class="text-sm">{{ quantity - 1 }} échangeable(s)</dd>
             </div>
           </dl>
 
@@ -78,12 +78,17 @@ const isEgg = computed(() => creature.value?.imageUrl.startsWith('data:') ?? fal
             <RouterLink v-if="!quantity" to="/booster" class="btn btn-primary">
               <PixelIcon name="booster" :size="18" /> Tenter ma chance
             </RouterLink>
-            <RouterLink to="/echanges/nouveau" class="btn btn-secondary">
-              <PixelIcon name="trade" :size="18" /> Proposer un échange
-            </RouterLink>
           </div>
         </div>
       </article>
+
+      <!-- Joueurs qui possèdent cette carte : on peut ouvrir un échange avec chacun -->
+      <section v-if="creature" class="mt-8 max-w-2xl" aria-labelledby="owners-title">
+        <h2 id="owners-title" class="mb-3 text-2xl font-bold">
+          {{ quantity ? 'Les autres joueurs qui l’ont' : 'Les joueurs qui l’ont' }}
+        </h2>
+        <CreatureOwners :creature-id="creature.id" :creature-name="creature.name" />
+      </section>
     </AsyncState>
   </section>
 </template>

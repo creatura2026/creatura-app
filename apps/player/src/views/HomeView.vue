@@ -7,20 +7,23 @@ import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import boosterUrl from '@creatura/shared/assets/booster.png'
 import { formatPercent } from '@creatura/shared/format'
 
-import { useMe, useMyTrades } from '@/api/queries'
+import { useMe, useOpenTrades } from '@/api/queries'
+import { awaitsMe } from '@/composables/tradeSeats'
+import { useAuthStore } from '@/stores/auth'
 
 const { data: me, isPending, error, refetch } = useMe()
-const { data: received } = useMyTrades({ role: 'received', status: 'PENDING', pageSize: 1 })
-const { data: sent } = useMyTrades({ role: 'sent', status: 'PENDING', pageSize: 1 })
+const { data: open } = useOpenTrades()
+const auth = useAuthStore()
 
-const pendingReceived = computed(() => received.value?.totalItems ?? 0)
-const pendingSent = computed(() => sent.value?.totalItems ?? 0)
+const openCount = computed(() => open.value?.items.length ?? 0)
+const myTurnCount = computed(
+  () => (open.value?.items ?? []).filter((t) => awaitsMe(t, auth.user?.id ?? '')).length,
+)
 </script>
 
 <template>
   <section>
     <PageHeader
-      eyebrow="Expérience joueur"
       :title="me ? `Bonjour, ${me.pseudo} !` : 'Bonjour !'"
       subtitle="Ouvrez, collectionnez, échangez."
     />
@@ -91,12 +94,11 @@ const pendingSent = computed(() => sent.value?.totalItems ?? 0)
           <p class="flex items-center gap-2 text-xs font-bold tracking-wider uppercase">
             <PixelIcon name="trade" :size="16" /> Échanges
           </p>
-          <p class="mt-2 font-pixel text-3xl font-bold">{{ pendingReceived }}</p>
+          <p class="mt-2 font-pixel text-3xl font-bold">{{ myTurnCount }}</p>
           <p class="text-sm">
-            {{ pendingReceived > 1 ? 'propositions reçues attendent' : 'proposition reçue attend' }}
-            votre réponse
+            {{ myTurnCount > 1 ? 'échanges attendent' : 'échange attend' }} votre réponse
           </p>
-          <p class="mt-3 text-sm">{{ pendingSent }} envoyée(s) en attente</p>
+          <p class="mt-3 text-sm">{{ openCount }} échange{{ openCount > 1 ? 's' : '' }} en cours</p>
         </RouterLink>
 
         <!-- Catalogue -->

@@ -2,25 +2,35 @@
  * Implémentation SIMULÉE de l'API joueur, en attendant le serveur NestJS.
  * Elle applique les règles métier du document (un booster par jour, transfert tout-ou-rien…)
  * et renvoie les mêmes codes d'erreur que le contrat OpenAPI.
+ * La salle d'échange (WebSocket dans le contrat) est simulée dans `trade-room.ts`.
  */
 import type { PlayerApi } from '@creatura/shared/api/contract'
-import type {
-  Booster,
-  BoosterCard,
-  CollectionEntry,
-  CollectionProgress,
-  CreatureSummary,
-  Trade,
-  TradeItem,
-  TradeItemInput,
-  User,
+import {
+  ApiError,
+  type Booster,
+  type BoosterCard,
+  type CollectionEntry,
+  type CollectionProgress,
+  type PlayerSummary,
+  type Trade,
+  type User,
 } from '@creatura/shared/api/types'
 import { clone, delay, normalize, paginate, problem, uuid } from '@creatura/shared/api/mock-utils'
 import { compareCreatures, CREATURES, FAMILIES, RARITIES } from '@creatura/shared/fixtures/catalog'
 import { nextParisMidnight, parisToday } from '@creatura/shared/format'
 import { readMockBoosterSettings } from '@creatura/shared/api/mock-settings'
 
-import { loadDb, saveDb, type MockBooster, type MockUser } from './db'
+import {
+  addCards,
+  loadDb,
+  quantityOf,
+  saveDb,
+  toSummary,
+  type MockBooster,
+  type MockUser,
+} from './db'
+import { startPartner, stopPartner } from './partner'
+import { act, enterRoom, findTrade, hasPlayers, notifyRoom, sideOf } from './trade-room'
 
 const withoutUser = ({ id, claimDate, openedAt, cards }: MockBooster): Booster => ({
   id,
@@ -35,13 +45,6 @@ const toUser = (u: MockUser): User => ({
   role: u.role,
   createdAt: u.createdAt,
 })
-
-const toSummary = (id: string): CreatureSummary => {
-  const creature = CREATURES.find((c) => c.id === id)
-  if (!creature) throw problem('NOT_FOUND', 'Créature inconnue.')
-  const { name, family, rarity, imageUrl } = creature
-  return { id, name, family, rarity, imageUrl }
-}
 
 function progressOf(userId: string): CollectionProgress {
   const owned = loadDb().collections[userId] ?? {}
@@ -72,35 +75,22 @@ function drawCreatureId(random: () => number): string {
   return pool[Math.floor(random() * pool.length)]!.id
 }
 
-function quantityOf(userId: string, creatureId: string): number {
-  return loadDb().collections[userId]?.[creatureId] ?? 0
-}
-
-function addCards(userId: string, creatureId: string, delta: number): void {
-  const db = loadDb()
-  const col = (db.collections[userId] ??= {})
-  col[creatureId] = (col[creatureId] ?? 0) + delta
-  if (col[creatureId] <= 0) delete col[creatureId]
-}
-
-function toItems(inputs: TradeItemInput[]): TradeItem[] {
-  return inputs.map((i) => ({ creature: toSummary(i.creatureId), quantity: i.quantity }))
-}
-
-function hasAll(userId: string, items: TradeItem[]): boolean {
-  return items.every((i) => quantityOf(userId, i.creature.id) >= i.quantity)
-}
-
 export interface MockApiOptions {
   getToken: () => string | null
   random?: () => number
   now?: () => Date
+  /**
+   * Fait jouer l'autre joueur dans la salle d'échange (voir `partner.ts`). Actif en démonstration,
+   * coupé dans les tests, qui font parler deux vrais joueurs.
+   */
+  simulatePartner?: boolean
 }
 
 export function createMockPlayerApi({
   getToken,
   random = Math.random,
   now = () => new Date(),
+  simulatePartner = import.meta.env.MODE !== 'test',
 }: MockApiOptions): PlayerApi & { resetTodayBooster(): Promise<void> } {
   function currentUser(): MockUser {
     const db = loadDb()
@@ -111,10 +101,18 @@ export function createMockPlayerApi({
     return user
   }
 
-  function findTrade(tradeId: string): Trade {
-    const trade = loadDb().trades.find((t) => t.id === tradeId)
-    if (!trade) throw problem('NOT_FOUND', 'Cet échange n’existe pas.')
-    return trade
+  /** Ferme un échange en cours sans rien transférer, et prévient la salle. */
+  function close(trade: Trade, status: 'REFUSED' | 'CANCELLED'): Trade {
+    if (trade.status !== 'PENDING') {
+      throw problem('TRADE_NOT_PENDING', 'Cet échange n’est plus en cours.')
+    }
+    trade.status = status
+    trade.proposerReady = false
+    trade.recipientReady = false
+    trade.decidedAt = now().toISOString()
+    saveDb()
+    notifyRoom(trade.id)
+    return clone(trade)
   }
 
   function todayBooster(userId: string) {
@@ -317,12 +315,29 @@ export function createMockPlayerApi({
       currentUser()
       const target = loadDb().users.find((u) => u.id === playerId && u.role === 'PLAYER')
       if (!target) throw problem('NOT_FOUND', 'Ce joueur n’existe pas.')
-      // Règle proposée : seuls les doublons sont échangeables, un exemplaire reste au joueur.
+      // Toutes ses cartes peuvent être échangées, y compris son dernier exemplaire.
       const items = Object.entries(loadDb().collections[target.id] ?? {})
-        .filter(([, q]) => q >= 2)
-        .map(([id, q]) => ({ creature: toSummary(id), availableQuantity: q - 1 }))
+        .filter(([, q]) => q > 0)
+        .map(([id, q]) => ({ creature: toSummary(id), availableQuantity: q }))
         .sort((a, b) => compareCreatures(a.creature, b.creature))
       return clone({ player: { id: target.id, pseudo: target.pseudo }, items })
+    },
+
+    async listCreatureOwners(creatureId) {
+      await delay()
+      const me = currentUser()
+      const creature = toSummary(creatureId)
+      const items = loadDb()
+        .users.filter((u) => u.id !== me.id && u.role === 'PLAYER')
+        .map((u) => ({
+          player: { id: u.id, pseudo: u.pseudo },
+          quantity: quantityOf(u.id, creatureId),
+        }))
+        .filter((owner) => owner.quantity > 0)
+        .sort(
+          (a, b) => b.quantity - a.quantity || a.player.pseudo.localeCompare(b.player.pseudo, 'fr'),
+        )
+      return clone({ creature, items })
     },
 
     async createTrade(body) {
@@ -332,20 +347,33 @@ export function createMockPlayerApi({
         throw problem('TRADE_WITH_SELF', 'Vous ne pouvez pas échanger avec vous-même.')
       const recipient = loadDb().users.find((u) => u.id === body.recipientId && u.role === 'PLAYER')
       if (!recipient) throw problem('NOT_FOUND', 'Ce joueur n’existe pas.')
-      if (!body.offered.length || !body.requested.length) {
-        throw problem('VALIDATION_ERROR', 'Il faut au moins une carte de chaque côté.')
+      const wanted = body.wantedCreatureId ? toSummary(body.wantedCreatureId) : null
+
+      // Un seul échange en cours entre deux joueurs : on rouvre celui qui existe.
+      const ids = [me.id, recipient.id]
+      const existing = loadDb().trades.find(
+        (t) =>
+          t.status === 'PENDING' && ids.includes(t.proposer.id) && ids.includes(t.recipient.id),
+      )
+      if (existing) {
+        if (wanted && existing.proposer.id === me.id && existing.wanted?.id !== wanted.id) {
+          existing.wanted = wanted
+          saveDb()
+          notifyRoom(existing.id)
+        }
+        return clone(existing)
       }
-      const offered = toItems(body.offered)
-      if (!hasAll(me.id, offered)) {
-        throw problem('CARDS_NOT_OWNED', 'Vous ne possédez pas toutes les cartes proposées.')
-      }
+
       const trade: Trade = {
         id: uuid(),
         status: 'PENDING',
         proposer: { id: me.id, pseudo: me.pseudo },
         recipient: { id: recipient.id, pseudo: recipient.pseudo },
-        offered,
-        requested: toItems(body.requested),
+        offered: [],
+        requested: [],
+        proposerReady: false,
+        recipientReady: false,
+        wanted,
         createdAt: now().toISOString(),
         decidedAt: null,
       }
@@ -376,42 +404,7 @@ export function createMockPlayerApi({
       await delay()
       const me = currentUser()
       const trade = findTrade(tradeId)
-      if (trade.proposer.id !== me.id && trade.recipient.id !== me.id) {
-        throw problem('FORBIDDEN', 'Cet échange ne vous concerne pas.')
-      }
-      return clone(trade)
-    },
-
-    async acceptTrade(tradeId) {
-      await delay(400, 700)
-      const me = currentUser()
-      const trade = findTrade(tradeId)
-      if (trade.recipient.id !== me.id)
-        throw problem('FORBIDDEN', 'Seul le destinataire peut accepter.')
-      if (trade.status !== 'PENDING')
-        throw problem('TRADE_NOT_PENDING', 'Cet échange n’est plus en attente.')
-      // Vérification au moment de l'acceptation : tout ou rien.
-      if (!hasAll(trade.proposer.id, trade.offered) || !hasAll(me.id, trade.requested)) {
-        trade.status = 'FAILED'
-        trade.decidedAt = now().toISOString()
-        trade.failureReason = 'CARDS_UNAVAILABLE'
-        saveDb()
-        throw problem(
-          'CARDS_UNAVAILABLE',
-          'Une carte n’est plus disponible. Aucune carte n’a été transférée.',
-        )
-      }
-      for (const item of trade.offered) {
-        addCards(trade.proposer.id, item.creature.id, -item.quantity)
-        addCards(me.id, item.creature.id, item.quantity)
-      }
-      for (const item of trade.requested) {
-        addCards(me.id, item.creature.id, -item.quantity)
-        addCards(trade.proposer.id, item.creature.id, item.quantity)
-      }
-      trade.status = 'ACCEPTED'
-      trade.decidedAt = now().toISOString()
-      saveDb()
+      sideOf(trade, me.id)
       return clone(trade)
     },
 
@@ -421,12 +414,7 @@ export function createMockPlayerApi({
       const trade = findTrade(tradeId)
       if (trade.recipient.id !== me.id)
         throw problem('FORBIDDEN', 'Seul le destinataire peut refuser.')
-      if (trade.status !== 'PENDING')
-        throw problem('TRADE_NOT_PENDING', 'Cet échange n’est plus en attente.')
-      trade.status = 'REFUSED'
-      trade.decidedAt = now().toISOString()
-      saveDb()
-      return clone(trade)
+      return close(trade, 'REFUSED')
     },
 
     async cancelTrade(tradeId) {
@@ -434,12 +422,37 @@ export function createMockPlayerApi({
       const me = currentUser()
       const trade = findTrade(tradeId)
       if (trade.proposer.id !== me.id) throw problem('FORBIDDEN', 'Seul le proposant peut annuler.')
-      if (trade.status !== 'PENDING')
-        throw problem('TRADE_NOT_PENDING', 'Cet échange n’est plus en attente.')
-      trade.status = 'CANCELLED'
-      trade.decidedAt = now().toISOString()
-      saveDb()
-      return clone(trade)
+      return close(trade, 'CANCELLED')
+    },
+
+    joinTrade(tradeId, onMessage) {
+      let player: PlayerSummary | null = null
+      let leave: (() => void) | null = null
+      try {
+        const me = currentUser()
+        player = { id: me.id, pseudo: me.pseudo }
+        leave = enterRoom(tradeId, player, onMessage)
+        const trade = findTrade(tradeId)
+        if (simulatePartner && trade.status === 'PENDING') {
+          const partner = trade.proposer.id === me.id ? trade.recipient : trade.proposer
+          startPartner(tradeId, partner, now, random)
+        }
+      } catch (error) {
+        // Comme un WebSocket refusé : l'erreur arrive par le canal, pas par une exception.
+        if (!(error instanceof ApiError)) throw error
+        const { problem: refused } = error
+        void delay(40, 140).then(() => onMessage({ type: 'error', problem: refused }))
+      }
+      return {
+        send(message) {
+          if (player && leave) act(tradeId, player, message, now)
+        },
+        close() {
+          leave?.()
+          leave = null
+          if (!hasPlayers(tradeId)) stopPartner(tradeId)
+        },
+      }
     },
 
     /** Outil de démonstration (hors contrat) : rend le booster du jour à nouveau disponible. */
