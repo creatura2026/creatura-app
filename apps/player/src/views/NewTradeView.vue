@@ -162,10 +162,7 @@ async function submit() {
         :error="tradeable.error.value"
         @retry="tradeable.refetch()"
       >
-        <ul
-          v-if="tradeable.data.value?.items.length"
-          class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-        >
+        <ul v-if="tradeable.data.value?.items.length" class="card-grid">
           <li v-for="t in tradeable.data.value.items" :key="t.creature.id">
             <button
               type="button"
@@ -174,7 +171,7 @@ async function submit() {
               @click="chooseRequested(t.creature)"
             >
               <CreatureCard :creature="t.creature" :highlight="requested?.id === t.creature.id">
-                <p class="text-xs sm:text-sm">
+                <p class="text-center text-xs sm:text-sm">
                   Disponibles : <strong>{{ t.availableQuantity }}</strong>
                 </p>
               </CreatureCard>
@@ -198,10 +195,7 @@ async function submit() {
       <h2 class="mb-1 text-2xl font-bold">Que proposez-vous en échange ?</h2>
       <p class="mb-4 text-sm">Vos doublons uniquement. Une carte contre une carte.</p>
       <AsyncState :loading="mine.isPending.value" :error="mine.error.value" @retry="mine.refetch()">
-        <ul
-          v-if="mine.data.value?.items.length"
-          class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-        >
+        <ul v-if="mine.data.value?.items.length" class="card-grid">
           <li v-for="e in mine.data.value.items" :key="e.creature.id">
             <button
               type="button"
@@ -210,7 +204,7 @@ async function submit() {
               @click="chooseOffered(e.creature)"
             >
               <CreatureCard :creature="e.creature" :highlight="offered?.id === e.creature.id">
-                <p class="text-xs sm:text-sm">
+                <p class="text-center text-xs sm:text-sm">
                   Échangeables : <strong>{{ e.quantity - 1 }}</strong>
                 </p>
               </CreatureCard>

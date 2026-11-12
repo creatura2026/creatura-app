@@ -68,7 +68,8 @@ const LOOP = [
           />
         </div>
 
-        <ul class="mt-12 grid grid-cols-3 gap-2 sm:gap-4 md:max-w-3xl">
+        <!-- Trois cartes au format du booster : la largeur est bornée pour qu'elles restent des cartes -->
+        <ul class="mt-12 grid max-w-[34rem] grid-cols-3 gap-2 sm:gap-4">
           <li v-for="c in showcase" :key="c.id">
             <CreatureCard :creature="c" class="!shadow-none sm:!shadow-pixel-sm" />
           </li>

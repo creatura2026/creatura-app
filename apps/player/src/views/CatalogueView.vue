@@ -52,10 +52,7 @@ function reset() {
           <p class="mb-3 text-sm" aria-live="polite" :class="isFetching ? 'opacity-60' : ''">
             {{ data.totalItems }} créature{{ data.totalItems > 1 ? 's' : '' }}
           </p>
-          <ul
-            v-if="data.items.length"
-            class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
-          >
+          <ul v-if="data.items.length" class="card-grid">
             <li v-for="c in data.items" :key="c.id">
               <RouterLink
                 :to="{ name: 'creature', params: { id: c.id } }"

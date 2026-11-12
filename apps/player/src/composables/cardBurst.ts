@@ -1,9 +1,13 @@
 /**
- * Fait jaillir les cartes du sachet ouvert jusqu'à leur place dans la grille.
+ * Fait jaillir les cartes du sachet ouvert jusqu'à leur place sur le tapis (la pile).
  *
  * Chaque carte part exactement de la position de son dos dessiné dans le canvas (passage de relais
  * invisible), remonte d'abord DERRIÈRE la face avant du sachet (z-index sous l'image du sachet),
- * passe devant une fois sortie, puis file vers sa place avec un léger rebond.
+ * passe devant une fois sortie, puis file vers sa place avec un léger rebond. Les cartes partent
+ * dans l'ordre du tableau `cards` : la première arrive en premier.
+ *
+ * L'animation ne touche qu'à `transform` : la place de la carte, donnée par `translate` et `scale`,
+ * n'est pas modifiée.
  */
 import type { TearResult } from '@/components/BoosterTear.vue'
 
@@ -13,7 +17,7 @@ export async function burstFromPack(
   result: TearResult,
   cards: HTMLElement[],
   pack: HTMLElement | null,
-  /** Facteur `zoom` appliqué à la grille : les translations y sont exprimées avant zoom. */
+  /** Échelle (`scale`) des cartes à l'arrivée : les translations sont exprimées avant échelle. */
   zoom = 1,
 ): Promise<void> {
   const fallback = {
