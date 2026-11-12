@@ -1,3 +1,9 @@
-# Secrets et configuration locale
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
 .env
-!.env.example
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
