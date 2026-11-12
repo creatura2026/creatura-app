@@ -19,6 +19,9 @@ export default defineConfig({
         // Illustrations et polices (sous-ensembles latins) disponibles hors ligne.
         globPatterns: ['**/*.{js,css,html,ico,svg}', 'assets/*.png', 'assets/*-latin-*.woff2'],
         navigateFallback: '/index.html',
+        // Le dashboard admin est servi sous /admin/ sur le même domaine : le service worker
+        // du joueur ne doit pas répondre à sa place.
+        navigateFallbackDenylist: [/^\/admin(\/|$)/, /^\/api\//],
       },
       manifest: {
         name: 'Créatura',
