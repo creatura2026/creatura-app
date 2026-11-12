@@ -8,9 +8,16 @@
  *
  * La carte a partout le format du booster : 5:8 en hauteur (150 × 240), sa hauteur suit sa largeur.
  * Pour que le contenu tienne aussi dans une carte étroite, il se règle sur la largeur de la carte
- * elle-même (requêtes de conteneur `@[…]`), pas sur celle de l'écran : en dessous de 9rem,
- * illustration et nom plus petits ; en dessous de 6.5rem, la ligne famille · rareté disparaît (les
- * gemmes disent déjà la rareté). Dans une grille, utiliser `.card-grid` (theme.css).
+ * elle-même (requêtes de conteneur `@[…]`), pas sur celle de l'écran. Attention : ces seuils
+ * portent sur la largeur INTÉRIEURE de la carte, soit 20px de moins que la carte (bordure et marge).
+ *  - en dessous de 8rem (carte de moins de 148px) : illustration et nom plus petits. La carte du
+ *    booster (150px) reste donc au grand format ;
+ *  - en dessous de 5.5rem (carte de moins de 108px) : la ligne famille · rareté disparaît, les
+ *    gemmes disent déjà la rareté ;
+ *  - la description n'est qu'un extrait, coupé au nombre de lignes qui tient dans la carte à cette
+ *    largeur, même si la ligne famille · rareté passe sur deux lignes (le texte complet est sur la
+ *    fiche de la créature).
+ * Dans une grille, utiliser `.card-grid` (theme.css).
  */
 import { computed } from 'vue'
 import type { CreatureSummary } from '../api/types'
@@ -50,7 +57,7 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
     <div
       class="card-window relative flex shrink-0 items-center justify-center overflow-hidden border-2"
       :class="[
-        size === 'sm' ? 'h-16 sm:h-20' : 'h-16 @[9rem]:h-24 sm:@[9rem]:h-28',
+        size === 'sm' ? 'h-16 sm:h-20' : 'h-16 @[8rem]:h-24 sm:@[8rem]:h-28',
         missing ? 'hatched border-dashed border-ink/40' : 'border-ink',
       ]"
       :style="missing ? undefined : { backgroundColor: familyTint(creature.family.code) }"
@@ -69,11 +76,11 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
     <div class="flex flex-1 flex-col items-center gap-1 px-1 text-center">
       <h3
         class="leading-tight font-bold"
-        :class="size === 'sm' ? 'text-sm' : 'text-sm @[9rem]:text-base sm:@[9rem]:text-lg'"
+        :class="size === 'sm' ? 'text-sm' : 'text-sm @[8rem]:text-base sm:@[8rem]:text-lg'"
       >
         {{ creature.name }}
       </h3>
-      <p class="hidden text-xs leading-snug text-ink/80 @[6.5rem]:block sm:text-sm">
+      <p class="hidden text-xs leading-snug text-ink/80 @[5.5rem]:block sm:@[8rem]:text-sm">
         {{ creature.family.label }} · {{ creature.rarity.label }}
       </p>
       <RarityGems
@@ -81,7 +88,11 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
         :label="creature.rarity.label"
         :size="size === 'sm' ? 12 : 16"
       />
-      <p v-if="description" class="text-xs leading-snug text-ink/80 sm:text-sm">
+      <!-- Extrait : le nombre de lignes suit la place qu'offre la largeur de la carte -->
+      <p
+        v-if="description"
+        class="line-clamp-2 text-xs leading-snug text-ink/80 @[8rem]:line-clamp-1 @[8.75rem]:line-clamp-2 @[10.25rem]:line-clamp-3 @[11.25rem]:line-clamp-4 @[12.75rem]:line-clamp-5 sm:@[11.25rem]:text-sm"
+      >
         {{ description }}
       </p>
       <!-- Pied de carte : reste en bas quand la carte est plus haute que son contenu -->

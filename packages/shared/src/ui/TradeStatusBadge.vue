@@ -5,7 +5,7 @@ defineProps<{ status: TradeStatus }>()
 
 const STATUS: Record<TradeStatus, { label: string; cls: string }> = {
   PENDING: { label: 'En attente', cls: 'bg-butter' },
-  ACCEPTED: { label: 'Accepté', cls: 'bg-mint' },
+  ACCEPTED: { label: 'Conclu', cls: 'bg-mint' },
   REFUSED: { label: 'Refusé', cls: 'bg-salmon' },
   CANCELLED: { label: 'Annulé', cls: 'bg-mist' },
   FAILED: { label: 'Échoué', cls: 'bg-salmon' },

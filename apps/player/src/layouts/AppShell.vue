@@ -3,14 +3,18 @@ import { computed } from 'vue'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import PixelIcon, { type IconName } from '@creatura/shared/ui/PixelIcon.vue'
 
-import { useMe, useMyTrades } from '@/api/queries'
+import { useMe, useOpenTrades } from '@/api/queries'
+import { awaitsMe } from '@/composables/tradeSeats'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const { data: me } = useMe()
-const { data: pending } = useMyTrades({ role: 'received', status: 'PENDING', pageSize: 1 })
+const { data: open } = useOpenTrades()
 
-const pendingCount = computed(() => pending.value?.totalItems ?? 0)
+/** Échanges qui attendent une action du joueur. */
+const pendingCount = computed(
+  () => (open.value?.items ?? []).filter((t) => awaitsMe(t, auth.user?.id ?? '')).length,
+)
 
 const NAV: { to: string; label: string; short: string; icon: IconName }[] = [
   { to: '/accueil', label: 'Accueil', short: 'Accueil', icon: 'home' },
@@ -55,7 +59,7 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
             <span
               v-if="item.to === '/echanges' && pendingCount"
               class="ml-0.5 min-w-5 border-2 border-ink bg-sun px-1 text-center text-xs leading-4 font-bold text-ink"
-              :aria-label="`${pendingCount} échange(s) en attente`"
+              :aria-label="`${pendingCount} échange(s) à votre tour`"
             >
               {{ pendingCount }}
             </span>
@@ -112,7 +116,7 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
             <span
               v-if="item.to === '/echanges' && pendingCount"
               class="absolute top-1.5 right-[calc(50%-1.4rem)] min-w-5 border-2 border-ink bg-sun px-1 text-center text-[0.65rem] leading-4 font-bold text-ink"
-              :aria-label="`${pendingCount} échange(s) en attente`"
+              :aria-label="`${pendingCount} échange(s) à votre tour`"
             >
               {{ pendingCount }}
             </span>

@@ -2,13 +2,18 @@
 import type { TradeItem } from '../api/types'
 import { familyTint } from '../family'
 
-defineProps<{ label: string; items: TradeItem[]; tone?: string }>()
+defineProps<{
+  label: string
+  items: TradeItem[]
+  tone?: string
+  emptyText?: string
+}>()
 </script>
 
 <template>
   <div class="min-w-0 flex-1 border-2 border-ink p-3" :class="tone ?? 'bg-white'">
-    <p class="text-xs font-bold tracking-wider uppercase">{{ label }}</p>
-    <ul class="mt-2 flex flex-col gap-2">
+    <p class="text-xs font-bold">{{ label }}</p>
+    <ul v-if="items.length" class="mt-2 flex flex-col gap-2">
       <li v-for="item in items" :key="item.creature.id" class="flex items-center gap-2">
         <span
           class="card-window grid size-11 shrink-0 place-items-center border-2 border-ink"
@@ -31,5 +36,8 @@ defineProps<{ label: string; items: TradeItem[]; tone?: string }>()
         </span>
       </li>
     </ul>
+    <p v-else class="mt-2 text-sm text-ink/70">
+      {{ emptyText ?? 'Aucune carte' }}
+    </p>
   </div>
 </template>

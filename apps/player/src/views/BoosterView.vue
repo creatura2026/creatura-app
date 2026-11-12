@@ -303,7 +303,7 @@ const remaining = computed(() =>
 
 <template>
   <section>
-    <PageHeader eyebrow="Expérience joueur" title="Un booster quotidien" />
+    <PageHeader title="Un booster quotidien" />
 
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
       <div v-if="today" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -311,7 +311,7 @@ const remaining = computed(() =>
           <!-- Cadre jaune unique : ouverture puis découverte des cartes, toujours à la taille de l'écran -->
           <div
             ref="panel"
-            class="card-pixel booster-stage flex flex-col items-center gap-2 bg-butter px-5 py-5 text-center"
+            class="card-pixel play-mat flex flex-col items-center gap-2 bg-butter px-5 py-5 text-center"
             :style="panelHeight ? { height: `${panelHeight}px` } : undefined"
           >
             <p
@@ -346,10 +346,6 @@ const remaining = computed(() =>
 
             <!-- Booster ouvert ou déjà réclamé : découverte des cartes dans le même cadre -->
             <template v-else-if="booster">
-              <p v-if="!opened" class="shrink-0 text-sm">
-                Une nouvelle demande ne donne aucune carte.
-              </p>
-
               <!--
                 Tapis : la pile face cachée en bas, un emplacement par carte au-dessus. Chaque carte
                 est placée par `cardStyle` et glisse d'une place à l'autre.
@@ -419,13 +415,6 @@ const remaining = computed(() =>
         </div>
 
         <aside class="flex flex-col gap-5">
-          <div class="card-pixel-sm bg-salmon p-4">
-            <p class="font-bold">Règle quotidienne</p>
-            <p class="mt-1 text-sm">
-              Un booster par compte et par jour (minuit à minuit, heure de Paris). Le serveur
-              contrôle aussi les demandes simultanées.
-            </p>
-          </div>
           <div class="card-pixel-sm bg-white p-4">
             <p class="font-bold">Probabilités de tirage</p>
             <ul class="mt-2 flex flex-col gap-1.5 text-sm">
@@ -445,10 +434,6 @@ const remaining = computed(() =>
                 <strong>{{ formatPercent(r.dropRate * 100) }}</strong>
               </li>
             </ul>
-            <p class="mt-3 text-sm">
-              Sur la pile, la prochaine carte à retourner scintille de la couleur de sa rareté si
-              elle est peu commune ou rare.
-            </p>
           </div>
         </aside>
       </div>
@@ -510,57 +495,5 @@ const remaining = computed(() =>
   .mat-slot {
     transition: none;
   }
-}
-
-/*
- * Fond du cadre jaune : tout est peint en arrière-plan (aucun élément ajouté), pour ne jamais passer
- * devant les cartes ni perturber leur jaillissement du sachet.
- *  - coins dorés en équerre, posés sur un cadre intérieur en pointillés (comme la ligne de déchirure) ;
- *  - halo clair en anneaux nets au centre, derrière le booster puis les cartes ;
- *  - motif pixel discret : pattes et feuilles du sachet, petits éclats blancs.
- */
-.booster-stage {
-  --corner: #d9a12e;
-  outline: 2px dashed rgb(255 255 255 / 0.75);
-  outline-offset: -10px;
-  background-color: var(--color-butter);
-  background-image:
-    linear-gradient(var(--corner) 0 0), linear-gradient(var(--corner) 0 0),
-    linear-gradient(var(--corner) 0 0), linear-gradient(var(--corner) 0 0),
-    linear-gradient(var(--corner) 0 0), linear-gradient(var(--corner) 0 0),
-    linear-gradient(var(--corner) 0 0), linear-gradient(var(--corner) 0 0),
-    radial-gradient(
-      ellipse 60% 48% at 50% 46%,
-      rgb(255 255 255 / 0.42) 0 38%,
-      rgb(255 255 255 / 0.26) 38% 62%,
-      rgb(255 255 255 / 0.13) 62% 84%,
-      transparent 84%
-    ),
-    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 80 80' shape-rendering='crispEdges'><path fill='%23d9a93a' fill-opacity='.22' d='M10 10h2v2h-2zM14 10h2v2h-2zM8 13h2v2h-2zM16 13h2v2h-2zM11 15h4v1h-4zM10 16h6v1h-6zM9 17h8v2h-8zM10 19h2v1h-2zM14 19h2v1h-2zM52 52h2v2h-2zM56 52h2v2h-2zM50 55h2v2h-2zM58 55h2v2h-2zM53 57h4v1h-4zM52 58h6v1h-6zM51 59h8v2h-8zM52 61h2v1h-2zM56 61h2v1h-2z'/><path fill='%2383cba4' fill-opacity='.45' d='M56 12h2v1h-2zM55 13h3v1h-3zM54 14h4v1h-4zM53 15h4v1h-4zM53 16h3v1h-3zM52 17h2v1h-2zM14 58h2v1h-2zM14 59h3v1h-3zM14 60h4v1h-4zM15 61h4v1h-4zM16 62h3v1h-3zM18 63h2v1h-2z'/><path fill='%23fff' fill-opacity='.8' d='M35 6h1v1h-1zM34 7h3v1h-3zM35 8h1v1h-1zM5 38h1v1h-1zM4 39h3v1h-3zM5 40h1v1h-1zM69 36h1v1h-1zM68 37h3v1h-3zM69 38h1v1h-1zM35 70h1v1h-1zM34 71h3v1h-3zM35 72h1v1h-1z'/><path fill='%23fff' fill-opacity='.6' d='M26 30h1v1h-1zM62 4h1v1h-1zM44 44h1v1h-1zM74 72h1v1h-1z'/></svg>");
-  background-position:
-    left 6px top 6px,
-    left 6px top 6px,
-    right 6px top 6px,
-    right 6px top 6px,
-    left 6px bottom 6px,
-    left 6px bottom 6px,
-    right 6px bottom 6px,
-    right 6px bottom 6px,
-    center,
-    -20px -12px;
-  background-size:
-    22px 6px,
-    6px 22px,
-    22px 6px,
-    6px 22px,
-    22px 6px,
-    6px 22px,
-    22px 6px,
-    6px 22px,
-    100% 100%,
-    160px 160px;
-  background-repeat:
-    no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat,
-    no-repeat, repeat;
 }
 </style>

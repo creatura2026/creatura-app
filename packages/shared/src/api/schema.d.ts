@@ -192,6 +192,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creatures/{creatureId}/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trouver les joueurs qui possèdent une créature (UC-08, AS-8)
+         * @description Sert à chercher une carte que l'on n'a pas, puis à ouvrir un échange avec un joueur qui la possède.
+         *     Le joueur connecté est exclu. Les joueurs sont triés par quantité possédée, la plus grande d'abord.
+         */
+        get: operations["listCreatureOwners"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/boosters/today": {
         parameters: {
             query?: never;
@@ -280,8 +301,8 @@ export interface paths {
         };
         /**
          * Voir les cartes qu'un joueur peut échanger (UC-08, AS-8)
-         * @description Règle proposée, à valider au point client : seuls les doublons sont visibles, et un exemplaire de chaque carte
-         *     reste toujours au joueur. La quantité disponible vaut donc `quantité possédée - 1`.
+         * @description Toutes les cartes que le joueur possède peuvent être échangées, y compris son dernier exemplaire.
+         *     La quantité disponible vaut donc la quantité possédée.
          */
         get: operations["getTradeableCards"];
         put?: never;
@@ -303,10 +324,13 @@ export interface paths {
         get: operations["listMyTrades"];
         put?: never;
         /**
-         * Proposer un échange (UC-09, AS-9)
-         * @description Une carte contre une carte au minimum. Les lots (plusieurs cartes de chaque côté) sont prévus par le contrat,
-         *     mais leur ouverture dans l'interface est à valider au point client.
-         *     Les cartes ne sont pas réservées : leur disponibilité est vérifiée de nouveau au moment de l'acceptation.
+         * Ouvrir un échange avec un joueur (UC-09, AS-9)
+         * @description Ouvre une salle d'échange, tapis vides. Les cartes se posent ensuite dans la salle (`/trades/{tradeId}/live`).
+         *     `wantedCreatureId` indique la carte que le proposant cherche chez l'autre joueur, quand l'échange part
+         *     d'une carte du catalogue.
+         *     S'il existe déjà un échange en cours entre les deux joueurs, il est renvoyé tel quel (200) au lieu d'en
+         *     créer un second.
+         *     Les cartes ne sont pas réservées : leur disponibilité est vérifiée de nouveau au moment de conclure.
          */
         post: operations["createTrade"];
         delete?: never;
@@ -332,22 +356,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/trades/{tradeId}/accept": {
+    "/trades/{tradeId}/live": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Accepter un échange (UC-10, AS-10)
-         * @description Réservé au destinataire. Transaction atomique : passage de `PENDING` à `ACCEPTED`, verrouillage des exemplaires
-         *     encore possédés, puis transfert dans les deux sens. Les deux collections changent ensemble, ou aucune.
-         *     Deux acceptations simultanées ne peuvent pas consommer le même exemplaire (preuve qualité 03).
+         * Entrer dans la salle d'échange (WebSocket) (UC-09, UC-10, AS-9, AS-10)
+         * @description Requête d'ouverture d'un WebSocket (`Upgrade: websocket`), réservée aux deux joueurs de l'échange.
+         *     Un navigateur ne peut pas envoyer d'en-tête `Authorization` sur un WebSocket : le jeton d'accès passe
+         *     donc dans le paramètre `access_token`.
+         *
+         *     À la connexion, le serveur envoie `init` (échange, discussion, joueurs présents). Ensuite :
+         *     - le client envoie `offer` (son tapis complet), `ready` (valider ou retirer sa validation) et `chat` ;
+         *     - le serveur diffuse aux deux joueurs `trade` (échange à jour), `chat` (nouveau message) et `presence` ;
+         *     - une action refusée renvoie `error` à son auteur, avec le même *Problem Details* qu'en HTTP.
+         *
+         *     Quand les deux joueurs ont validé, le serveur transfère les cartes dans une transaction atomique et
+         *     diffuse `trade` avec le statut `ACCEPTED`. Les deux collections changent ensemble, ou aucune ; deux
+         *     échanges conclus en même temps ne peuvent pas consommer le même exemplaire (preuve qualité 03).
          */
-        post: operations["acceptTrade"];
+        get: operations["joinTrade"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -365,7 +398,7 @@ export interface paths {
         put?: never;
         /**
          * Refuser un échange (UC-10, AS-10)
-         * @description Réservé au destinataire. Aucun transfert.
+         * @description Réservé au destinataire, tant que l'échange est en cours. Ferme la salle, aucun transfert.
          */
         post: operations["refuseTrade"];
         delete?: never;
@@ -384,8 +417,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Annuler sa proposition (UC-09, AS-9)
-         * @description Réservé au proposant, tant que l'échange est en attente.
+         * Annuler un échange que l'on a ouvert (UC-09, AS-9)
+         * @description Réservé au proposant, tant que l'échange est en cours. Ferme la salle, aucun transfert.
          */
         post: operations["cancelTrade"];
         delete?: never;
@@ -672,7 +705,16 @@ export interface components {
             player: components["schemas"]["PlayerSummary"];
             items: {
                 creature: components["schemas"]["CreatureSummary"];
+                /** @description Quantité possédée par le joueur */
                 availableQuantity: number;
+            }[];
+        };
+        CreatureOwners: {
+            creature: components["schemas"]["CreatureSummary"];
+            items: {
+                player: components["schemas"]["PlayerSummary"];
+                /** @description Nombre d'exemplaires que ce joueur possède */
+                quantity: number;
             }[];
         };
         TradeItemInput: {
@@ -683,17 +725,18 @@ export interface components {
         CreateTradeRequest: {
             /** Format: uuid */
             recipientId: string;
-            /** @description Cartes que le proposant donne */
-            offered: components["schemas"]["TradeItemInput"][];
-            /** @description Cartes que le proposant demande au destinataire */
-            requested: components["schemas"]["TradeItemInput"][];
+            /**
+             * Format: uuid
+             * @description Carte que le proposant cherche chez l'autre joueur (facultatif)
+             */
+            wantedCreatureId?: string;
         };
         /**
-         * @description PENDING : en attente de décision.
-         *     ACCEPTED : accepté, cartes transférées.
-         *     REFUSED : refusé par le destinataire.
-         *     CANCELLED : annulé par le proposant.
-         *     FAILED : acceptation impossible, une carte n'était plus disponible.
+         * @description PENDING : en cours, les joueurs posent leurs cartes et discutent.
+         *     ACCEPTED : conclu, les deux joueurs ont validé et les cartes sont transférées.
+         *     REFUSED : abandonné par le destinataire.
+         *     CANCELLED : abandonné par le proposant.
+         *     FAILED : le transfert a échoué côté serveur ; aucune carte n'a été transférée.
          * @enum {string}
          */
         TradeStatus: "PENDING" | "ACCEPTED" | "REFUSED" | "CANCELLED" | "FAILED";
@@ -707,13 +750,21 @@ export interface components {
             status: components["schemas"]["TradeStatus"];
             proposer: components["schemas"]["PlayerSummary"];
             recipient: components["schemas"]["PlayerSummary"];
+            /** @description Tapis du proposant, les cartes qu'il donne */
             offered: components["schemas"]["TradeItem"][];
+            /** @description Tapis du destinataire, les cartes qu'il donne */
             requested: components["schemas"]["TradeItem"][];
+            /** @description Le proposant a validé l'échange tel qu'il est */
+            proposerReady: boolean;
+            /** @description Le destinataire a validé l'échange tel qu'il est */
+            recipientReady: boolean;
+            /** @description Carte que le proposant cherche chez le destinataire, s'il l'a indiquée à l'ouverture */
+            wanted?: components["schemas"]["CreatureSummary"] | null;
             /** Format: date-time */
             createdAt: string;
             /**
              * Format: date-time
-             * @description Date d'acceptation, de refus, d'annulation ou d'échec ; null tant que l'échange est en attente
+             * @description Date de conclusion, de refus, d'annulation ou d'échec ; null tant que l'échange est en cours
              */
             decidedAt: string | null;
             /**
@@ -724,6 +775,73 @@ export interface components {
         };
         TradePage: components["schemas"]["PageMeta"] & {
             items: components["schemas"]["Trade"][];
+        };
+        /** @description Message de la discussion d'un échange */
+        TradeMessage: {
+            /** Format: uuid */
+            id: string;
+            author: components["schemas"]["PlayerSummary"];
+            text: string;
+            /** Format: date-time */
+            sentAt: string;
+        };
+        /** @description Message envoyé par le client dans la salle d'échange (WebSocket) ; le champ `type` dit lequel */
+        TradeClientMessage: components["schemas"]["TradeOfferCommand"] | components["schemas"]["TradeReadyCommand"] | components["schemas"]["TradeChatCommand"];
+        /** @description Remplace le tapis du joueur par cette liste de cartes (liste vide pour tout retirer) */
+        TradeOfferCommand: {
+            /** @enum {string} */
+            type: "offer";
+            items: components["schemas"]["TradeItemInput"][];
+        };
+        /** @description Valide l'échange tel qu'il est, ou retire sa validation pour modifier son tapis */
+        TradeReadyCommand: {
+            /** @enum {string} */
+            type: "ready";
+            ready: boolean;
+        };
+        /** @description Envoie un message dans la discussion */
+        TradeChatCommand: {
+            /** @enum {string} */
+            type: "chat";
+            text: string;
+        };
+        /** @description Message envoyé par le serveur dans la salle d'échange (WebSocket) ; le champ `type` dit lequel */
+        TradeServerMessage: components["schemas"]["TradeInitEvent"] | components["schemas"]["TradeUpdatedEvent"] | components["schemas"]["TradeChatEvent"] | components["schemas"]["TradePresenceEvent"] | components["schemas"]["TradeErrorEvent"];
+        /** @description État complet de la salle, envoyé à la connexion */
+        TradeInitEvent: {
+            /** @enum {string} */
+            type: "init";
+            trade: components["schemas"]["Trade"];
+            /** @description Discussion, du plus ancien message au plus récent */
+            messages: components["schemas"]["TradeMessage"][];
+            /** @description Identifiants des joueurs présents dans la salle */
+            online: string[];
+        };
+        /** @description L'échange a changé (tapis, validation, conclusion ou abandon) */
+        TradeUpdatedEvent: {
+            /** @enum {string} */
+            type: "trade";
+            trade: components["schemas"]["Trade"];
+        };
+        /** @description Nouveau message dans la discussion */
+        TradeChatEvent: {
+            /** @enum {string} */
+            type: "chat";
+            message: components["schemas"]["TradeMessage"];
+        };
+        /** @description Un joueur entre dans la salle ou la quitte */
+        TradePresenceEvent: {
+            /** @enum {string} */
+            type: "presence";
+            /** Format: uuid */
+            playerId: string;
+            online: boolean;
+        };
+        /** @description Action refusée, ou carte devenue indisponible au moment de conclure */
+        TradeErrorEvent: {
+            /** @enum {string} */
+            type: "error";
+            problem: components["schemas"]["Problem"];
         };
         Period: {
             /** Format: date */
@@ -1139,6 +1257,30 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listCreatureOwners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creatureId: components["parameters"]["CreatureId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Joueurs qui possèdent au moins un exemplaire */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatureOwners"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getTodayBooster: {
         parameters: {
             query?: never;
@@ -1373,25 +1515,23 @@ export interface operations {
                 /**
                  * @example {
                  *       "recipientId": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
-                 *       "offered": [
-                 *         {
-                 *           "creatureId": "0b6f2c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
-                 *           "quantity": 1
-                 *         }
-                 *       ],
-                 *       "requested": [
-                 *         {
-                 *           "creatureId": "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a",
-                 *           "quantity": 1
-                 *         }
-                 *       ]
+                 *       "wantedCreatureId": "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a"
                  *     }
                  */
                 "application/json": components["schemas"]["CreateTradeRequest"];
             };
         };
         responses: {
-            /** @description Proposition créée, statut `PENDING` */
+            /** @description Un échange était déjà en cours avec ce joueur ; il est renvoyé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trade"];
+                };
+            };
+            /** @description Salle ouverte, statut `PENDING`, tapis vides */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1403,7 +1543,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            /** @description Cartes proposées non possédées (`CARDS_NOT_OWNED`) ou échange avec soi-même (`TRADE_WITH_SELF`) */
+            /** @description Échange avec soi-même (`TRADE_WITH_SELF`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1439,9 +1579,12 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    acceptTrade: {
+    joinTrade: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Jeton d'accès du joueur (JWT) */
+                access_token: string;
+            };
             header?: never;
             path: {
                 tradeId: components["parameters"]["TradeId"];
@@ -1450,39 +1593,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Échange accepté, cartes transférées */
-            200: {
+            /**
+             * @description Connexion WebSocket établie. Messages reçus : `TradeServerMessage` ; messages envoyés :
+             *     `TradeClientMessage`.
+             */
+            101: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Trade"];
-                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /**
-             * @description `TRADE_NOT_PENDING` : l'échange n'est plus en attente.
-             *     `CARDS_UNAVAILABLE` : une carte n'est plus disponible ; aucun transfert, l'échange passe en `FAILED`.
-             */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "type": "https://app.creatura.fr/problems/cards-unavailable",
-                     *       "title": "Cartes indisponibles",
-                     *       "status": 409,
-                     *       "code": "CARDS_UNAVAILABLE",
-                     *       "detail": "Moussou n'est plus disponible chez le proposant. Aucune carte n'a été transférée."
-                     *     }
-                     */
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     refuseTrade: {
@@ -1522,7 +1645,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Proposition annulée */
+            /** @description Échange annulé */
             200: {
                 headers: {
                     [name: string]: unknown;

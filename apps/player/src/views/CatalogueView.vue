@@ -34,7 +34,6 @@ function reset() {
 <template>
   <section>
     <PageHeader
-      eyebrow="Expérience joueur"
       title="Le catalogue"
       subtitle="Toutes les créatures de Créatura, possédées ou non."
     />

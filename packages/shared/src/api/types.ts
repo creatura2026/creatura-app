@@ -45,12 +45,18 @@ export type CollectionPage = Schemas['CollectionPage']
 export type PlayerSummary = Schemas['PlayerSummary']
 export type PlayerPage = Schemas['PlayerPage']
 export type TradeableCards = Schemas['TradeableCards']
+export type CreatureOwners = Schemas['CreatureOwners']
 export type TradeItemInput = Schemas['TradeItemInput']
 export type CreateTradeRequest = Schemas['CreateTradeRequest']
 export type TradeStatus = Schemas['TradeStatus']
 export type TradeItem = Schemas['TradeItem']
 export type Trade = Schemas['Trade']
 export type TradePage = Schemas['TradePage']
+
+/** Salle d'échange (WebSocket) : discussion, messages du client et du serveur. */
+export type TradeMessage = Schemas['TradeMessage']
+export type TradeClientMessage = Schemas['TradeClientMessage']
+export type TradeServerMessage = Schemas['TradeServerMessage']
 
 export type Period = Schemas['Period']
 export type DailyCount = Schemas['DailyCount']
