@@ -2,8 +2,24 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+# Dépendances
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+coverage/
+
+# Variables d'environnement (ne jamais commiter de secrets)
 .env
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
+.env.*
+!.env.example
+!.env.mock
+
+# Logs
+*.log
+
+# Éditeurs et système
+.idea/
+.DS_Store
+Thumbs.db

@@ -5,6 +5,7 @@ erDiagram
     utilisateur ||--o{ echange : "reçoit"
     echange     ||--|{ echange_ligne : "contient"
     creature    ||--o{ echange_ligne : "est échangée dans"
+    utilisateur |o--o{ reglage : "a modifié"
 
     utilisateur {
         uuid        id                PK
@@ -23,7 +24,7 @@ erDiagram
         varchar     famille              "NATURE | CRISTAL | BRUME | LUEUR"
         varchar     rarete               "COMMUN | PEU_COMMUN | RARE"
         integer     poids                "> 0, probabilité de tirage"
-        varchar     image                "chemin, ex. images/moussou.png"
+        varchar     image                "clé S3 du CDN, ex. sprites/moss_puff.png"
         integer     stock_total          ">= 0"
         integer     stock_restant        "entre 0 et stock_total"
     }
@@ -38,9 +39,10 @@ erDiagram
         uuid        id                PK
         uuid        proposeur_id      FK
         uuid        destinataire_id   FK "différent du proposeur"
-        varchar     statut               "EN_ATTENTE | ACCEPTE | REFUSE | ANNULE"
+        varchar     statut               "EN_ATTENTE | ACCEPTE | REFUSE | ANNULE | ECHOUE"
         timestamptz cree_le
         timestamptz decide_le            "NULL tant qu'en attente"
+        varchar     motif_echec          "rempli si et seulement si ECHOUE"
     }
 
     echange_ligne {
@@ -48,4 +50,11 @@ erDiagram
         integer     creature_id       PK, FK
         varchar     sens              PK "OFFERT | DEMANDE"
         integer     quantite             "> 0"
+    }
+
+    reglage {
+        smallint    id                PK "toujours 1 : une seule ligne"
+        integer     cartes_par_booster   "1 à 10, 5 par défaut"
+        timestamptz modifie_le           "NULL si jamais modifié"
+        uuid        modifie_par       FK "administrateur"
     }

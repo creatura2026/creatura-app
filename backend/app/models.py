@@ -1,4 +1,4 @@
-"""Modèles ORM : correspondance exacte avec db/01_schema.sql.
+"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_…).
 
 Le schéma est la source de vérité : le back ne crée ni ne modifie aucune table
 (pas de `create_all`). Les noms suivent la base : français, snake_case, sans accents.
@@ -42,6 +42,7 @@ class Statut(str, enum.Enum):
     ACCEPTE = "ACCEPTE"
     REFUSE = "REFUSE"
     ANNULE = "ANNULE"
+    ECHOUE = "ECHOUE"  # acceptation impossible : une carte n'était plus disponible
 
 
 class Sens(str, enum.Enum):
@@ -101,6 +102,7 @@ class Echange(Base):
     statut: Mapped[Statut] = mapped_column(_varchar_enum(Statut, 12), default=Statut.EN_ATTENTE)
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     decide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    motif_echec: Mapped[str | None] = mapped_column(String(30))
 
     proposeur: Mapped[Utilisateur] = relationship(foreign_keys=[proposeur_id], lazy="joined")
     destinataire: Mapped[Utilisateur] = relationship(foreign_keys=[destinataire_id], lazy="joined")
@@ -118,3 +120,18 @@ class EchangeLigne(Base):
     quantite: Mapped[int] = mapped_column(Integer)
 
     creature: Mapped[Creature] = relationship(lazy="joined")
+
+
+class Reglage(Base):
+    """Réglages du jeu modifiables par un administrateur (une seule ligne, id = 1)."""
+
+    __tablename__ = "reglage"
+
+    ID = 1
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=ID)
+    cartes_par_booster: Mapped[int] = mapped_column(Integer)
+    modifie_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    modifie_par_id: Mapped[uuid.UUID | None] = mapped_column("modifie_par", ForeignKey("utilisateur.id"))
+
+    modifie_par: Mapped[Utilisateur | None] = relationship(lazy="joined")

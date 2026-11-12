@@ -1,69 +1,72 @@
+import enum
 import uuid
-from datetime import date, datetime
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import Field, StringConstraints, field_validator
 
 from app.models import Role, Utilisateur
+from app.schemas.base import ApiInput, ApiModel
 from app.security import BCRYPT_MAX_BYTES
 
 
-class RegisterIn(BaseModel):
-    # Espaces autour retirés : la base refuse un pseudo ou un identifiant vide (btrim).
-    pseudo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=30)]
+class RoleCode(str, enum.Enum):
+    PLAYER = "PLAYER"
+    ADMIN = "ADMIN"
+
+
+ROLE_CODES = {Role.JOUEUR: RoleCode.PLAYER, Role.ADMIN: RoleCode.ADMIN}
+
+
+class RegisterIn(ApiInput):
+    pseudo: Annotated[str, StringConstraints(min_length=3, max_length=20, pattern=r"^[A-Za-z0-9_-]+$")]
+    # Espaces autour retirés : la base refuse un identifiant vide (btrim).
     login: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=50)]
-    password: str = Field(min_length=8, max_length=BCRYPT_MAX_BYTES)
+    password: str = Field(min_length=12, max_length=128)
 
     @field_validator("password")
     @classmethod
     def password_fits_bcrypt(cls, value: str) -> str:
         if len(value.encode()) > BCRYPT_MAX_BYTES:
-            raise ValueError(f"Mot de passe trop long ({BCRYPT_MAX_BYTES} octets maximum)")
+            raise ValueError(f"mot de passe trop long ({BCRYPT_MAX_BYTES} octets au maximum)")
         return value
 
 
-class LoginIn(BaseModel):
-    login: str
-    password: str
+class LoginIn(ApiInput):
+    login: str = Field(max_length=50)
+    password: str = Field(max_length=128)
 
 
-class RefreshIn(BaseModel):
+class RefreshIn(ApiInput):
     refresh_token: str
 
 
-class TokenOut(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-
-class UserOut(BaseModel):
+class UserOut(ApiModel):
     id: uuid.UUID
     pseudo: str
-    login: str
-    role: Role
+    role: RoleCode
     created_at: datetime
-    last_booster: date | None
 
     @classmethod
     def of(cls, u: Utilisateur) -> "UserOut":
-        return cls(
-            id=u.id,
-            pseudo=u.pseudo,
-            login=u.identifiant,
-            role=u.role,
-            created_at=u.cree_le,
-            last_booster=u.dernier_booster,
-        )
+        return cls(id=u.id, pseudo=u.pseudo, role=ROLE_CODES[u.role], created_at=u.cree_le)
 
 
-class CollectionSummary(BaseModel):
-    owned_distinct: int
+class AuthTokensOut(ApiModel):
+    access_token: str
+    refresh_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    expires_in: int  # durée de validité du jeton d'accès, en secondes
+    user: UserOut
+
+
+class CollectionProgress(ApiModel):
+    owned_creatures: int  # créatures différentes possédées
     total_creatures: int
+    total_cards: int  # exemplaires, doublons compris
     completion_percent: float
-    total_cards: int
-    duplicates: int
 
 
-class ProfileOut(UserOut):
-    collection: CollectionSummary
+class MeOut(UserOut):
+    progress: CollectionProgress
+    booster_available_today: bool

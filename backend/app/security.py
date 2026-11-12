@@ -50,9 +50,9 @@ def decode_token(token: str, expected_kind: str) -> dict:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except jwt.ExpiredSignatureError:
-        raise Unauthorized("Jeton expiré")
+        raise Unauthorized("Votre session a expiré, reconnectez-vous.")
     except jwt.InvalidTokenError:
-        raise Unauthorized("Jeton invalide")
+        raise Unauthorized("Votre session est invalide, reconnectez-vous.")
     if payload.get("type") != expected_kind:
-        raise Unauthorized("Type de jeton invalide")
+        raise Unauthorized("Type de jeton invalide.")
     return payload

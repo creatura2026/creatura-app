@@ -1,23 +1,20 @@
 import enum
 
-from pydantic import BaseModel
+from app.schemas.auth import CollectionProgress
+from app.schemas.base import ApiModel, Page
+from app.schemas.catalog import CreatureSummaryOut
 
-from app.schemas.auth import CollectionSummary
-from app.schemas.catalog import CreatureOut
 
-
-class CollectionFilter(str, enum.Enum):
+class Ownership(str, enum.Enum):
     all = "all"
     owned = "owned"
     missing = "missing"
-    duplicates = "duplicates"
 
 
-class CollectionItemOut(BaseModel):
-    creature: CreatureOut
+class CollectionEntryOut(ApiModel):
+    creature: CreatureSummaryOut
     quantity: int  # 0 = carte manquante
 
 
-class CollectionOut(BaseModel):
-    summary: CollectionSummary
-    items: list[CollectionItemOut]
+class CollectionPageOut(Page[CollectionEntryOut]):
+    progress: CollectionProgress

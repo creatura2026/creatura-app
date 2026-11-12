@@ -5,11 +5,15 @@
 - Stock global : chaque carte tirée décrémente `creature.stock_restant` ; une créature épuisée
   sort du tirage. Si tout est épuisé, le booster est annulé et le joueur ne le perd pas.
 - Tout se fait dans une transaction : `stock_total = stock_restant + Σ collections` reste vrai.
+- Le nombre de cartes vient de la table `reglage` (modifiable par l'admin).
+- Les boosters ne sont pas enregistrés (pas de table booster) : une fois ouvert, le booster du
+  jour ne peut pas être réaffiché ; ses cartes sont dans la collection.
 """
 
 import random
+import uuid
 from collections import Counter
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Date, cast, func, or_, select, update
@@ -19,9 +23,9 @@ from sqlalchemy.orm.attributes import set_committed_value
 from app.config import get_settings
 from app.controllers import collection
 from app.errors import Conflict
-from app.models import Creature, Utilisateur
-from app.schemas.booster import BoosterOpenedOut, BoosterTodayOut
-from app.schemas.catalog import CreatureOut
+from app.models import Collection, Creature, Reglage, Utilisateur
+from app.schemas.booster import BoosterCardOut, BoosterOut, BoosterTodayOut
+from app.schemas.catalog import CreatureSummaryOut
 
 _rng = random.SystemRandom()
 MAX_ATTEMPTS = 3
@@ -41,17 +45,30 @@ def today(db: Session) -> date:
 
 
 def _next_midnight(day: date) -> datetime:
-    return datetime.combine(day + timedelta(days=1), time.min, tzinfo=ZoneInfo(get_settings().timezone))
+    """Prochain minuit (heure de Paris), exprimé en UTC."""
+    local = datetime.combine(day + timedelta(days=1), time.min, tzinfo=ZoneInfo(get_settings().timezone))
+    return local.astimezone(timezone.utc)
+
+
+def settings(db: Session) -> Reglage:
+    reglage = db.get(Reglage, Reglage.ID)
+    if reglage is None:  # ligne créée par db/init/04_evolution_reglage_echec.sql
+        raise RuntimeError("Réglages absents : appliquer les scripts de db/ (appliquer.sh)")
+    return reglage
+
+
+def available_today(user: Utilisateur, day: date) -> bool:
+    return user.dernier_booster is None or user.dernier_booster < day
 
 
 def get_today(db: Session, user: Utilisateur) -> BoosterTodayOut:
     day = today(db)
-    available = user.dernier_booster is None or user.dernier_booster < day
     return BoosterTodayOut(
-        available=available,
-        day=day,
-        last_booster=user.dernier_booster,
-        next_available_at=None if available else _next_midnight(day),
+        claim_date=day,
+        available=available_today(user, day),
+        next_available_at=_next_midnight(day),
+        cards_per_booster=settings(db).cartes_par_booster,
+        booster=None,  # pas de table booster : le contenu d'un booster ouvert n'est pas conservé
     )
 
 
@@ -70,7 +87,7 @@ def _draw(db: Session, count: int) -> list[Creature]:
     return drawn
 
 
-def _open_once(db: Session, user: Utilisateur) -> BoosterOpenedOut:
+def _open_once(db: Session, user: Utilisateur) -> BoosterOut:
     # 1. Réserver le booster du jour. La ligne utilisateur reste verrouillée jusqu'au commit :
     #    une requête simultanée du même joueur attend, puis ne trouve plus de ligne à modifier.
     day = db.execute(
@@ -85,17 +102,31 @@ def _open_once(db: Session, user: Utilisateur) -> BoosterOpenedOut:
     ).scalar_one_or_none()
     if day is None:
         db.rollback()
-        raise Conflict("Booster du jour déjà réclamé")
+        raise Conflict(
+            "Le booster du jour a déjà été ouvert. Prochain booster à partir de minuit (heure de Paris).",
+            "BOOSTER_ALREADY_CLAIMED",
+        )
 
-    # 2. Tirer les cartes.
-    cards = _draw(db, get_settings().booster_size)
+    # 2. Tirer les cartes, au nombre réglé par l'administrateur.
+    cards = _draw(db, settings(db).cartes_par_booster)
     if not cards:
         db.rollback()  # annule aussi la réservation : le joueur ne perd pas son booster
-        raise Conflict("Toutes les créatures sont épuisées : booster annulé, réessayez plus tard")
+        raise Conflict("Toutes les créatures sont épuisées : booster annulé, réessayez plus tard.")
+
+    # Créatures déjà possédées avant ce booster (pour signaler les nouvelles).
+    counts = Counter(c.id for c in cards)
+    owned = set(
+        db.scalars(
+            select(Collection.creature_id).where(
+                Collection.utilisateur_id == user.id,
+                Collection.creature_id.in_(counts),
+                Collection.quantite > 0,
+            )
+        )
+    )
 
     # 3. Sortir les cartes du stock et les ajouter à la collection.
     #    Ordre fixe (id croissant) pour éviter les interblocages entre boosters simultanés.
-    counts = Counter(c.id for c in cards)
     for creature_id in sorted(counts):
         qty = counts[creature_id]
         taken = db.execute(
@@ -110,21 +141,20 @@ def _open_once(db: Session, user: Utilisateur) -> BoosterOpenedOut:
     db.commit()
 
     set_committed_value(user, "dernier_booster", day)  # met à jour l'objet sans le marquer modifié
-    fresh = {
-        c.id: c
-        for c in db.scalars(
-            select(Creature)
-            .where(Creature.id.in_(counts))
-            .execution_options(populate_existing=True)
+
+    booster_cards = []
+    for creature in cards:
+        booster_cards.append(
+            BoosterCardOut(creature=CreatureSummaryOut.of(creature), is_new=creature.id not in owned)
         )
-    }
-    return BoosterOpenedOut(day=day, cards=[CreatureOut.of(fresh[c.id]) for c in cards])
+        owned.add(creature.id)  # un deuxième exemplaire du même booster n'est plus « nouveau »
+    return BoosterOut(id=uuid.uuid4(), claim_date=day, opened_at=datetime.now(timezone.utc), cards=booster_cards)
 
 
-def open_booster(db: Session, user: Utilisateur) -> BoosterOpenedOut:
+def open_booster(db: Session, user: Utilisateur) -> BoosterOut:
     for _ in range(MAX_ATTEMPTS):
         try:
             return _open_once(db, user)
         except _StockChanged:
             db.rollback()  # stock modifié entre-temps : on retire avec le stock à jour
-    raise Conflict("Trop de boosters ouverts en même temps, réessayez")
+    raise Conflict("Trop de boosters ouverts en même temps, réessayez.")

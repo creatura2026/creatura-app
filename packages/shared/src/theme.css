@@ -1,0 +1,361 @@
+/*
+ * Thème CREATURA — tokens issus du document de vision (creatura.pdf).
+ * À importer APRÈS `@import "tailwindcss";` dans le style.css de chaque application.
+ */
+@import '@fontsource/pixelify-sans/latin-400.css';
+@import '@fontsource/pixelify-sans/latin-600.css';
+@import '@fontsource/pixelify-sans/latin-700.css';
+@import '@fontsource-variable/inter/index.css';
+
+/* Les composants partagés utilisent des classes Tailwind : on les fait scanner. */
+@source './ui';
+
+@theme {
+  /* Couleurs relevées dans le PDF */
+  --color-ink: #25334b; /* fond des pages de section, texte, bordures */
+  --color-ink-soft: #3a4963;
+  --color-cream: #fff7e7; /* fond des pages de contenu */
+  --color-mint: #c6ebd8; /* Découvrir, Recevoir, succès */
+  --color-butter: #fbe4a4; /* Collectionner, Ouvrir, à valider */
+  --color-salmon: #f8c0b2; /* Échanger, Proposer, refus */
+  --color-sky: #d2e2f5; /* Repérer, information */
+  --color-sun: #f6cb67; /* badge de partie, accent */
+  --color-blue: #4776bc; /* sur-titres, barres d'en-tête, graphiques */
+  --color-blue-dark: #375f9b;
+  --color-brick: #b14635; /* flèches, erreurs */
+  --color-leaf: #83cba4; /* progression */
+  --color-mist: #e7edf2; /* colonnes, fonds neutres */
+  --color-line: #aab6bd; /* séparateurs de tableau */
+
+  /* Rareté des cartes : cadre affiché au survol */
+  --color-rarity-common: #9aa7b1;
+  --color-rarity-uncommon: #4776bc;
+  --color-rarity-rare: #f6cb67;
+
+  /* Typographies : titres pixel, texte Inter */
+  --font-pixel: 'Pixelify Sans', ui-monospace, monospace;
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Ombre « carte posée » du document : décalage net, sans flou */
+  --shadow-pixel: 6px 6px 0 0 var(--color-ink);
+  --shadow-pixel-sm: 4px 4px 0 0 var(--color-ink);
+  --shadow-pixel-xs: 2px 2px 0 0 var(--color-ink);
+
+  --animate-pop-in: pop-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+  --animate-wiggle: wiggle 900ms ease-in-out infinite;
+  --animate-float: float 3s ease-in-out infinite;
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(-3deg);
+    }
+    50% {
+      transform: rotate(3deg);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-cream font-sans text-ink antialiased;
+    overflow-x: hidden;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-pixel;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-blue);
+    outline-offset: 2px;
+  }
+  img.pixelated {
+    image-rendering: pixelated;
+  }
+}
+
+/* Bloc à bordure + ombre décalée, signature visuelle du document */
+@utility card-pixel {
+  border: 2px solid var(--color-ink);
+  box-shadow: var(--shadow-pixel);
+}
+@utility card-pixel-sm {
+  border: 2px solid var(--color-ink);
+  box-shadow: var(--shadow-pixel-sm);
+}
+
+/* Sur-titre bleu en capitales (« VISION », « EXPÉRIENCE JOUEUR ») */
+@utility eyebrow {
+  font-family: var(--font-pixel);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-blue);
+}
+
+/* Fond hachuré de la « carte manquante » */
+@utility hatched {
+  background-image: repeating-linear-gradient(-45deg, #ededed 0 8px, #ffffff 8px 16px);
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 border-2 border-ink px-5 py-2 font-semibold text-ink shadow-pixel-sm transition-[transform,box-shadow] duration-100 select-none;
+  }
+  .btn:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0 0 var(--color-ink);
+  }
+  .btn:active:not(:disabled) {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 0 var(--color-ink);
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+  .btn-primary {
+    @apply bg-sun;
+  }
+  .btn-secondary {
+    @apply bg-white;
+  }
+  .btn-success {
+    @apply bg-mint;
+  }
+  .btn-danger {
+    @apply bg-salmon;
+  }
+  .btn-dark {
+    @apply border-cream bg-ink text-cream;
+  }
+
+  .field-label {
+    @apply mb-1 block text-sm font-semibold;
+  }
+  .field-input {
+    @apply block min-h-11 w-full border-2 border-ink bg-white px-3 py-2 text-base text-ink placeholder:text-ink/50;
+  }
+  .field-input[aria-invalid='true'] {
+    @apply border-brick bg-salmon/20;
+  }
+  .field-error {
+    @apply mt-1 text-sm font-medium text-brick;
+  }
+
+  .chip {
+    @apply inline-flex min-h-9 cursor-pointer items-center gap-1 border-2 border-ink bg-white px-3 text-sm font-semibold whitespace-nowrap;
+  }
+  .chip[aria-pressed='true'],
+  .chip[aria-selected='true'] {
+    @apply bg-ink text-cream;
+  }
+
+  /*
+   * Grille de cartes de créatures (catalogue, collection, échanges). Les cartes sont au format du
+   * booster, 5:8 en hauteur (voir CreatureCard) : des colonnes étroites les gardent à une taille
+   * raisonnable, entre 135 et 210 px de large selon l'écran.
+   */
+  .card-grid {
+    @apply grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6;
+  }
+
+  /* Bandeau sombre d'information (« Périmètre : … ») */
+  .banner {
+    @apply bg-ink px-5 py-4 text-cream;
+  }
+}
+
+/*
+ * Aura de rareté : les cartes peu communes et rares scintillent légèrement, sans survol.
+ * Un halo de la couleur de la rareté respire autour de la carte et quelques éclats pixel clignotent
+ * à tour de rôle sur son pourtour. Les cartes communes restent sobres.
+ * Placer `rarity-frame` + `data-rarity="COMMON|UNCOMMON|RARE"` sur la carte (élément positionné).
+ */
+.rarity-frame {
+  --rarity: var(--color-line);
+}
+.rarity-frame[data-rarity='COMMON'] {
+  --rarity: var(--color-rarity-common);
+}
+.rarity-frame[data-rarity='UNCOMMON'] {
+  --rarity: var(--color-rarity-uncommon);
+  --aura: rgb(71 118 188 / 0.7);
+  --aura-blur: 14px;
+  --aura-spread: 3px;
+  --spark: #ffffff;
+  --spark-alt: #4776bc;
+}
+.rarity-frame[data-rarity='RARE'] {
+  --rarity: var(--color-rarity-rare);
+  --aura: rgb(236 160 20 / 0.85);
+  --aura-blur: 18px;
+  --aura-spread: 4px;
+  --spark: #ffffff;
+  --spark-alt: #e09a10;
+}
+
+/* Halo : une ombre extérieure seule, elle ne déborde jamais sur le contenu de la carte */
+.rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  box-shadow: 0 0 var(--aura-blur) var(--aura-spread) var(--aura);
+  opacity: 0.8;
+}
+
+/* Éclats : petits carrés posés dans la marge autour de la carte */
+.rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::after {
+  --s1: var(--spark);
+  --s2: transparent;
+  --s3: var(--spark-alt);
+  content: '';
+  position: absolute;
+  inset: -10px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--s1) 0 0) 18% 0 / 6px 6px,
+    linear-gradient(var(--s2) 0 0) 100% 34% / 6px 6px,
+    linear-gradient(var(--s3) 0 0) 0 70% / 4px 4px,
+    linear-gradient(var(--s1) 0 0) 82% 100% / 4px 4px;
+  background-repeat: no-repeat;
+}
+.rarity-frame[data-rarity='RARE']::after {
+  background:
+    linear-gradient(var(--s1) 0 0) 18% 0 / 6px 6px,
+    linear-gradient(var(--s3) 0 0) 74% 2px / 4px 4px,
+    linear-gradient(var(--s2) 0 0) 100% 34% / 6px 6px,
+    linear-gradient(var(--s1) 0 0) 100% 78% / 4px 4px,
+    linear-gradient(var(--s3) 0 0) 0 70% / 6px 6px,
+    linear-gradient(var(--s2) 0 0) 2px 22% / 4px 4px,
+    linear-gradient(var(--s1) 0 0) 82% 100% / 4px 4px,
+    linear-gradient(var(--s2) 0 0) 30% 100% / 6px 6px;
+  background-repeat: no-repeat;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::before {
+    animation: rarity-breathe 2.6s ease-in-out infinite alternate;
+  }
+  /* Les éclats s'allument à tour de rôle, par paliers pour rester « pixel » */
+  .rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::after {
+    animation: rarity-twinkle 2.4s steps(1, end) infinite;
+  }
+  .rarity-frame[data-rarity='RARE']::after {
+    animation-duration: 1.6s;
+  }
+}
+@keyframes rarity-breathe {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes rarity-twinkle {
+  0%,
+  100% {
+    --s1: var(--spark);
+    --s2: transparent;
+    --s3: transparent;
+  }
+  17% {
+    --s1: var(--spark-alt);
+  }
+  33% {
+    --s1: transparent;
+    --s2: var(--spark);
+  }
+  50% {
+    --s2: var(--spark-alt);
+  }
+  67% {
+    --s2: transparent;
+    --s3: var(--spark);
+  }
+  83% {
+    --s3: var(--spark-alt);
+  }
+}
+@property --s1 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+@property --s2 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+@property --s3 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+/*
+ * Fenêtre d'illustration des cartes (CreatureCard, fiche créature, vignettes d'échange) :
+ * fond teinté par la famille (à poser en style), trame pixel claire en damier et biseau intérieur.
+ */
+.card-window:not(.hatched) {
+  background-image: repeating-conic-gradient(rgb(255 255 255 / 0.28) 0 25%, transparent 0 50%);
+  background-size: 8px 8px;
+  box-shadow:
+    inset 3px 3px 0 rgb(255 255 255 / 0.55),
+    inset -3px -3px 0 rgb(37 51 75 / 0.1);
+}
+/* Ombre au sol en escalier, sous les pattes de la créature */
+.card-ground {
+  position: absolute;
+  bottom: 9%;
+  left: 50%;
+  width: 56%;
+  height: 8px;
+  transform: translateX(-50%);
+  background: rgb(37 51 75 / 0.16);
+  clip-path: polygon(
+    10% 0,
+    90% 0,
+    90% 25%,
+    100% 25%,
+    100% 75%,
+    90% 75%,
+    90% 100%,
+    10% 100%,
+    10% 75%,
+    0 75%,
+    0 25%,
+    10% 25%
+  );
+}
+
+/* Carte manquante : la créature n'est qu'une ombre */
+.card-silhouette {
+  filter: brightness(0);
+  opacity: 0.16;
+}

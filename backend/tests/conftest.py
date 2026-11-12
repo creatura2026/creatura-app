@@ -15,22 +15,22 @@ TEST_DATABASE_URL = os.environ.get(
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ADMIN_LOGIN"] = "admin"
 os.environ["ADMIN_PASSWORD"] = "admin-password"
-os.environ["BOOSTER_SIZE"] = "5"
 
 DB_INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine, select, text, update  # noqa: E402
+from sqlalchemy import create_engine, func, select, text, update  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
 from app.controllers import collection  # noqa: E402
 from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Creature  # noqa: E402
+from app.models import Creature, Reglage  # noqa: E402
 
 API = "/api/v1"
+PASSWORD = "password-1234"  # 12 caractères minimum (contrat)
 
 
 def _ensure_test_database() -> None:
@@ -80,7 +80,7 @@ def admin_headers(client):
     return auth_headers(login(client, "admin", "admin-password"))
 
 
-def register_and_login(client: TestClient, pseudo: str, password: str = "password123") -> dict:
+def register_and_login(client: TestClient, pseudo: str, password: str = PASSWORD) -> dict:
     """Crée un joueur et retourne {id, headers, tokens}."""
     r = client.post(f"{API}/auth/register", json={"pseudo": pseudo, "login": pseudo.lower(), "password": password})
     assert r.status_code == 201, r.text
@@ -95,17 +95,36 @@ def login(client: TestClient, login_: str, password: str) -> dict:
 
 
 def auth_headers(tokens: dict) -> dict:
-    return {"Authorization": f"Bearer {tokens['access_token']}"}
+    return {"Authorization": f"Bearer {tokens['accessToken']}"}
 
 
-def creature_id(name: str) -> int:
+def problem(response, status: int, code: str) -> dict:
+    """Vérifie une erreur au format Problem Details du contrat et la retourne."""
+    assert response.status_code == status, response.text
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert body["code"] == code and body["status"] == status and body["title"] and body["detail"], body
+    return body
+
+
+def _pk(name: str) -> int:
     with SessionLocal() as db:
         return db.scalar(select(Creature.id).where(Creature.nom == name))
 
 
+def catalogue_size() -> int:
+    with SessionLocal() as db:
+        return db.scalar(select(func.count()).select_from(Creature))
+
+
+def creature_id(name: str) -> str:
+    """Identifiant d'une créature tel que l'API l'expose (texte)."""
+    return str(_pk(name))
+
+
 def give(user_id: uuid.UUID, name: str, quantity: int = 1) -> None:
     """Donne des cartes à un joueur en les sortant du stock, comme le ferait un booster."""
-    cid = creature_id(name)
+    cid = _pk(name)
     with SessionLocal() as db:
         taken = db.execute(
             update(Creature)
@@ -119,7 +138,13 @@ def give(user_id: uuid.UUID, name: str, quantity: int = 1) -> None:
 
 def quantity(user_id: uuid.UUID, name: str) -> int:
     with SessionLocal() as db:
-        return collection.owned_quantity(db, user_id, creature_id(name))
+        return collection.owned_quantity(db, user_id, _pk(name))
+
+
+def set_booster_size(cards: int) -> None:
+    with SessionLocal() as db:
+        db.execute(update(Reglage).values(cartes_par_booster=cards))
+        db.commit()
 
 
 def set_stock(stocks: dict[str, int]) -> None:

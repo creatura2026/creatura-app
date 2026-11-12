@@ -1,27 +1,34 @@
 """Collection — UC-06, UC-07."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.controllers import collection
-from app.dependencies import CurrentUser, DbSession
-from app.models import Famille, Rarete
-from app.schemas.collection import CollectionFilter, CollectionOut
+from app.dependencies import CurrentUser, DbSession, Pagination
+from app.models import Famille
+from app.schemas.catalog import RARETE_OF, CreatureSummaryOut, RarityCode
+from app.schemas.collection import CollectionEntryOut, CollectionPageOut, Ownership
+from app.views.catalog import Search
 
 router = APIRouter(tags=["Collection"])
 
 
-@router.get("/me/collection", response_model=CollectionOut)
+@router.get("/me/collection", response_model=CollectionPageOut)
 def my_collection(
     user: CurrentUser,
     db: DbSession,
-    status: CollectionFilter = CollectionFilter.all,
-    search: str | None = None,
+    page: Pagination,
+    search: str | None = Search,
     family: Famille | None = None,
-    rarity: Rarete | None = None,
+    rarity: RarityCode | None = None,
+    ownership: Ownership = Ownership.all,
+    duplicates_only: bool = Query(False, alias="duplicatesOnly"),
 ):
-    """Progression et cartes du joueur.
-
-    `status` : `all` (tout le catalogue), `owned` (possédées), `missing` (manquantes),
-    `duplicates` (doublons, au moins 2 exemplaires).
-    """
-    return collection.get_collection(db, user, status, search, family, rarity)
+    """Tout le catalogue avec la quantité possédée (0 = manquante), et la progression."""
+    result = collection.get_collection(
+        db, user, page, ownership, duplicates_only, search, family, RARETE_OF[rarity] if rarity else None
+    )
+    return CollectionPageOut.of(
+        result,
+        lambda row: CollectionEntryOut(creature=CreatureSummaryOut.of(row[0]), quantity=row[1]),
+        progress=collection.progress(db, user.id),
+    )

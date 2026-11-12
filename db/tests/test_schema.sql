@@ -188,5 +188,45 @@ DO $$ BEGIN
     RAISE NOTICE 'OK  échange décidé avec sa date accepté';
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- echange échoué (04_evolution_reglage_echec.sql)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+    INSERT INTO echange (id, proposeur_id, destinataire_id, statut, decide_le, motif_echec)
+    VALUES ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-00000000000a',
+            '00000000-0000-0000-0000-00000000000b', 'ECHOUE', now(), 'CARDS_UNAVAILABLE');
+    RAISE NOTICE 'OK  échange échoué avec son motif accepté';
+END $$;
+SELECT pg_temp.doit_echouer('échec sans motif refusé',
+    $q$UPDATE echange SET motif_echec = NULL WHERE id = '00000000-0000-0000-0000-0000000000e2'$q$,
+    'ck_echange_motif_echec');
+SELECT pg_temp.doit_echouer('motif sur un échange non échoué refusé',
+    $q$UPDATE echange SET statut = 'ACCEPTE' WHERE id = '00000000-0000-0000-0000-0000000000e2'$q$,
+    'ck_echange_motif_echec');
+
+-- ---------------------------------------------------------------------------
+-- reglage (04_evolution_reglage_echec.sql)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+    ASSERT (SELECT cartes_par_booster FROM reglage WHERE id = 1) IS NOT NULL,
+        'KO  la ligne de réglage doit exister';
+    RAISE NOTICE 'OK  ligne de réglage présente';
+END $$;
+SELECT pg_temp.doit_echouer('une seule ligne de réglage',
+    $q$INSERT INTO reglage (id) VALUES (2)$q$,
+    'ck_reglage_ligne_unique');
+SELECT pg_temp.doit_echouer('booster vide refusé',
+    $q$UPDATE reglage SET cartes_par_booster = 0$q$,
+    'ck_reglage_cartes_par_booster');
+SELECT pg_temp.doit_echouer('booster de plus de 10 cartes refusé',
+    $q$UPDATE reglage SET cartes_par_booster = 11$q$,
+    'ck_reglage_cartes_par_booster');
+SELECT pg_temp.doit_echouer('auteur sans date de modification refusé',
+    $q$UPDATE reglage SET modifie_par = '00000000-0000-0000-0000-00000000000a', modifie_le = NULL$q$,
+    'ck_reglage_modification');
+SELECT pg_temp.doit_echouer('auteur inexistant refusé',
+    $q$UPDATE reglage SET modifie_par = gen_random_uuid(), modifie_le = now()$q$,
+    'fk_reglage_modifie_par');
+
 ROLLBACK;
 \echo '>>> Tous les tests du schéma sont passés.'

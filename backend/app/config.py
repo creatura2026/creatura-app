@@ -15,15 +15,18 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "dev-only-secret-change-me-in-production-please-0123456789"
     jwt_algorithm: str = "HS256"
-    access_token_minutes: int = 30
+    access_token_minutes: int = 15
     refresh_token_days: int = 7
 
-    # Règles du booster : à valider au point client.
-    booster_size: int = 5
+    # Le nombre de cartes par booster est un réglage en base (table reglage), modifiable par l'admin.
     # Fuseau qui définit le « jour » du booster (calculé par Postgres, RDS étant en UTC).
     timezone: str = "Europe/Paris"
 
     cors_origins: str = "*"
+
+    # CDN des illustrations (CloudFront devant le bucket S3) : la clé stockée en base
+    # (sprites/moss_puff.png) y est concaténée.
+    image_base_url: str = "https://d3tkhh3xjmflkh.cloudfront.net"
 
     # Compte administrateur créé au démarrage s'il n'existe pas (mot de passe haché par le back).
     admin_login: str | None = None

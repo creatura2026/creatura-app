@@ -1,30 +1,16 @@
 """Catalogue — UC-05 et filtres."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.controllers import catalog
-from app.dependencies import CurrentUser, DbSession
-from app.models import Famille, Rarete
-from app.schemas.catalog import CreatureOut, FamilyOut, RarityOut
+from app.dependencies import CurrentUser, DbSession, Pagination
+from app.models import Famille
+from app.schemas.base import Page
+from app.schemas.catalog import RARETE_OF, CreatureOut, FamilyOut, RarityCode, RarityOut
 
 router = APIRouter(tags=["Catalogue"])
 
-
-@router.get("/creatures", response_model=list[CreatureOut])
-def list_creatures(
-    _: CurrentUser,
-    db: DbSession,
-    search: str | None = None,
-    family: Famille | None = None,
-    rarity: Rarete | None = None,
-):
-    """Toutes les créatures, possédées ou non. Recherche par nom, filtre par famille et rareté."""
-    return [CreatureOut.of(c) for c in catalog.list_creatures(db, search, family, rarity)]
-
-
-@router.get("/creatures/{creature_id}", response_model=CreatureOut)
-def get_creature(creature_id: int, _: CurrentUser, db: DbSession):
-    return CreatureOut.of(catalog.get_creature(db, creature_id))
+Search = Query(None, min_length=1, max_length=50, description="Nom de la créature, sans casse ni accents")
 
 
 @router.get("/families", response_model=list[FamilyOut])
@@ -34,5 +20,24 @@ def list_families(_: CurrentUser):
 
 @router.get("/rarities", response_model=list[RarityOut])
 def list_rarities(_: CurrentUser, db: DbSession):
-    """Raretés avec leur probabilité actuelle de tirage (créatures épuisées exclues)."""
+    """Raretés et probabilité actuelle de tirage (les créatures épuisées sortent du tirage)."""
     return catalog.list_rarities(db)
+
+
+@router.get("/creatures", response_model=Page[CreatureOut])
+def list_creatures(
+    _: CurrentUser,
+    db: DbSession,
+    page: Pagination,
+    search: str | None = Search,
+    family: Famille | None = None,
+    rarity: RarityCode | None = None,
+):
+    """Toutes les créatures, possédées ou non : recherche par nom, filtres famille et rareté."""
+    rarete = RARETE_OF[rarity] if rarity else None
+    return Page[CreatureOut].of(catalog.list_creatures(db, page, search, family, rarete), CreatureOut.of)
+
+
+@router.get("/creatures/{creatureId}", response_model=CreatureOut)
+def get_creature(creatureId: str, _: CurrentUser, db: DbSession):  # noqa: N803 (nom du contrat)
+    return CreatureOut.of(catalog.get_creature(db, creatureId))
