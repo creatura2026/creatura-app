@@ -1,0 +1,271 @@
+# =============================================================================
+# CREATURA - Intégration continue du repo app
+#
+#   1. Vérifier  : tests de la base (SQL), du back (pytest sur PostgreSQL),
+#                  du front (types, tests unitaires, build)
+#   2. Construire: une image Docker par composant
+#   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
+#
+# Les images sont ensuite déployées sur EKS par Argo CD (manifestes dans le
+# repo infra). Détails, tags et variables : docs/ci-cd.md
+# =============================================================================
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Une PR mise à jour annule l'exécution précédente ; jamais sur main/develop.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+  # Les PR construisent les images (le Dockerfile est vérifié) sans les publier.
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
+  # Architecture des nœuds EKS (ajouter linux/arm64 pour des nœuds Graviton).
+  PLATFORMS: linux/amd64
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Composants présents dans ce commit (le front arrive avec la branche as-35)
+  # ---------------------------------------------------------------------------
+  detect:
+    name: Composants
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.detect.outputs.frontend }}
+      images: ${{ steps.detect.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: detect
+        run: |
+          images='[
+            {"name": "creatura-backend", "context": "backend", "file": "backend/Dockerfile"},
+            {"name": "creatura-db",      "context": "db",      "file": "db/Dockerfile"}
+          ]'
+          if [ -f pnpm-workspace.yaml ]; then
+            frontend=true
+            images=$(jq '. + [
+              {"name": "creatura-player", "context": ".", "file": "docker/frontend/Dockerfile", "app": "player"},
+              {"name": "creatura-admin",  "context": ".", "file": "docker/frontend/Dockerfile", "app": "admin"}
+            ]' <<< "$images")
+          else
+            frontend=false
+          fi
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "images=$(jq -c . <<< "$images")" >> "$GITHUB_OUTPUT"
+          echo "Front présent : $frontend" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Base de données : scripts SQL de db/ et image du Job de schéma
+  # ---------------------------------------------------------------------------
+  db:
+    name: Base de données
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construire l'image de la base
+        run: docker build -t creatura-db:ci db
+
+      - name: Démarrer la base (schéma, catalogue et démo)
+        run: |
+          docker run -d --name creatura-db \
+            -e POSTGRES_USER=creatura -e POSTGRES_PASSWORD=creatura -e POSTGRES_DB=creatura \
+            -e CREATURA_DEMO=true \
+            creatura-db:ci
+          for _ in $(seq 1 60); do
+            health=$(docker inspect -f '{{.State.Health.Status}}' creatura-db)
+            [ "$health" = healthy ] && break
+            sleep 2
+          done
+          docker logs creatura-db
+          [ "$health" = healthy ]
+
+      - name: Tests du schéma et des données
+        run: |
+          for test in test_schema test_donnees; do
+            docker exec creatura-db psql -U creatura -d creatura -v ON_ERROR_STOP=1 -f "/db/tests/$test.sql"
+          done
+
+      - name: appliquer.sh est ré-exécutable (Job de schéma sur RDS)
+        run: |
+          docker exec -e PGUSER=creatura -e PGDATABASE=creatura -e CREATURA_DEMO=true \
+            creatura-db /db/scripts/appliquer.sh
+          docker exec creatura-db psql -U creatura -d creatura -v ON_ERROR_STOP=1 -f /db/tests/test_donnees.sql
+
+  # ---------------------------------------------------------------------------
+  # Back : tests sur un vrai PostgreSQL 16 (même version que RDS)
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Back
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: creatura
+          POSTGRES_PASSWORD: creatura
+          POSTGRES_DB: creatura
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U creatura"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # Les tests créent cette base et y appliquent db/init/ avant chaque test.
+      TEST_DATABASE_URL: postgres://creatura:creatura@localhost:5432/creatura_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Installer les dépendances
+        run: uv sync --frozen
+
+      - name: Tests
+        run: uv run pytest --junitxml=../reports/backend-tests.xml
+
+      - name: Publier le rapport de tests
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-backend
+          path: reports/backend-tests.xml
+
+  # ---------------------------------------------------------------------------
+  # Front : PWA joueur et dashboard admin (monorepo pnpm)
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Front
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Vérification des types et build
+        run: pnpm -r run build
+
+      - name: Tests unitaires
+        run: pnpm -r run test:unit
+
+      - name: Publier les applications construites
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: |
+            apps/player/dist
+            apps/admin/dist
+
+  # ---------------------------------------------------------------------------
+  # Images Docker : construites à chaque fois, publiées si tout est vert
+  # ---------------------------------------------------------------------------
+  images:
+    name: Image ${{ matrix.image.name }}
+    needs: [detect, db, backend, frontend]
+    # Le front peut être absent (job ignoré) ; tout le reste doit avoir réussi.
+    if: >-
+      ${{ !cancelled()
+      && needs.db.result == 'success'
+      && needs.backend.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.frontend.result) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.detect.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Nom de l'image (GHCR exige des minuscules)
+        run: echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image.name }}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Connexion à GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tags et labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # sha-xxxxxxx : immuable, c'est lui que référencent les manifestes Argo CD.
+          # develop / main : suit la branche. 1.2.3 et 1.2 : versions (tags git v1.2.3).
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image.name }}
+            org.opencontainers.image.vendor=CREATURA
+
+      - name: Construire${{ env.PUBLISH == 'true' && ' et publier' || '' }}
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          build-args: ${{ matrix.image.app && format('APP={0}', matrix.image.app) || '' }}
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+
+      - name: Résumé
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### ${{ matrix.image.name }}"
+            if [ "$PUBLISH" = true ]; then
+              echo "Publiée : \`${IMAGE}@${DIGEST}\`"
+            else
+              echo "Construite, non publiée (pull request)."
+            fi
+            echo '```'
+            echo "$TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
