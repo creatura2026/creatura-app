@@ -511,7 +511,7 @@ export interface components {
             boosterId?: string;
         };
         /** @enum {string} */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "RATE_LIMITED";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "RATE_LIMITED" | "INTERNAL_ERROR";
         PageMeta: {
             page: number;
             pageSize: number;
@@ -599,7 +599,10 @@ export interface components {
             dropRate: number;
         };
         CreatureSummary: {
-            /** Format: uuid */
+            /**
+             * @description Numéro de la créature dans la base, en texte
+             * @example 1
+             */
             id: string;
             /** @example Flammille */
             name: string;
@@ -648,7 +651,7 @@ export interface components {
              * @example 5
              */
             cardsPerBooster: number;
-            /** @description Booster déjà ouvert aujourd'hui, ou null */
+            /** @description Booster déjà ouvert aujourd'hui, ou null (V1 : toujours null, voir « Écarts connus ») */
             booster: components["schemas"]["Booster"] | null;
         };
         CollectionEntry: {
@@ -676,7 +679,10 @@ export interface components {
             }[];
         };
         TradeItemInput: {
-            /** Format: uuid */
+            /**
+             * @description Identifiant renvoyé par le catalogue
+             * @example 1
+             */
             creatureId: string;
             quantity: number;
         };
@@ -867,6 +873,7 @@ export interface components {
         From: string;
         /** @description Dernier jour inclus de la période (aujourd'hui par défaut). Période de 366 jours au maximum. */
         To: string;
+        /** @description Identifiant renvoyé par le catalogue (numéro en texte) */
         CreatureId: string;
         PlayerId: string;
         TradeId: string;
@@ -1120,6 +1127,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifiant renvoyé par le catalogue (numéro en texte) */
                 creatureId: components["parameters"]["CreatureId"];
             };
             cookie?: never;
@@ -1183,7 +1191,7 @@ export interface operations {
                      *       "cards": [
                      *         {
                      *           "creature": {
-                     *             "id": "0b6f2c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
+                     *             "id": "1",
                      *             "name": "Moussou",
                      *             "family": {
                      *               "code": "NATURE",
@@ -1199,7 +1207,7 @@ export interface operations {
                      *         },
                      *         {
                      *           "creature": {
-                     *             "id": "7c8d9e0f-1a2b-4c3d-9e8f-7a6b5c4d3e2f",
+                     *             "id": "6",
                      *             "name": "Cristille",
                      *             "family": {
                      *               "code": "CRISTAL",
@@ -1375,13 +1383,13 @@ export interface operations {
                  *       "recipientId": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
                  *       "offered": [
                  *         {
-                 *           "creatureId": "0b6f2c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
+                 *           "creatureId": "1",
                  *           "quantity": 1
                  *         }
                  *       ],
                  *       "requested": [
                  *         {
-                 *           "creatureId": "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a",
+                 *           "creatureId": "9",
                  *           "quantity": 1
                  *         }
                  *       ]

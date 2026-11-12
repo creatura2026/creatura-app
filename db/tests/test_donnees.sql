@@ -1,6 +1,6 @@
 -- =============================================================================
 -- CREATURA - Tests du jeu de données (AS-41)
--- À lancer après 01_schema.sql, 02_catalogue.sql et 03_demo_dev.sql.
+-- À lancer après 01_schema.sql, 02_catalogue.sql, 03_demo_dev.sql et 04_evolution_*.sql.
 -- Ne modifie pas les données (les scripts relancés sont ré-exécutables).
 -- S'arrête au premier test KO.
 -- =============================================================================
@@ -14,8 +14,14 @@ DECLARE
 BEGIN
     -- Catalogue ---------------------------------------------------------------
     SELECT count(*) INTO n FROM creature;
-    ASSERT n = 12, format('KO  12 créatures attendues, %s trouvées', n);
-    RAISE NOTICE 'OK  12 créatures au catalogue';
+    ASSERT n = 82, format('KO  82 créatures attendues, %s trouvées', n);
+    RAISE NOTICE 'OK  82 créatures au catalogue';
+
+    SELECT count(*) INTO n FROM creature WHERE image NOT LIKE 'sprites/%.png';
+    ASSERT n = 0, 'KO  chaque image doit être une clé sprites/….png du CDN';
+    SELECT count(*) - count(DISTINCT image) INTO n FROM creature;
+    ASSERT n = 0, 'KO  deux créatures partagent la même image';
+    RAISE NOTICE 'OK  une image distincte du CDN par créature';
 
     SELECT count(*) INTO n
     FROM (SELECT famille FROM creature GROUP BY famille
@@ -77,11 +83,13 @@ END $$;
 -- Ré-exécution : relancer les scripts ne doit rien dupliquer ni casser
 \i /db/init/02_catalogue.sql
 \i /db/init/03_demo_dev.sql
+\i /db/init/04_evolution_reglage_echec.sql
 \o /dev/null
 DO $$ BEGIN
-    ASSERT (SELECT count(*) FROM creature) = 12,    'KO  ré-exécution : créatures dupliquées';
+    ASSERT (SELECT count(*) FROM creature) = 82,    'KO  ré-exécution : créatures dupliquées';
     ASSERT (SELECT count(*) FROM utilisateur) = 3,  'KO  ré-exécution : comptes dupliqués';
     ASSERT (SELECT count(*) FROM echange_ligne) = 2,'KO  ré-exécution : lignes dupliquées';
+    ASSERT (SELECT count(*) FROM reglage) = 1,      'KO  ré-exécution : réglages dupliqués';
     RAISE NOTICE 'OK  scripts ré-exécutables sans doublon';
 END $$;
 

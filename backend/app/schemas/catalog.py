@@ -1,6 +1,14 @@
-from pydantic import BaseModel
+"""Catalogue : créatures, familles, raretés.
 
+La base garde ses codes français (COMMUN, PEU_COMMUN…) ; l'API expose ceux du contrat
+(COMMON, UNCOMMON…). Les familles ont le même code des deux côtés.
+"""
+
+import enum
+
+from app.config import get_settings
 from app.models import Creature, Famille, Rarete
+from app.schemas.base import ApiModel
 
 FAMILY_LABELS = {
     Famille.NATURE: "Nature",
@@ -9,46 +17,73 @@ FAMILY_LABELS = {
     Famille.LUEUR: "Lueur",
 }
 
-RARITY_LABELS = {
-    Rarete.COMMUN: "Commun",
-    Rarete.PEU_COMMUN: "Peu commun",
-    Rarete.RARE: "Rare",
-}
 
+class RarityCode(str, enum.Enum):
+    COMMON = "COMMON"
+    UNCOMMON = "UNCOMMON"
+    RARE = "RARE"
+
+
+RARITY_CODES = {Rarete.COMMUN: RarityCode.COMMON, Rarete.PEU_COMMUN: RarityCode.UNCOMMON, Rarete.RARE: RarityCode.RARE}
+RARETE_OF = {code: rarete for rarete, code in RARITY_CODES.items()}
+RARITY_LABELS = {Rarete.COMMUN: "Commun", Rarete.PEU_COMMUN: "Peu commun", Rarete.RARE: "Rare"}
 RARITY_RANK = {Rarete.COMMUN: 1, Rarete.PEU_COMMUN: 2, Rarete.RARE: 3}
 
 
-class FamilyOut(BaseModel):
+def image_url(path: str) -> str:
+    """Clé du fichier dans le bucket (sprites/moss_puff.png) → URL du CDN."""
+    return f"{get_settings().image_base_url.rstrip('/')}/{path.lstrip('/')}"
+
+
+class FamilyOut(ApiModel):
     code: Famille
     label: str
 
+    @classmethod
+    def of(cls, famille: Famille) -> "FamilyOut":
+        return cls(code=famille, label=FAMILY_LABELS[famille])
 
-class RarityOut(BaseModel):
-    code: Rarete
+
+class RaritySummaryOut(ApiModel):
+    code: RarityCode
     label: str
+
+    @classmethod
+    def of(cls, rarete: Rarete) -> "RaritySummaryOut":
+        return cls(code=RARITY_CODES[rarete], label=RARITY_LABELS[rarete])
+
+
+class RarityOut(RaritySummaryOut):
     rank: int  # 1 = la plus commune
-    drop_rate_percent: float  # probabilité actuelle qu'une carte tirée soit de cette rareté
+    drop_rate: float  # probabilité (0 à 1) qu'une carte tirée soit de cette rareté
 
 
-class CreatureOut(BaseModel):
-    id: int
+class CreatureSummaryOut(ApiModel):
+    # La base numérote les créatures (entier) : l'API les expose en texte, comme les autres identifiants.
+    id: str
     name: str
-    description: str | None
-    family: Famille
-    rarity: Rarete
-    image: str  # chemin relatif, le front ajoute l'URL du CDN
-    stock_total: int
-    stock_remaining: int
+    family: FamilyOut
+    rarity: RaritySummaryOut
+    image_url: str
+
+    @classmethod
+    def of(cls, c: Creature) -> "CreatureSummaryOut":
+        return cls(**cls._fields(c))
+
+    @staticmethod
+    def _fields(c: Creature) -> dict:
+        return {
+            "id": str(c.id),
+            "name": c.nom,
+            "family": FamilyOut.of(c.famille),
+            "rarity": RaritySummaryOut.of(c.rarete),
+            "image_url": image_url(c.image),
+        }
+
+
+class CreatureOut(CreatureSummaryOut):
+    description: str
 
     @classmethod
     def of(cls, c: Creature) -> "CreatureOut":
-        return cls(
-            id=c.id,
-            name=c.nom,
-            description=c.description,
-            family=c.famille,
-            rarity=c.rarete,
-            image=c.image,
-            stock_total=c.stock_total,
-            stock_remaining=c.stock_restant,
-        )
+        return cls(**cls._fields(c), description=c.description or "")

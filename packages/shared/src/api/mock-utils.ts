@@ -15,6 +15,7 @@ const TITLES: Record<ErrorCode, string> = {
   CARDS_NOT_OWNED: 'Cartes non possédées',
   TRADE_WITH_SELF: 'Échange avec soi-même',
   RATE_LIMITED: 'Trop de tentatives',
+  INTERNAL_ERROR: 'Erreur interne',
 }
 
 const STATUS: Record<ErrorCode, number> = {
@@ -31,6 +32,7 @@ const STATUS: Record<ErrorCode, number> = {
   CARDS_NOT_OWNED: 422,
   TRADE_WITH_SELF: 422,
   RATE_LIMITED: 429,
+  INTERNAL_ERROR: 500,
 }
 
 export function problem(

@@ -12,6 +12,7 @@ erDiagram
     utilisateur ||--o{ echange : "reçoit"
     echange     ||--|{ echange_ligne : "contient"
     creature    ||--o{ echange_ligne : "est échangée dans"
+    utilisateur |o--o{ reglage : "a modifié"
 
     utilisateur {
         uuid        id                PK
@@ -30,7 +31,7 @@ erDiagram
         varchar     famille              "NATURE | CRISTAL | BRUME | LUEUR"
         varchar     rarete               "COMMUN | PEU_COMMUN | RARE"
         integer     poids                "> 0, probabilité de tirage"
-        varchar     image                "chemin, ex. images/moussou.png"
+        varchar     image                "clé S3 du CDN, ex. sprites/moss_puff.png"
         integer     stock_total          ">= 0"
         integer     stock_restant        "entre 0 et stock_total"
     }
@@ -45,9 +46,10 @@ erDiagram
         uuid        id                PK
         uuid        proposeur_id      FK
         uuid        destinataire_id   FK "différent du proposeur"
-        varchar     statut               "EN_ATTENTE | ACCEPTE | REFUSE | ANNULE"
+        varchar     statut               "EN_ATTENTE | ACCEPTE | REFUSE | ANNULE | ECHOUE"
         timestamptz cree_le
         timestamptz decide_le            "NULL tant qu'en attente"
+        varchar     motif_echec          "rempli si et seulement si ECHOUE"
     }
 
     echange_ligne {
@@ -55,6 +57,13 @@ erDiagram
         integer     creature_id       PK, FK
         varchar     sens              PK "OFFERT | DEMANDE"
         integer     quantite             "> 0"
+    }
+
+    reglage {
+        smallint    id                PK "toujours 1 : une seule ligne"
+        integer     cartes_par_booster   "1 à 10, 5 par défaut"
+        timestamptz modifie_le           "NULL si jamais modifié"
+        uuid        modifie_par       FK "administrateur"
     }
 ```
 
@@ -99,7 +108,7 @@ erDiagram
 | famille | varchar(20) | NOT NULL, CHECK `NATURE`/`CRISTAL`/`BRUME`/`LUEUR` | Famille (filtre UC-07) |
 | rarete | varchar(20) | NOT NULL, CHECK `COMMUN`/`PEU_COMMUN`/`RARE` | Rareté de l'espèce |
 | poids | integer | NOT NULL, CHECK `> 0` | Poids de tirage |
-| image | varchar(255) | NOT NULL | Chemin relatif de l'image (le front ajoute l'URL du CDN) |
+| image | varchar(255) | NOT NULL | Clé du fichier dans le bucket S3 (ex. `sprites/moss_puff.png`) ; le back y ajoute l'URL du CDN CloudFront |
 | stock_total | integer | NOT NULL, CHECK `>= 0` | Exemplaires existant au total |
 | stock_restant | integer | NOT NULL, CHECK `0 <= stock_restant <= stock_total` | Exemplaires encore tirables |
 
@@ -118,9 +127,10 @@ Index : `(creature_id) WHERE quantite > 0` — « qui possède cette carte ? » 
 | id | uuid | PK, défaut `gen_random_uuid()` | Identifiant |
 | proposeur_id | uuid | NOT NULL, FK → utilisateur | Joueur qui propose |
 | destinataire_id | uuid | NOT NULL, FK → utilisateur, CHECK `<> proposeur_id` | Joueur qui décide |
-| statut | varchar(12) | NOT NULL, défaut `EN_ATTENTE`, CHECK `EN_ATTENTE`/`ACCEPTE`/`REFUSE`/`ANNULE` | État |
+| statut | varchar(12) | NOT NULL, défaut `EN_ATTENTE`, CHECK `EN_ATTENTE`/`ACCEPTE`/`REFUSE`/`ANNULE`/`ECHOUE` | État ; `ECHOUE` = acceptation impossible, une carte n'était plus disponible |
 | cree_le | timestamptz | NOT NULL, défaut `now()` | Date de proposition |
-| decide_le | timestamptz | NULL ; CHECK : NULL si et seulement si `EN_ATTENTE` | Date de décision |
+| decide_le | timestamptz | NULL ; CHECK : NULL si et seulement si `EN_ATTENTE` | Date de décision (ou d'échec) |
+| motif_echec | varchar(30) | NULL ; CHECK : rempli si et seulement si `ECHOUE` | Code de l'échec (ex. `CARDS_UNAVAILABLE`) |
 
 Index : `(destinataire_id, statut)`, `(proposeur_id)`.
 
@@ -131,6 +141,16 @@ Index : `(destinataire_id, statut)`, `(proposeur_id)`.
 | creature_id | integer | PK, FK → creature | Créature échangée |
 | sens | varchar(8) | PK, CHECK `OFFERT`/`DEMANDE` | `OFFERT` = donnée par le proposeur, `DEMANDE` = donnée par le destinataire |
 | quantite | integer | NOT NULL, CHECK `> 0` | Nombre d'exemplaires |
+
+### reglage
+Ajoutée par `init/04_evolution_reglage_echec.sql` (avec `echange.motif_echec` et le statut `ECHOUE`).
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| id | smallint | PK, défaut 1, CHECK `= 1` | Une seule ligne : réglages globaux |
+| cartes_par_booster | integer | NOT NULL, défaut 5, CHECK entre 1 et 10 | Cartes tirées par booster (modifiable depuis le dashboard admin) |
+| modifie_le | timestamptz | NULL ; CHECK : renseigné dès qu'il y a un auteur | Dernière modification |
+| modifie_par | uuid | NULL, FK → utilisateur, ON DELETE SET NULL | Administrateur auteur |
 
 ## Règles vérifiées par les tests
 

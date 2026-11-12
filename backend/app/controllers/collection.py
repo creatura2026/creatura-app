@@ -6,11 +6,11 @@ from sqlalchemy import and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.controllers.catalog import filter_creatures
+from app.controllers.catalog import CATALOG_ORDER, filter_creatures, paginate
 from app.models import Collection, Creature, Famille, Rarete, Utilisateur
-from app.schemas.auth import CollectionSummary
-from app.schemas.catalog import CreatureOut
-from app.schemas.collection import CollectionFilter, CollectionItemOut, CollectionOut
+from app.schemas.auth import CollectionProgress
+from app.schemas.base import PageParams, PageResult
+from app.schemas.collection import Ownership
 
 
 def add_cards(db: Session, user_id: uuid.UUID, creature_id: int, quantity: int) -> None:
@@ -52,35 +52,37 @@ def owned_quantity(db: Session, user_id: uuid.UUID, creature_id: int) -> int:
     return qty or 0
 
 
-def summary(db: Session, user_id: uuid.UUID) -> CollectionSummary:
+def progress(db: Session, user_id: uuid.UUID) -> CollectionProgress:
     total_creatures = db.scalar(select(func.count(Creature.id))) or 0
-    owned = Collection.quantite >= 1
-    owned_distinct, total_cards, duplicates = db.execute(
+    owned_creatures, total_cards = db.execute(
         select(
-            func.count().filter(owned),
+            func.count().filter(Collection.quantite >= 1),
             func.coalesce(func.sum(Collection.quantite), 0),
-            func.coalesce(func.sum(Collection.quantite - 1).filter(owned), 0),
         ).where(Collection.utilisateur_id == user_id)
     ).one()
-    completion = round(owned_distinct * 100 / total_creatures, 1) if total_creatures else 0.0
-    return CollectionSummary(
-        owned_distinct=owned_distinct,
+    completion = round(owned_creatures * 100 / total_creatures, 1) if total_creatures else 0.0
+    return CollectionProgress(
+        owned_creatures=owned_creatures,
         total_creatures=total_creatures,
-        completion_percent=completion,
         total_cards=total_cards,
-        duplicates=duplicates,
+        completion_percent=completion,
     )
 
 
 def get_collection(
     db: Session,
     user: Utilisateur,
-    status: CollectionFilter = CollectionFilter.all,
+    params: PageParams,
+    ownership: Ownership = Ownership.all,
+    duplicates_only: bool = False,
     search: str | None = None,
     family: Famille | None = None,
     rarity: Rarete | None = None,
-) -> CollectionOut:
-    """Tout le catalogue, avec la quantité possédée par le joueur (0 = manquante)."""
+) -> PageResult:
+    """Tout le catalogue, avec la quantité possédée par le joueur (0 = manquante).
+
+    Lignes de la page : (Creature, quantité).
+    """
     quantity = func.coalesce(Collection.quantite, 0)
     query = (
         select(Creature, quantity)
@@ -88,19 +90,15 @@ def get_collection(
             Collection,
             and_(Collection.creature_id == Creature.id, Collection.utilisateur_id == user.id),
         )
-        .order_by(Creature.nom)
+        .order_by(*CATALOG_ORDER)
     )
     query = filter_creatures(query, search, family, rarity)
 
-    if status == CollectionFilter.owned:
+    if ownership == Ownership.owned:
         query = query.where(quantity >= 1)
-    elif status == CollectionFilter.missing:
+    elif ownership == Ownership.missing:
         query = query.where(quantity == 0)
-    elif status == CollectionFilter.duplicates:
+    if duplicates_only:
         query = query.where(quantity >= 2)
 
-    items = [
-        CollectionItemOut(creature=CreatureOut.of(creature), quantity=qty)
-        for creature, qty in db.execute(query).all()
-    ]
-    return CollectionOut(summary=summary(db, user.id), items=items)
+    return paginate(db, query, params, scalars=False)

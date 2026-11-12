@@ -4,6 +4,8 @@
   "scripts": {
     "dev:player": "pnpm --filter player dev",
     "dev:admin": "pnpm --filter admin dev",
+    "dev:player:mock": "pnpm --filter player dev:mock",
+    "dev:admin:mock": "pnpm --filter admin dev:mock",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "format": "pnpm -r run format"

@@ -1,4 +1,4 @@
-"""Administration — UC-12, UC-13, UC-14. Réservé au rôle administrateur."""
+"""Administration — UC-12, UC-13, UC-14 et réglages. Réservé au rôle ADMIN."""
 
 import uuid
 from datetime import date
@@ -6,39 +6,53 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 
 from app.controllers import admin
-from app.dependencies import DbSession, require_admin
-from app.models import Statut
-from app.schemas.admin import RarityDistributionOut, StatsOut
-from app.schemas.trade import TradeOut
+from app.dependencies import AdminUser, DbSession, Pagination, require_admin
+from app.schemas.admin import AdminStatsOut, BoosterSettingsIn, BoosterSettingsOut, RarityDistributionOut
+from app.schemas.base import Page
+from app.schemas.trade import STATUT_OF, TradeOut, TradeStatus
 
-router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/admin", tags=["Administration"], dependencies=[Depends(require_admin)])
 
-DateFrom = Query(None, alias="from", description="Début de période (inclus), AAAA-MM-JJ")
-DateTo = Query(None, alias="to", description="Fin de période (incluse), AAAA-MM-JJ")
+DateFrom = Query(None, alias="from", description="Premier jour inclus (30 jours avant `to` par défaut)")
+DateTo = Query(None, alias="to", description="Dernier jour inclus (aujourd'hui par défaut), 366 jours au maximum")
 
 
-@router.get("/stats", response_model=StatsOut)
+@router.get("/stats", response_model=AdminStatsOut)
 def stats(db: DbSession, date_from: date | None = DateFrom, date_to: date | None = DateTo):
-    """Inscrits, boosters ouverts aujourd'hui, échanges finalisés par jour."""
+    """Inscriptions, boosters ouverts par jour, échanges finalisés par jour."""
     return admin.stats(db, admin.resolve_period(db, date_from, date_to))
 
 
-@router.get("/trades", response_model=list[TradeOut])
+@router.get("/trades", response_model=Page[TradeOut])
 def trades(
     db: DbSession,
+    page: Pagination,
     date_from: date | None = DateFrom,
     date_to: date | None = DateTo,
-    status: Statut | None = None,
-    player_id: uuid.UUID | None = None,
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    status: TradeStatus | None = None,
+    player_id: uuid.UUID | None = Query(None, alias="playerId"),
 ):
     """Échanges créés dans la période, filtrables par état et par joueur."""
     period = admin.resolve_period(db, date_from, date_to)
-    return [TradeOut.of(t) for t in admin.list_trades(db, period, status, player_id, limit, offset)]
+    statut = STATUT_OF[status] if status else None
+    return Page[TradeOut].of(admin.list_trades(db, period, page, statut, player_id), TradeOut.of)
 
 
 @router.get("/rarity-distribution", response_model=RarityDistributionOut)
-def rarity_distribution(db: DbSession):
-    """Cartes sorties des boosters par rareté (d'après les stocks), comparées aux probabilités."""
-    return admin.rarity_distribution(db)
+def rarity_distribution(db: DbSession, date_from: date | None = DateFrom, date_to: date | None = DateTo):
+    """Cartes sorties des boosters par rareté, comparées aux probabilités de tirage.
+
+    Sans table booster, le décompte vient des stocks : il couvre toute la vie du jeu.
+    """
+    return admin.rarity_distribution(db, admin.resolve_period(db, date_from, date_to))
+
+
+@router.get("/settings/booster", response_model=BoosterSettingsOut)
+def get_booster_settings(db: DbSession):
+    return BoosterSettingsOut.of(admin.get_booster_settings(db))
+
+
+@router.put("/settings/booster", response_model=BoosterSettingsOut)
+def update_booster_settings(data: BoosterSettingsIn, user: AdminUser, db: DbSession):
+    """Nombre de cartes par booster : s'applique aux boosters ouverts après la modification."""
+    return BoosterSettingsOut.of(admin.update_booster_settings(db, user, data.cards_per_booster))

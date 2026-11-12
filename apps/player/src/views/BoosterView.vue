@@ -83,7 +83,11 @@ const total = computed(() => booster.value?.cards.length ?? 0)
 /** Pile et emplacements du tapis sont disposés pour tenir dans la zone libre du cadre. */
 const cardArea = ref<HTMLDivElement | null>(null)
 const table = useCardTable(cardArea, total)
-const showTear = computed(() => animating.value || !booster.value)
+// Booster disponible : sachet à déchirer. Déjà ouvert sans son contenu (le serveur ne le
+// conserve pas) : simple rappel, les cartes sont dans la collection.
+const showTear = computed(
+  () => animating.value || (!booster.value && today.value?.available !== false),
+)
 const allRevealed = computed(() => !opened.value || flipped.value >= total.value)
 /**
  * Pile vide (ou booster déjà ouvert avant cette visite) : plus rien à retourner, les cartes
@@ -411,6 +415,17 @@ const remaining = computed(() =>
                   Tout révéler
                 </button>
                 <RouterLink v-else to="/collection" class="btn btn-success" data-after-reveal>
+                  Voir ma collection <PixelIcon name="arrow-right" :size="18" />
+                </RouterLink>
+              </div>
+            </template>
+
+            <!-- Booster déjà ouvert plus tôt : le serveur ne renvoie pas son contenu -->
+            <template v-else>
+              <div class="flex flex-1 flex-col items-center justify-center gap-3">
+                <p class="font-bold">Booster du jour déjà ouvert</p>
+                <p class="max-w-sm text-sm">Ses cartes ont rejoint votre collection.</p>
+                <RouterLink to="/collection" class="btn btn-success">
                   Voir ma collection <PixelIcon name="arrow-right" :size="18" />
                 </RouterLink>
               </div>

@@ -1,18 +1,27 @@
 -- =============================================================================
--- CREATURA - Catalogue initial des créatures
+-- CREATURA - Catalogue des créatures
 -- Ticket : AS-41
 -- À appliquer PARTOUT (local, dev, prod) après 01_schema.sql.
 --
--- Contenu provisoire : les 4 créatures du cahier des charges + 8 créatures
--- inventées pour avoir de la variété. À remplacer par la liste du client.
--- Répartition : 4 familles × 3 raretés (une créature par couple).
+-- 82 créatures, une par sprite du CDN (dossier sprites/ du bucket S3).
+-- Les variantes presque identiques (eye_orb_2, star_moth_3, moon_bat_2…) ne
+-- sont pas utilisées. Moussou, Cristille, Brumel et Flammille viennent du
+-- cahier des charges.
 --
---   Rareté      poids  stock   (le poids donne la proba : 60/30/10 par famille)
---   COMMUN        60    500
---   PEU_COMMUN    30    200
---   RARE          10     50
+--   Rareté      créatures  poids  stock   part du tirage
+--   COMMUN          33       182    500    60 %
+--   PEU_COMMUN      32        94    200    30 %
+--   RARE            17        59     50    10 %
 --
--- Ré-exécutable sans risque : une créature déjà présente (même nom) est ignorée.
+-- Le poids d'une créature dépend de sa rareté et du nombre de créatures de
+-- cette rareté : la part de chaque rareté reste 60/30/10 (à valider au point
+-- client). Une créature épuisée sort du tirage.
+--
+-- Images : `image` est la clé du fichier dans le bucket S3 servi par CloudFront.
+-- Le back la concatène à IMAGE_BASE_URL (l'URL du CDN).
+--
+-- Ré-exécutable sans risque : une créature déjà présente (même nom) garde son
+-- stock ; sa description, son image et son poids sont mis à jour.
 -- =============================================================================
 
 BEGIN;
@@ -20,21 +29,176 @@ BEGIN;
 INSERT INTO creature (nom, description, famille, rarete, poids, image, stock_total, stock_restant)
 VALUES
     -- NATURE
-    ('Moussou',    'Habite les sous-bois.',                       'NATURE',  'COMMUN',     60, 'images/moussou.png',    500, 500),
-    ('Feuillard',  'Se camoufle parmi les feuilles mortes.',      'NATURE',  'PEU_COMMUN', 30, 'images/feuillard.png',  200, 200),
-    ('Sylvanor',   'Gardien des plus vieux arbres de la forêt.',  'NATURE',  'RARE',       10, 'images/sylvanor.png',    50,  50),
+    ('Moussou', 'Petite boule de mousse qui somnole au creux des souches. Là où elle dort, des champignons poussent le lendemain.',
+     'NATURE', 'COMMUN', 182, 'sprites/moss_puff.png', 500, 500),
+    ('Marcassou', 'Marcassin au groin fouineur qui retourne la terre à la recherche de truffes dorées. Il ronfle comme une petite forge.',
+     'NATURE', 'COMMUN', 182, 'sprites/baby_boar.png', 500, 500),
+    ('Dunadaire', 'Chameau des dunes qui garde dans ses bosses la fraîcheur des oasis. Son écharpe orange flotte même sans vent.',
+     'NATURE', 'COMMUN', 182, 'sprites/camel.png', 500, 500),
+    ('Fleurépine', 'Cactus jovial qui fleurit à chaque compliment qu''on lui fait. Ses épines sont douces comme du duvet.',
+     'NATURE', 'COMMUN', 182, 'sprites/flower_cactus.png', 500, 500),
+    ('Girafeuille', 'Girafon gourmand qui grignote la cime des arbres. Ses taches dessinent la carte des forêts qu''il a visitées.',
+     'NATURE', 'COMMUN', 182, 'sprites/giraffe.png', 500, 500),
+    ('Somnolu', 'Koala qui dort vingt heures par jour en mâchouillant une feuille d''eucalyptus. Le reste du temps, il bâille.',
+     'NATURE', 'COMMUN', 182, 'sprites/koala.png', 500, 500),
+    ('Champignard', 'Champignon farceur qui se cache sous les feuilles mortes et surgit en riant devant les promeneurs.',
+     'NATURE', 'COMMUN', 182, 'sprites/mushroom.png', 500, 500),
+    ('Roulécaille', 'Ses écailles brunes s''emboîtent comme des tuiles : roulé en boule, rien ne peut l''atteindre.',
+     'NATURE', 'COMMUN', 182, 'sprites/pangolin.png', 500, 500),
+    ('Bondirose', 'Kangourou rose qui transporte dans sa poche des graines qu''il sème à chaque bond.',
+     'NATURE', 'COMMUN', 182, 'sprites/pink_kangaroo.png', 500, 500),
+    ('Rhinolilas', 'Rhinocéros pelucheux au cœur tendre. Sa corne émoussée sert surtout à pousser les ballons.',
+     'NATURE', 'COMMUN', 182, 'sprites/purple_rhino.png', 500, 500),
+    ('Bélouclé', 'Bélier aux cornes d''or enroulées. Sa laine est si épaisse qu''il rebondit quand il tombe.',
+     'NATURE', 'COMMUN', 182, 'sprites/ram.png', 500, 500),
+    ('Yakouette', 'Yak des hauts plateaux dont la clochette annonce la neige trois jours avant qu''elle tombe.',
+     'NATURE', 'COMMUN', 182, 'sprites/yak.png', 500, 500),
+    ('Zébrillon', 'Zèbre espiègle qui change l''ordre de ses rayures pour ne jamais être reconnu.',
+     'NATURE', 'COMMUN', 182, 'sprites/zebra.png', 500, 500),
+    ('Plumecorne', 'Hibou aux aigrettes ébouriffées qui veille sur les clairières. Il connaît le nom de chaque arbre.',
+     'NATURE', 'COMMUN', 182, 'sprites/horned_owl.png', 500, 500),
+    ('Piouchou', 'Poussin rose et curieux qui suit le premier promeneur venu en piaillant joyeusement.',
+     'NATURE', 'COMMUN', 182, 'sprites/pink_chick.png', 500, 500),
+    ('Feuillard', 'Ses bois portent de jeunes pousses qui changent de couleur avec les saisons. Il sème des graines en remuant la queue.',
+     'NATURE', 'PEU_COMMUN', 94, 'sprites/moss_sprite.png', 200, 200),
+    ('Pangolierre', 'Pangolin couvert d''écailles vertes comme du lierre. Il se fond dans les haies pour y faire la sieste.',
+     'NATURE', 'PEU_COMMUN', 94, 'sprites/green_pangolin.png', 200, 200),
+    ('Coccibaston', 'Coccinelle guerrière aux gants rouges. Elle porte ses points noirs comme des médailles de victoire.',
+     'NATURE', 'PEU_COMMUN', 94, 'sprites/ladybug_warrior.png', 200, 200),
+    ('Crapobiceps', 'Grenouille qui soulève des nénuphars pour s''entraîner. Son coassement fait trembler les étangs.',
+     'NATURE', 'PEU_COMMUN', 94, 'sprites/muscle_frog.png', 200, 200),
+    ('Pandaroux', 'Panda roux armé d''un bouclier d''écorce. Il protège les nids des oiseaux contre les voleurs d''œufs.',
+     'NATURE', 'PEU_COMMUN', 94, 'sprites/red_panda.png', 200, 200),
+    ('Tricorne', 'Jeune tricératops qui fonce tête baissée dans les fougères. Ses trois cornes ne servent qu''à jouer.',
+     'NATURE', 'PEU_COMMUN', 94, 'sprites/triceratops.png', 200, 200),
+    ('Pantinbois', 'Pantin taillé dans une branche de chêne et animé par un rayon de lune. Il craque à chaque pas.',
+     'NATURE', 'PEU_COMMUN', 94, 'sprites/wooden_puppet.png', 200, 200),
+    ('Sylvanor', 'Dragon millénaire couvert de mousse et de champignons. On raconte que la forêt a poussé sur son dos endormi.',
+     'NATURE', 'RARE', 59, 'sprites/mushroom_dragon.png', 50, 50),
+    ('Feuillagon', 'Dragon dont les ailes sont des feuilles vivantes. Au printemps, ses écailles tombent et des bourgeons repoussent.',
+     'NATURE', 'RARE', 59, 'sprites/leaf_dragon.png', 50, 50),
+    ('Ankylosol', 'Ancêtre cuirassé dont la carapace porte la mousse de mille ans. Sa queue-massue fait trembler le sol.',
+     'NATURE', 'RARE', 59, 'sprites/ankylosaurus.png', 50, 50),
+    ('Minotaurin', 'Gardien des labyrinthes de haies. Il ne s''y perd jamais et raccompagne ceux qui s''égarent.',
+     'NATURE', 'RARE', 59, 'sprites/minotaur.png', 50, 50),
     -- CRISTAL
-    ('Galetin',    'Roule le long des rivières de montagne.',     'CRISTAL', 'COMMUN',     60, 'images/galetin.png',    500, 500),
-    ('Quartzelle', 'Ses écailles reflètent la lumière du matin.', 'CRISTAL', 'PEU_COMMUN', 30, 'images/quartzelle.png', 200, 200),
-    ('Cristille',  'Un insecte aux ailes minérales.',             'CRISTAL', 'RARE',       10, 'images/cristille.png',   50,  50),
+    ('Galetin', 'Roulé en boule, il dévale les rivières de montagne. Sa carapace cache une géode qui scintille quand il se déroule.',
+     'CRISTAL', 'COMMUN', 182, 'sprites/geode_armadillo.png', 500, 500),
+    ('Tortuquartz', 'Tortue paisible qui fait pousser des cristaux roses sur sa carapace en dormant au soleil.',
+     'CRISTAL', 'COMMUN', 182, 'sprites/crystal_turtle.png', 500, 500),
+    ('Scaracorne', 'Scarabée à la carapace métallique et à la corne d''ivoire. Il pousse des cailloux deux fois plus lourds que lui.',
+     'CRISTAL', 'COMMUN', 182, 'sprites/horned_beetle.png', 500, 500),
+    ('Rocaillou', 'Petit golem de pierre coiffé d''une pousse verte. Il reste immobile des jours entiers, au grand bonheur des lézards.',
+     'CRISTAL', 'COMMUN', 182, 'sprites/stone_golem.png', 500, 500),
+    ('Quartzelle', 'Ses oreilles de quartz captent la lumière du matin et la renvoient en arcs-en-ciel. Elle bondit sans un bruit.',
+     'CRISTAL', 'PEU_COMMUN', 94, 'sprites/quartz_rabbit.png', 200, 200),
+    ('Ambrescorpe', 'Scorpion d''ambre au dard inoffensif. Dans sa carapace dorée, on devine un insecte figé depuis des millénaires.',
+     'CRISTAL', 'PEU_COMMUN', 94, 'sprites/amber_scorpion.png', 200, 200),
+    ('Ambraignée', 'Araignée qui tisse des toiles de fils cristallins. Au matin, elles brillent comme des colliers de perles.',
+     'CRISTAL', 'PEU_COMMUN', 94, 'sprites/amber_spider.png', 200, 200),
+    ('Cuivrechou', 'Chouette mécanique aux plumes de cuivre et aux yeux de lentilles. Elle tic-taque doucement quand elle réfléchit.',
+     'CRISTAL', 'PEU_COMMUN', 94, 'sprites/copper_owl.png', 200, 200),
+    ('Gargouillon', 'Gargouille qui veille sur les toits la nuit. Au lever du jour, elle redevient pierre et fait semblant de dormir.',
+     'CRISTAL', 'PEU_COMMUN', 94, 'sprites/gargoyle.png', 200, 200),
+    ('Cristille', 'Scarabée à la carapace de diamant, taillée par des siècles de vent. Ses ailes minérales tintent comme du verre.',
+     'CRISTAL', 'RARE', 59, 'sprites/diamond_beetle.png', 50, 50),
+    ('Améthor', 'Colosse d''améthyste né au cœur d''une géode géante. Chacun de ses pas fait chanter les cristaux alentour.',
+     'CRISTAL', 'RARE', 59, 'sprites/crystal_golem.png', 50, 50),
+    ('Scorpior', 'Scorpion d''or massif qui garde les trésors enfouis du désert. Son armure ne se ternit jamais.',
+     'CRISTAL', 'RARE', 59, 'sprites/golden_scorpion.png', 50, 50),
+    ('Cyclopierre', 'Gardien antique à l''œil unique, couronné de bronze. Il a vu naître les montagnes et s''en souvient.',
+     'CRISTAL', 'RARE', 59, 'sprites/stone_cyclops.png', 50, 50),
     -- BRUME
-    ('Nuageon',    'Flotte au-dessus des étangs à l''aube.',      'BRUME',   'COMMUN',     60, 'images/nuageon.png',    500, 500),
-    ('Vapouille',  'Apparaît après les averses d''été.',          'BRUME',   'PEU_COMMUN', 30, 'images/vapouille.png',  200, 200),
-    ('Brumel',     'Se déplace dans les nuages.',                 'BRUME',   'RARE',       10, 'images/brumel.png',      50,  50),
+    ('Nuageon', 'Feu follet né de la rosée, il flotte au-dessus des étangs à l''aube et s''évapore dès qu''on tend la main.',
+     'BRUME', 'COMMUN', 182, 'sprites/blue_wisp.png', 500, 500),
+    ('Rosilotl', 'Axolotl rose qui sourit en permanence. Il fait des bulles en forme de cœur au fond des mares.',
+     'BRUME', 'COMMUN', 182, 'sprites/axolotl.png', 500, 500),
+    ('Souffleau', 'Baleineau farceur qui arrose les marins de son jet d''eau. Il chante pour appeler la pluie.',
+     'BRUME', 'COMMUN', 182, 'sprites/baby_whale.png', 500, 500),
+    ('Givrou', 'Phoque des banquises au pelage de givre. Un flocon brille sur sa tête et ne fond jamais.',
+     'BRUME', 'COMMUN', 182, 'sprites/ice_seal.png', 500, 500),
+    ('Homardin', 'Homard rouge vif qui claque des pinces pour applaudir. Il collectionne les coquillages vides.',
+     'BRUME', 'COMMUN', 182, 'sprites/lobster.png', 500, 500),
+    ('Tentaclou', 'Poulpe violet aux huit bras habiles. Il défait n''importe quel nœud et recoud les filets déchirés.',
+     'BRUME', 'COMMUN', 182, 'sprites/octopus.png', 500, 500),
+    ('Gonfléon', 'Poisson-globe qui gonfle quand il rit. Ses piquants jaunes sont doux au toucher.',
+     'BRUME', 'COMMUN', 182, 'sprites/pufferfish.png', 500, 500),
+    ('Tortulame', 'Tortue de mer qui suit les courants depuis cent ans. Sa carapace dessine la route des grandes marées.',
+     'BRUME', 'COMMUN', 182, 'sprites/sea_turtle.png', 500, 500),
+    ('Gluantine', 'Gelée rose et tremblotante née de la brume des marais. Elle prend la forme de tout ce qu''elle serre dans ses bras.',
+     'BRUME', 'COMMUN', 182, 'sprites/pink_slime.png', 500, 500),
+    ('Libellin', 'Libellule aux ailes de brume qui frôle la surface des lacs sans jamais la toucher.',
+     'BRUME', 'COMMUN', 182, 'sprites/dragonfly.png', 500, 500),
+    ('Vapouille', 'Méduse des averses d''été : elle nage dans l''air humide et laisse derrière elle une traînée de bulles.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/jellyfish.png', 200, 200),
+    ('Abyssolu', 'Poisson des abysses qui guide les égarés avec sa lanterne. Ses dents impressionnent, son cœur est tendre.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/anglerfish.png', 200, 200),
+    ('Coraillotl', 'Axolotl aux branchies de corail qui rend leurs couleurs aux récifs fatigués.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/coral_axolotl.png', 200, 200),
+    ('Planémante', 'Raie manta qui plane dans la brume comme dans l''eau. Les étoiles se reflètent sur son dos.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/manta_ray.png', 200, 200),
+    ('Licornet', 'Narval à la corne torsadée qui perce la glace pour laisser respirer les phoques.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/narwhal.png', 200, 200),
+    ('Hippocime', 'Hippocampe corail qui s''accroche aux algues pendant les tempêtes et danse quand elles s''arrêtent.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/seahorse.png', 200, 200),
+    ('Flocourson', 'Ourson de neige au pelage si blanc qu''on ne le voit que lorsqu''il éternue.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/snow_cub.png', 200, 200),
+    ('Salamaré', 'Salamandre des marées aux taches lumineuses. Elle ne sort que les nuits de brouillard.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/teal_axolotl.png', 200, 200),
+    ('Mammoufle', 'Petit mammouth laineux qui souffle de la neige par sa trompe. Il adore les batailles de boules de neige.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/baby_mammoth.png', 200, 200),
+    ('Bernithé', 'Bernard-l''ermite installé dans une théière ancienne. Il offre le thé à qui frappe à son couvercle.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/hermit_crab.png', 200, 200),
+    ('Corbrume', 'Corbeau aux reflets violets qui porte les messages à travers le brouillard. Il ne se trompe jamais d''adresse.',
+     'BRUME', 'PEU_COMMUN', 94, 'sprites/raven.png', 200, 200),
+    ('Brumel', 'Fait de brume pure, il traverse les nuages sans laisser de trace. On ne l''aperçoit qu''au moment où le brouillard se lève.',
+     'BRUME', 'RARE', 59, 'sprites/mist_ghost.png', 50, 50),
+    ('Carpéon', 'Carpe koï qui a remonté la cascade du ciel pour devenir dragon. Ses nageoires dorées ondulent comme des rubans.',
+     'BRUME', 'RARE', 59, 'sprites/koi_dragon.png', 50, 50),
+    ('Marégon', 'Dragon des mers aux cornes de corail. Il commande aux vagues et apaise les tempêtes d''un regard.',
+     'BRUME', 'RARE', 59, 'sprites/sea_dragon.png', 50, 50),
+    ('Cygnelle', 'Cygne couronné qui règne sur les lacs de brume. Ses plumes blanches ne se mouillent jamais.',
+     'BRUME', 'RARE', 59, 'sprites/royal_swan.png', 50, 50),
     -- LUEUR
-    ('Lucioli',    'Danse autour des lanternes le soir.',         'LUEUR',   'COMMUN',     60, 'images/lucioli.png',    500, 500),
-    ('Flammille',  'Éclaire les sentiers.',                       'LUEUR',   'PEU_COMMUN', 30, 'images/flammille.png',  200, 200),
-    ('Solaris',    'Ne se montre qu''au solstice.',               'LUEUR',   'RARE',       10, 'images/solaris.png',     50,  50)
-ON CONFLICT ON CONSTRAINT uq_creature_nom DO NOTHING;
+    ('Lucioli', 'Papillon de nuit aux ailes constellées d''étoiles. Il danse autour des lanternes jusqu''au lever du jour.',
+     'LUEUR', 'COMMUN', 182, 'sprites/star_moth.png', 500, 500),
+    ('Cirette', 'Esprit de bougie qui veille sur les chambres d''enfants. Sa flamme tremble quand quelqu''un ment.',
+     'LUEUR', 'COMMUN', 182, 'sprites/candle_spirit.png', 500, 500),
+    ('Braisson', 'Hérisson dont les piquants sont des braises. Il réchauffe les terriers pendant l''hiver.',
+     'LUEUR', 'COMMUN', 182, 'sprites/fire_hedgehog.png', 500, 500),
+    ('Crépuchon', 'Raton laveur du crépuscule qui fouille les cratères des étoiles filantes.',
+     'LUEUR', 'COMMUN', 182, 'sprites/purple_raccoon.png', 500, 500),
+    ('Flammille', 'Renarde dont la queue brûle sans jamais rien consumer. Elle guide les voyageurs égarés sur les sentiers.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/flame_fox.png', 200, 200),
+    ('Zorgloeil', 'Visiteur venu d''une étoile lointaine, couronné de pierres qui voient. Il observe tout et ne juge rien.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/eye_alien.png', 200, 200),
+    ('Œillume', 'Flamme violette au regard unique qui flotte dans les ruines. Elle cligne quand on lui souhaite bonsoir.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/eye_orb.png', 200, 200),
+    ('Ouistibraise', 'Ouistiti à la queue enflammée qui saute de branche en branche en semant des étincelles.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/fire_monkey.png', 200, 200),
+    ('Tortulave', 'Tortue des volcans dont la carapace craque de lave. Elle avance lentement, mais rien ne l''arrête.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/lava_turtle.png', 200, 200),
+    ('Chauvelune', 'Chauve-souris marquée d''un croissant de lune. Elle ne vole que les nuits de pleine lune.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/moon_bat.png', 200, 200),
+    ('Minastre', 'Chaton tombé d''une constellation, qui joue avec un éclat d''étoile. Ses yeux brillent dans le noir.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/star_kitten.png', 200, 200),
+    ('Lunéphant', 'Éléphant mauve paré d''un tapis de lune. Il n''oublie aucun des rêves qu''on lui raconte.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/purple_elephant.png', 200, 200),
+    ('Prismalou', 'Caméléon qui prend toutes les couleurs de l''arc-en-ciel à la fois. Il ne passe jamais inaperçu.',
+     'LUEUR', 'PEU_COMMUN', 94, 'sprites/chameleon.png', 200, 200),
+    ('Solaris', 'Petit dragon salamandre qui ne sort qu''au solstice. Sa flamme garde en elle la chaleur d''un été entier.',
+     'LUEUR', 'RARE', 59, 'sprites/salamander_dragon.png', 50, 50),
+    ('Cerfélune', 'Cerf nocturne aux bois d''argent et au pelage constellé. On dit qu''il guide la lune dans sa course.',
+     'LUEUR', 'RARE', 59, 'sprites/moon_deer.png', 50, 50),
+    ('Griffaurore', 'Griffon doré qui s''envole au lever du soleil. Ses plumes gardent la lumière de l''aube toute la journée.',
+     'LUEUR', 'RARE', 59, 'sprites/griffin.png', 50, 50),
+    ('Paonciel', 'Paon aux plumes irisées : chaque ocelle reflète un ciel différent. Il fait la roue pour saluer l''aurore.',
+     'LUEUR', 'RARE', 59, 'sprites/peacock.png', 50, 50),
+    ('Triplouf', 'Chiot à trois têtes qui garde l''entrée des rêves. Une tête dort, une tête joue, une tête veille.',
+     'LUEUR', 'RARE', 59, 'sprites/cerberus_pup.png', 50, 50)
+ON CONFLICT ON CONSTRAINT uq_creature_nom DO UPDATE
+    SET description = EXCLUDED.description,
+        image       = EXCLUDED.image,
+        poids       = EXCLUDED.poids;
 
 COMMIT;

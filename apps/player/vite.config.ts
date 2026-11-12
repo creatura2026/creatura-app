@@ -6,8 +6,17 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// En local, `/api` est relayé vers le back (uvicorn ou docker compose de backend/) :
+// le front appelle la même origine, comme derrière l'Ingress sur EKS.
+// Autre adresse : variable API_PROXY_TARGET.
+const apiProxy = {
+  '/api': { target: process.env.API_PROXY_TARGET ?? 'http://localhost:8000', changeOrigin: true },
+}
+
 // https://vite.dev/config/
 export default defineConfig({
+  server: { proxy: apiProxy },
+  preview: { proxy: apiProxy },
   plugins: [
     vue(),
     vueDevTools(),

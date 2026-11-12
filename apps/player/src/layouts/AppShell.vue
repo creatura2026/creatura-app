@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import PixelIcon, { type IconName } from '@creatura/shared/ui/PixelIcon.vue'
 
+import { USE_MOCK_API } from '@/api'
 import { useMe, useMyTrades } from '@/api/queries'
 import { useAuthStore } from '@/stores/auth'
 
@@ -90,7 +91,9 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
 
     <footer class="hidden border-t-2 border-ink/10 py-5 md:block">
       <p class="mx-auto max-w-6xl px-4 font-pixel text-xs text-ink/70">
-        CREATURA — Projet d’intégration DLTQ 2026 · Données fictives (API simulée)
+        CREATURA — Projet d’intégration DLTQ 2026<template v-if="USE_MOCK_API">
+          · Données fictives (API simulée)</template
+        >
       </p>
     </footer>
 
