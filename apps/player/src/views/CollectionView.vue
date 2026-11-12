@@ -125,10 +125,7 @@ function toggleDuplicates() {
             }}
             <template v-if="duplicatesOnly"> · filtre actif : <strong>doublons</strong></template>
           </p>
-          <ul
-            v-if="data.items.length"
-            class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
-          >
+          <ul v-if="data.items.length" class="card-grid">
             <li v-for="e in data.items" :key="e.creature.id">
               <RouterLink
                 :to="{ name: 'creature', params: { id: e.creature.id } }"

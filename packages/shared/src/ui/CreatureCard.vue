@@ -5,6 +5,12 @@
  * Fenêtre d'illustration teintée par la famille (trame pixel + ombre au sol), puis le nom, la
  * famille et la rareté, et des gemmes de rareté de la couleur de la rareté. Une carte non possédée
  * montre la silhouette de la créature sur fond hachuré.
+ *
+ * La carte a partout le format du booster : 5:8 en hauteur (150 × 240), sa hauteur suit sa largeur.
+ * Pour que le contenu tienne aussi dans une carte étroite, il se règle sur la largeur de la carte
+ * elle-même (requêtes de conteneur `@[…]`), pas sur celle de l'écran : en dessous de 9rem,
+ * illustration et nom plus petits ; en dessous de 6.5rem, la ligne famille · rareté disparaît (les
+ * gemmes disent déjà la rareté). Dans une grille, utiliser `.card-grid` (theme.css).
  */
 import { computed } from 'vue'
 import type { CreatureSummary } from '../api/types'
@@ -31,7 +37,7 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
 
 <template>
   <article
-    class="relative flex h-full flex-col bg-white text-ink"
+    class="@container relative flex aspect-[5/8] h-full flex-col bg-white text-ink"
     :class="[
       missing ? 'border-2 border-dashed border-ink' : 'card-pixel-sm rarity-frame',
       size === 'sm' ? 'gap-1.5 p-1.5 pb-2' : 'gap-2 p-2 pb-3',
@@ -44,7 +50,7 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
     <div
       class="card-window relative flex shrink-0 items-center justify-center overflow-hidden border-2"
       :class="[
-        size === 'sm' ? 'h-16 sm:h-20' : 'h-24 sm:h-28',
+        size === 'sm' ? 'h-16 sm:h-20' : 'h-16 @[9rem]:h-24 sm:@[9rem]:h-28',
         missing ? 'hatched border-dashed border-ink/40' : 'border-ink',
       ]"
       :style="missing ? undefined : { backgroundColor: familyTint(creature.family.code) }"
@@ -63,11 +69,11 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
     <div class="flex flex-1 flex-col items-center gap-1 px-1 text-center">
       <h3
         class="leading-tight font-bold"
-        :class="size === 'sm' ? 'text-sm' : 'text-base sm:text-lg'"
+        :class="size === 'sm' ? 'text-sm' : 'text-sm @[9rem]:text-base sm:@[9rem]:text-lg'"
       >
         {{ creature.name }}
       </h3>
-      <p class="text-xs leading-snug text-ink/80 sm:text-sm">
+      <p class="hidden text-xs leading-snug text-ink/80 @[6.5rem]:block sm:text-sm">
         {{ creature.family.label }} · {{ creature.rarity.label }}
       </p>
       <RarityGems
@@ -78,8 +84,9 @@ const isEgg = computed(() => props.creature.imageUrl.startsWith('data:'))
       <p v-if="description" class="text-xs leading-snug text-ink/80 sm:text-sm">
         {{ description }}
       </p>
-      <p v-if="missing" class="text-xs font-semibold">Non possédée</p>
-      <p v-else-if="quantity !== undefined" class="text-xs sm:text-sm">
+      <!-- Pied de carte : reste en bas quand la carte est plus haute que son contenu -->
+      <p v-if="missing" class="mt-auto pt-1 text-xs font-semibold">Non possédée</p>
+      <p v-else-if="quantity !== undefined" class="mt-auto pt-1 text-xs sm:text-sm">
         Possédées : <strong>{{ quantity }}</strong>
       </p>
     </div>
