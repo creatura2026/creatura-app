@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.controllers import collection
 from app.dependencies import user_from_token
-from app.errors import Conflict, Unauthorized
+from app.errors import Conflict, Unauthorized, from_integrity_error
 from app.models import Role, Utilisateur
 from app.schemas.auth import LoginIn, ProfileOut, RegisterIn, TokenOut, UserOut
 from app.security import ACCESS, REFRESH, create_token, hash_password, verify_password
@@ -31,9 +31,9 @@ def register(db: Session, data: RegisterIn) -> Utilisateur:
     db.add(user)
     try:
         db.commit()
-    except IntegrityError:  # inscription simultanée avec le même pseudo/identifiant
+    except IntegrityError as exc:  # inscription simultanée avec le même pseudo/identifiant
         db.rollback()
-        raise Conflict("Pseudonyme ou identifiant déjà utilisé")
+        raise from_integrity_error(exc)
     return user
 
 

@@ -1,15 +1,17 @@
 import uuid
 from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from app.models import Role, Utilisateur
 from app.security import BCRYPT_MAX_BYTES
 
 
 class RegisterIn(BaseModel):
-    pseudo: str = Field(min_length=3, max_length=30)
-    login: str = Field(min_length=3, max_length=50)
+    # Espaces autour retirés : la base refuse un pseudo ou un identifiant vide (btrim).
+    pseudo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=30)]
+    login: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=50)]
     password: str = Field(min_length=8, max_length=BCRYPT_MAX_BYTES)
 
     @field_validator("password")

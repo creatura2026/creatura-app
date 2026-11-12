@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.controllers import collection
 from app.controllers.player import get_player
-from app.errors import BadRequest, Conflict, Forbidden, NotFound
+from app.errors import BadRequest, Conflict, Forbidden, NotFound, from_integrity_error
 from app.models import Creature, Echange, EchangeLigne, Sens, Statut, Utilisateur
 from app.schemas.trade import TradeCreateIn, TradeLineIn, TradeRole
 
@@ -162,8 +162,8 @@ def accept_trade(db: Session, me: Utilisateur, trade_id: uuid.UUID) -> Echange:
     except Conflict:
         db.rollback()
         raise
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
-        raise Conflict("Conflit lors du transfert, réessayez")
+        raise from_integrity_error(exc)
 
     return _reload(db, trade.id)

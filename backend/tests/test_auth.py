@@ -1,7 +1,49 @@
+import pytest
 from conftest import API, SessionLocal, auth_headers, login, register_and_login
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
+from app.errors import from_integrity_error
 from app.models import Utilisateur
+
+
+def test_login_with_pgcrypto_hash_like_demo_accounts(client):
+    """Les comptes de démo (db/init/03_demo_dev.sql) sont hachés par pgcrypto en $2a$10$."""
+    with SessionLocal() as db:
+        db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
+        db.execute(
+            text(
+                "INSERT INTO utilisateur (pseudo, identifiant, mot_de_passe_hash) "
+                "VALUES ('Alice', 'joueur1', crypt('joueur1', gen_salt('bf', 10)))"
+            )
+        )
+        db.commit()
+    tokens = login(client, "joueur1", "joueur1")
+    assert client.get(f"{API}/me", headers=auth_headers(tokens)).json()["pseudo"] == "Alice"
+
+
+def test_blank_pseudo_rejected(client):
+    r = client.post(f"{API}/auth/register", json={"pseudo": "     ", "login": "lina", "password": "password123"})
+    assert r.status_code == 422
+
+
+def test_constraint_names_translated_to_http(client):
+    """Les contraintes nommées du schéma deviennent des codes HTTP (tableau de db/README.md)."""
+    with SessionLocal() as db:
+        db.add(Utilisateur(pseudo="Lina", identifiant="lina", mot_de_passe_hash="x"))
+        db.commit()
+        db.add(Utilisateur(pseudo="LINA", identifiant="autre", mot_de_passe_hash="x"))
+        with pytest.raises(IntegrityError) as dup_pseudo:
+            db.commit()
+        db.rollback()
+        db.add(Utilisateur(pseudo="Noe", identifiant="  ", mot_de_passe_hash="x"))
+        with pytest.raises(IntegrityError) as blank_login:
+            db.commit()
+
+    assert (from_integrity_error(dup_pseudo.value).status_code, from_integrity_error(dup_pseudo.value).detail) == (
+        409, "Ce pseudonyme est déjà utilisé"
+    )
+    assert from_integrity_error(blank_login.value).status_code == 400
 
 
 def test_health_without_token(client):

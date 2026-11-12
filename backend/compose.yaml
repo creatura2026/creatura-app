@@ -1,51 +1,39 @@
-# Environnement local : Postgres + API.
-#   docker compose up -d --build     démarrer (ou reconstruire après modification du code)
-#   docker compose logs -f api       suivre les logs
-#   docker compose down              arrêter (les données restent dans le volume)
-#   docker compose down -v           arrêter et effacer la base (nécessaire après un
-#                                    changement des fichiers SQL de db/)
+# API CREATURA en local, branchée sur la base de l'équipe (dossier db/).
 #
-# Au premier démarrage, Postgres exécute les fichiers SQL de ../db (schéma + catalogue).
+#   1. Démarrer la base :  cd ../db && docker compose up -d      (voir db/README.md)
+#   2. Démarrer l'API :    cd ../backend && docker compose up -d --build
+#
+#   docker compose logs -f api       suivre les logs
+#   docker compose down              arrêter l'API (la base continue de tourner)
+#
 # Valeurs de développement uniquement : en K8S, elles viennent d'un Secret.
 
-name: creatura
+name: creatura-backend
 
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: creatura
-      POSTGRES_PASSWORD: creatura-dev
-      POSTGRES_DB: creatura
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ../db:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U creatura -d creatura"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
-
   api:
     build: .
-    depends_on:
-      db:
-        condition: service_healthy
+    container_name: creatura-api
     environment:
-      DATABASE_URL: postgresql+psycopg://creatura:creatura-dev@db:5432/creatura
+      # Le conteneur de la base s'appelle creatura-db sur le réseau de db/docker-compose.yml.
+      DATABASE_URL: postgres://creatura:creatura@creatura-db:5432/creatura
       JWT_SECRET: dev-only-secret-change-me-in-production-please-0123456789
+      # Le compte admin existe déjà avec les données de démo (CREATURA_DEMO=true) ;
+      # sinon, l'API le crée au démarrage avec ces valeurs.
       ADMIN_LOGIN: admin
-      ADMIN_PASSWORD: admin-dev
+      ADMIN_PASSWORD: admin
       CORS_ORIGINS: "*"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    networks:
+      - creatura-db
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-volumes:
-  pgdata:
+networks:
+  creatura-db:
+    name: creatura-db_default  # réseau créé par db/docker-compose.yml
+    external: true

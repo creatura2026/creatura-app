@@ -1,8 +1,8 @@
-"""Les tests tournent sur un vrai PostgreSQL : le schéma est recréé avant chaque test à partir
-des fichiers SQL de db/ (la même source que la production).
+"""Les tests tournent sur un vrai PostgreSQL : avant chaque test, la base est recréée avec les
+scripts de db/init/ (schéma + catalogue, sans les données de démo), comme en production.
 
-Par défaut : base `creatura_test` sur le Postgres du compose (créée si besoin).
-Autre serveur : variable TEST_DATABASE_URL.
+Par défaut : base `creatura_test` sur le Postgres de db/ (créée si besoin, la base `creatura`
+n'est pas touchée). Autre serveur : variable TEST_DATABASE_URL.
 """
 
 import os
@@ -10,20 +10,21 @@ import uuid
 from pathlib import Path
 
 TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql+psycopg://creatura:creatura-dev@localhost:5432/creatura_test"
+    "TEST_DATABASE_URL", "postgres://creatura:creatura@localhost:5432/creatura_test"
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ADMIN_LOGIN"] = "admin"
 os.environ["ADMIN_PASSWORD"] = "admin-password"
 os.environ["BOOSTER_SIZE"] = "5"
 
-DB_DIR = Path(__file__).resolve().parents[2] / "db"
+DB_INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, select, text, update  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.controllers import collection  # noqa: E402
 from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
@@ -33,7 +34,7 @@ API = "/api/v1"
 
 
 def _ensure_test_database() -> None:
-    url = make_url(TEST_DATABASE_URL)
+    url = make_url(get_settings().database_url)
     server = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     with server.connect() as conn:
         if not conn.scalar(text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": url.database}):
@@ -41,15 +42,22 @@ def _ensure_test_database() -> None:
     server.dispose()
 
 
+def init_scripts() -> list[Path]:
+    """Scripts de db/init/ dans l'ordre, sans les données de démo (comme CREATURA_DEMO=false)."""
+    scripts = [f for f in sorted(DB_INIT_DIR.glob("*.sql")) if "demo" not in f.name]
+    assert scripts, f"aucun script SQL dans {DB_INIT_DIR}"
+    return scripts
+
+
 def reset_database() -> None:
     engine.dispose()
     raw = engine.raw_connection()
     try:
+        raw.driver_connection.autocommit = True  # les scripts gèrent leurs propres BEGIN/COMMIT
         cur = raw.cursor()
         cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-        for sql_file in sorted(DB_DIR.glob("*.sql")):
+        for sql_file in init_scripts():
             cur.execute(sql_file.read_text())
-        raw.commit()
     finally:
         raw.close()
     engine.dispose()

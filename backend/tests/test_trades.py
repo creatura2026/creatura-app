@@ -63,13 +63,13 @@ def test_trade_with_several_cards_each_side(client):
     give(a["id"], "Moussou", 3)
     give(a["id"], "Flammille", 1)
     give(b["id"], "Brumel", 1)
-    give(b["id"], "Quartzou", 2)
+    give(b["id"], "Galetin", 2)
 
-    t = propose(client, a, b, {"Moussou": 2, "Flammille": 1}, {"Brumel": 1, "Quartzou": 2}).json()
+    t = propose(client, a, b, {"Moussou": 2, "Flammille": 1}, {"Brumel": 1, "Galetin": 2}).json()
     assert client.post(f"{API}/trades/{t['id']}/accept", headers=b["headers"]).status_code == 200
 
-    assert [quantity(a["id"], n) for n in ("Moussou", "Flammille", "Brumel", "Quartzou")] == [1, 0, 1, 2]
-    assert [quantity(b["id"], n) for n in ("Moussou", "Flammille", "Brumel", "Quartzou")] == [2, 1, 0, 0]
+    assert [quantity(a["id"], n) for n in ("Moussou", "Flammille", "Brumel", "Galetin")] == [1, 0, 1, 2]
+    assert [quantity(b["id"], n) for n in ("Moussou", "Flammille", "Brumel", "Galetin")] == [2, 1, 0, 0]
     assert_stock_invariant()
 
 
@@ -131,8 +131,8 @@ def test_concurrent_acceptances_do_not_consume_same_copy(client):
     a = register_and_login(client, "Alice")
     give(a["id"], "Moussou", 1)  # un seul exemplaire, proposé à 5 joueurs
     others = []
-    for name, card in [("Bob", "Brumel"), ("Chloe", "Cristille"), ("Dan", "Scintil"),
-                       ("Eve", "Solarion"), ("Fred", "Quartzou")]:
+    for name, card in [("Bob", "Brumel"), ("Chloe", "Cristille"), ("Dan", "Nuageon"),
+                       ("Eve", "Solaris"), ("Fred", "Lucioli")]:
         p = register_and_login(client, name)
         give(p["id"], card, 1)
         others.append((p, card, propose(client, a, p, {"Moussou": 1}, {card: 1}).json()["id"]))
