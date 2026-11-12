@@ -8,13 +8,10 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import get_settings
-from app.errors import DomainError, from_integrity_error
+from app.errors import DomainError, from_integrity_error, problem_body
 from app.seed import ensure_admin
 from app.validation import validation_problem
 from app.views import api_router
-
-PROBLEM_TYPE = "https://app.creatura.fr/problems/"
-
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -25,17 +22,10 @@ async def lifespan(_: FastAPI):
 
 def problem_response(error: DomainError) -> JSONResponse:
     """Réponse au format Problem Details (RFC 9457), avec le code stable du contrat."""
-    body = {
-        "type": PROBLEM_TYPE + error.code.lower().replace("_", "-"),
-        "title": error.title,
-        "status": error.status_code,
-        "code": error.code,
-        "detail": error.detail,
-    }
-    if error.errors:
-        body["errors"] = error.errors
     headers = {"WWW-Authenticate": "Bearer"} if error.status_code == 401 else None
-    return JSONResponse(body, status_code=error.status_code, headers=headers, media_type="application/problem+json")
+    return JSONResponse(
+        problem_body(error), status_code=error.status_code, headers=headers, media_type="application/problem+json"
+    )
 
 
 # Erreurs HTTP levées par FastAPI lui-même (route inconnue, méthode non permise…).

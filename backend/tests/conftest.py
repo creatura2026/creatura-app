@@ -7,6 +7,7 @@ n'est pas touchée). Autre serveur : variable TEST_DATABASE_URL.
 
 import os
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 TEST_DATABASE_URL = os.environ.get(
@@ -15,6 +16,9 @@ TEST_DATABASE_URL = os.environ.get(
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ADMIN_LOGIN"] = "admin"
 os.environ["ADMIN_PASSWORD"] = "admin-password"
+# Les tests visent toujours le Postgres local, même si backend/.env vise RDS.
+os.environ["DB_IAM_AUTH"] = "false"
+os.environ["IMAGE_BASE_URL"] = "https://cdn.test"
 
 DB_INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
 
@@ -171,3 +175,96 @@ def assert_stock_invariant() -> None:
         ).all()
         negative = db.scalar(text("SELECT count(*) FROM collection WHERE quantite < 0"))
     assert broken == [] and negative == 0
+
+
+# ── Salle d'échange ──────────────────────────────────────────────────────────
+
+
+def open_trade(client: TestClient, proposer: dict, recipient: dict, wanted: str | None = None) -> dict:
+    """Ouvre une salle d'échange (tapis vides) et la retourne."""
+    body = {"recipientId": str(recipient["id"])}
+    if wanted:
+        body["wantedCreatureId"] = creature_id(wanted)
+    r = client.post(f"{API}/trades", json=body, headers=proposer["headers"])
+    assert r.status_code in (200, 201), r.text
+    return r.json()
+
+
+def cards(names: dict[str, int]) -> list[dict]:
+    return [{"creatureId": creature_id(n), "quantity": q} for n, q in names.items()]
+
+
+def mat(items: list[dict]) -> list[tuple[str, int]]:
+    return [(i["creature"]["name"], i["quantity"]) for i in items]
+
+
+class LiveRoom:
+    """Un joueur connecté à la salle d'échange : `init` est lu à l'entrée.
+
+    `offer` et `ready` attendent l'échange à jour, et font lire la même diffusion aux autres
+    joueurs connectés (`peers`) : chacun reste ainsi synchronisé sur le serveur.
+    """
+
+    def __init__(self, ws, peers: list["LiveRoom"]):
+        self.ws = ws
+        self.peers = peers
+        self.init = ws.receive_json()
+        assert self.init["type"] == "init", self.init
+        self.trade = self.init["trade"]
+
+    def send(self, **message) -> None:
+        self.ws.send_json(message)
+
+    def next(self, type_: str) -> dict:
+        """Prochain message de ce type (les autres sont ignorés)."""
+        while True:
+            message = self.ws.receive_json()
+            if message["type"] == "trade":
+                self.trade = message["trade"]
+            if message["type"] == type_:
+                return message
+
+    def _act(self, **message) -> dict:
+        self.send(**message)
+        trade = self.next("trade")["trade"]
+        for peer in self.peers:
+            if peer is not self:
+                peer.next("trade")
+        return trade
+
+    def offer(self, names: dict[str, int]) -> dict:
+        return self._act(type="offer", items=cards(names))
+
+    def ready(self, ready: bool = True) -> dict:
+        return self._act(type="ready", ready=ready)
+
+    def error(self) -> dict:
+        return self.next("error")["problem"]
+
+
+_tables: dict[str, list[LiveRoom]] = {}
+
+
+@contextmanager
+def live(client: TestClient, player: dict, trade_id: str):
+    token = player["tokens"]["accessToken"]
+    peers = _tables.setdefault(trade_id, [])
+    with client.websocket_connect(f"{API}/trades/{trade_id}/live?access_token={token}") as ws:
+        room = LiveRoom(ws, peers)
+        peers.append(room)
+        try:
+            yield room
+        finally:
+            peers.remove(room)
+
+
+def conclude_trade(client: TestClient, a: dict, b: dict, offered: dict[str, int], requested: dict[str, int]) -> dict:
+    """A ouvre un échange avec B, chacun pose ses cartes, puis les deux valident."""
+    trade = open_trade(client, a, b)
+    with live(client, a, trade["id"]) as room_a, live(client, b, trade["id"]) as room_b:
+        room_a.offer(offered)
+        room_b.offer(requested)
+        room_a.ready()
+        done = room_b.ready()
+    assert done["status"] == "ACCEPTED", done
+    return done

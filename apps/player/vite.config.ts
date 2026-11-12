@@ -10,7 +10,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 // le front appelle la même origine, comme derrière l'Ingress sur EKS.
 // Autre adresse : variable API_PROXY_TARGET.
 const apiProxy = {
-  '/api': { target: process.env.API_PROXY_TARGET ?? 'http://localhost:8000', changeOrigin: true },
+  '/api': {
+    target: process.env.API_PROXY_TARGET ?? 'http://localhost:8000',
+    changeOrigin: true,
+    ws: true, // salle d'échange (WebSocket /api/v1/trades/{tradeId}/live)
+  },
 }
 
 // https://vite.dev/config/

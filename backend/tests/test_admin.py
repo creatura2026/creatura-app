@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from conftest import API, creature_id, give, problem, register_and_login
+from conftest import API, conclude_trade, give, problem, register_and_login
 
 ADMIN_ROUTES = ("/admin/stats", "/admin/trades", "/admin/rarity-distribution", "/admin/settings/booster")
 
@@ -20,16 +20,7 @@ def test_admin_dashboard(client, admin_headers):
     client.post(f"{API}/me/boosters", headers=b["headers"])
     give(a["id"], "Moussou", 1)
     give(b["id"], "Brumel", 1)
-    t = client.post(
-        f"{API}/trades",
-        json={
-            "recipientId": str(b["id"]),
-            "offered": [{"creatureId": creature_id("Moussou"), "quantity": 1}],
-            "requested": [{"creatureId": creature_id("Brumel"), "quantity": 1}],
-        },
-        headers=a["headers"],
-    ).json()
-    client.post(f"{API}/trades/{t['id']}/accept", headers=b["headers"])
+    t = conclude_trade(client, a, b, {"Moussou": 1}, {"Brumel": 1})
 
     stats = client.get(f"{API}/admin/stats", headers=admin_headers).json()
     today = date.fromisoformat(stats["period"]["to"])

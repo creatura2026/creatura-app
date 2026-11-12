@@ -36,11 +36,13 @@ d'un fichier SQL, il faut **réinitialiser** pour la voir.
 | Fichier | Contenu |
 |---|---|
 | `04_evolution_reglage_echec.sql` | Table `reglage` (cartes par booster) ; statut d'échange `ECHOUE` et colonne `motif_echec` |
+| `05_evolution_salle_echange.sql` | Salle d'échange : validations `proposeur_pret` / `destinataire_pret`, carte cherchée, table `echange_message` (discussion) |
 
-Pour l'appliquer à une base locale déjà créée, sans perdre ses données :
+Pour les appliquer à une base locale déjà créée, sans perdre ses données :
 
 ```bash
 docker exec -i creatura-db psql -U creatura -d creatura < init/04_evolution_reglage_echec.sql
+docker exec -i creatura-db psql -U creatura -d creatura < init/05_evolution_salle_echange.sql
 ```
 
 ## Connexion depuis le back

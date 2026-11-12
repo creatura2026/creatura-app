@@ -205,6 +205,41 @@ SELECT pg_temp.doit_echouer('motif sur un échange non échoué refusé',
     'ck_echange_motif_echec');
 
 -- ---------------------------------------------------------------------------
+-- salle d'échange (05_evolution_salle_echange.sql)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+    INSERT INTO echange (id, proposeur_id, destinataire_id, creature_cherchee_id)
+    SELECT '00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a',
+           '00000000-0000-0000-0000-00000000000b', id FROM creature WHERE nom = 'TestBrumel';
+    ASSERT (SELECT NOT proposeur_pret AND NOT destinataire_pret FROM echange
+            WHERE id = '00000000-0000-0000-0000-0000000000e3'), 'KO  validations à faux par défaut';
+    INSERT INTO echange_message (echange_id, auteur_id, texte)
+    VALUES ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a', 'Bonjour !');
+    RAISE NOTICE 'OK  salle ouverte tapis vides, sans validation, avec un message';
+END $$;
+SELECT pg_temp.doit_echouer('carte cherchée inexistante refusée',
+    $q$UPDATE echange SET creature_cherchee_id = -1 WHERE id = '00000000-0000-0000-0000-0000000000e3'$q$,
+    'fk_echange_creature_cherchee');
+SELECT pg_temp.doit_echouer('message vide refusé',
+    $q$INSERT INTO echange_message (echange_id, auteur_id, texte)
+       VALUES ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a', '   ')$q$,
+    'ck_echange_message_texte');
+SELECT pg_temp.doit_echouer('message d''un auteur inexistant refusé',
+    $q$INSERT INTO echange_message (echange_id, auteur_id, texte)
+       VALUES ('00000000-0000-0000-0000-0000000000e3', gen_random_uuid(), 'Salut')$q$,
+    'fk_echange_message_auteur');
+SELECT pg_temp.doit_echouer('message de plus de 500 caractères refusé',
+    $q$INSERT INTO echange_message (echange_id, auteur_id, texte)
+       VALUES ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a', repeat('a', 501))$q$,
+    '');
+DO $$ BEGIN
+    DELETE FROM echange WHERE id = '00000000-0000-0000-0000-0000000000e3';
+    ASSERT (SELECT count(*) FROM echange_message
+            WHERE echange_id = '00000000-0000-0000-0000-0000000000e3') = 0, 'KO  cascade echange -> echange_message';
+    RAISE NOTICE 'OK  suppression d''un échange supprime sa discussion';
+END $$;
+
+-- ---------------------------------------------------------------------------
 -- reglage (04_evolution_reglage_echec.sql)
 -- ---------------------------------------------------------------------------
 DO $$ BEGIN

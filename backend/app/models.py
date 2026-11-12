@@ -1,4 +1,4 @@
-"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_…).
+"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_…, 05_…).
 
 Le schéma est la source de vérité : le back ne crée ni ne modifie aucune table
 (pas de `create_all`). Les noms suivent la base : français, snake_case, sans accents.
@@ -9,7 +9,7 @@ import enum
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -103,12 +103,32 @@ class Echange(Base):
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     decide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     motif_echec: Mapped[str | None] = mapped_column(String(30))
+    # Salle d'échange (05_evolution_salle_echange.sql)
+    proposeur_pret: Mapped[bool] = mapped_column(Boolean, default=False)
+    destinataire_pret: Mapped[bool] = mapped_column(Boolean, default=False)
+    creature_cherchee_id: Mapped[int | None] = mapped_column(ForeignKey("creature.id"))
 
     proposeur: Mapped[Utilisateur] = relationship(foreign_keys=[proposeur_id], lazy="joined")
     destinataire: Mapped[Utilisateur] = relationship(foreign_keys=[destinataire_id], lazy="joined")
+    creature_cherchee: Mapped["Creature | None"] = relationship(lazy="joined")
+    # Ordre de pose sur le tapis : pas de date dans echange_ligne, on garde l'ordre du catalogue.
     lignes: Mapped[list["EchangeLigne"]] = relationship(
         lazy="selectin", cascade="all, delete-orphan", order_by="EchangeLigne.creature_id"
     )
+
+
+class EchangeMessage(Base):
+    """Message de la discussion d'un échange."""
+
+    __tablename__ = "echange_message"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    echange_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("echange.id"))
+    auteur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    texte: Mapped[str] = mapped_column(String(500))
+    envoye_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    auteur: Mapped[Utilisateur] = relationship(lazy="joined")
 
 
 class EchangeLigne(Base):
