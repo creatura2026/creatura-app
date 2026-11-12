@@ -188,7 +188,11 @@ watch(mode, (m) => {
             :error="cards.error.value"
             @retry="cards.refetch()"
           >
-            <ul v-if="cards.data.value?.items.length" class="card-grid">
+            <!-- La grille partage la largeur avec la recherche : moins de colonnes que d'habitude -->
+            <ul
+              v-if="cards.data.value?.items.length"
+              class="card-grid lg:grid-cols-3 xl:grid-cols-4"
+            >
               <li v-for="c in cards.data.value.items" :key="c.creature.id" class="relative">
                 <button
                   type="button"
