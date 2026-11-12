@@ -23,7 +23,7 @@ def test_catalog_filters(client):
         "description": "Habite les sous-bois.",
         "family": "NATURE",
         "rarity": "COMMUN",
-        "image": "images/moussou.png",
+        "image": "sprites/moss_puff.png",
         "stock_total": moussou["stock_total"],
         "stock_remaining": moussou["stock_total"],
     }

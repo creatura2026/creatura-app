@@ -14,14 +14,22 @@ DECLARE
 BEGIN
     -- Catalogue ---------------------------------------------------------------
     SELECT count(*) INTO n FROM creature;
-    ASSERT n = 12, format('KO  12 créatures attendues, %s trouvées', n);
-    RAISE NOTICE 'OK  12 créatures au catalogue';
+    ASSERT n = 24, format('KO  24 créatures attendues, %s trouvées', n);
+    RAISE NOTICE 'OK  24 créatures au catalogue';
+
+    SELECT count(*) INTO n FROM creature WHERE image !~ '^sprites/[a-z0-9_]+\.png$';
+    ASSERT n = 0, format('KO  %s image(s) hors format sprites/<fichier>.png', n);
+    SELECT count(*) INTO n FROM (SELECT image FROM creature GROUP BY image HAVING count(*) > 1) d;
+    ASSERT n = 0, 'KO  deux créatures partagent le même sprite';
+    RAISE NOTICE 'OK  chaque créature a son propre sprite (clé sprites/<fichier>.png)';
 
     SELECT count(*) INTO n
     FROM (SELECT famille FROM creature GROUP BY famille
-          HAVING count(DISTINCT rarete) = 3) f;
-    ASSERT n = 4, 'KO  chaque famille doit avoir les 3 raretés';
-    RAISE NOTICE 'OK  4 familles, chacune avec COMMUN, PEU_COMMUN et RARE';
+          HAVING count(*) FILTER (WHERE rarete = 'COMMUN') = 3
+             AND count(*) FILTER (WHERE rarete = 'PEU_COMMUN') = 2
+             AND count(*) FILTER (WHERE rarete = 'RARE') = 1) f;
+    ASSERT n = 4, 'KO  chaque famille doit avoir 3 COMMUN, 2 PEU_COMMUN et 1 RARE';
+    RAISE NOTICE 'OK  4 familles de 6 créatures (3 COMMUN, 2 PEU_COMMUN, 1 RARE)';
 
     SELECT count(*) INTO n FROM creature
     WHERE nom IN ('Moussou', 'Cristille', 'Brumel', 'Flammille');
@@ -79,7 +87,7 @@ END $$;
 \i /db/init/03_demo_dev.sql
 \o /dev/null
 DO $$ BEGIN
-    ASSERT (SELECT count(*) FROM creature) = 12,    'KO  ré-exécution : créatures dupliquées';
+    ASSERT (SELECT count(*) FROM creature) = 24,    'KO  ré-exécution : créatures dupliquées';
     ASSERT (SELECT count(*) FROM utilisateur) = 3,  'KO  ré-exécution : comptes dupliqués';
     ASSERT (SELECT count(*) FROM echange_ligne) = 2,'KO  ré-exécution : lignes dupliquées';
     RAISE NOTICE 'OK  scripts ré-exécutables sans doublon';
