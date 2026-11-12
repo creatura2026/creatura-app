@@ -14,11 +14,13 @@ import CreatureFilters from '@/components/CreatureFilters.vue'
 import { useCollection } from '@/api/queries'
 
 type Ownership = 'all' | 'owned' | 'missing'
+/** À l'ouverture, la collection montre les cartes que le joueur possède. */
+const DEFAULT_OWNERSHIP: Ownership = 'owned'
 
 const search = ref('')
 const family = ref('')
 const rarity = ref('')
-const ownership = ref<Ownership>('all')
+const ownership = ref<Ownership>(DEFAULT_OWNERSHIP)
 const duplicatesOnly = ref(false)
 const debouncedSearch = useDebounced(search)
 
@@ -34,9 +36,9 @@ const query = computed(() => ({
 const { data, isPending, error, refetch, isFetching } = useCollection(query)
 
 const OWNERSHIP: { value: Ownership; label: string }[] = [
-  { value: 'all', label: 'Toutes' },
   { value: 'owned', label: 'Possédées' },
   { value: 'missing', label: 'Manquantes' },
+  { value: 'all', label: 'Toutes' },
 ]
 
 const hasFilters = computed(
@@ -45,7 +47,7 @@ const hasFilters = computed(
       search.value ||
       family.value ||
       rarity.value ||
-      ownership.value !== 'all' ||
+      ownership.value !== DEFAULT_OWNERSHIP ||
       duplicatesOnly.value
     ),
 )
@@ -54,19 +56,19 @@ function reset() {
   search.value = ''
   family.value = ''
   rarity.value = ''
-  ownership.value = 'all'
+  ownership.value = DEFAULT_OWNERSHIP
   duplicatesOnly.value = false
 }
 
 function toggleDuplicates() {
   duplicatesOnly.value = !duplicatesOnly.value
-  if (duplicatesOnly.value && ownership.value === 'missing') ownership.value = 'all'
+  if (duplicatesOnly.value && ownership.value === 'missing') ownership.value = 'owned'
 }
 </script>
 
 <template>
   <section>
-    <PageHeader eyebrow="Expérience joueur" title="Ma collection" />
+    <PageHeader title="Ma collection" />
 
     <!-- UC-06 · Progression -->
     <div

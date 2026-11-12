@@ -10,7 +10,10 @@ describe('CreatureCard', () => {
     const wrapper = mount(CreatureCard, { props: { creature: moussou, quantity: 3 } })
     expect(wrapper.text()).toContain('Moussou')
     expect(wrapper.text()).toContain('Nature · Commun')
-    expect(wrapper.text()).toContain('Possédées : 3')
+    // Texte lu par un lecteur d'écran : sans le « × » des cartes étroites, masqué par aria-hidden.
+    const footer = wrapper.find('p.mt-auto').element.cloneNode(true) as HTMLElement
+    footer.querySelectorAll('[aria-hidden="true"]').forEach((el) => el.remove())
+    expect(footer.textContent?.trim()).toBe('Possédées : 3')
     expect(wrapper.find('img').attributes('alt')).toBe('Illustration de Moussou')
   })
 

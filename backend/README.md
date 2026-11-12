@@ -29,11 +29,12 @@ pnpm dev:admin       # dashboard
 pnpm dev:player:mock # sans back : API simulée dans le navigateur
 ```
 
-**Base déjà créée avant l'évolution `04`** (réglages, échanges échoués) : l'appliquer une fois,
-sans perdre les données :
+**Base déjà créée avant les évolutions `04` (réglages, échanges échoués) et `05` (salle
+d'échange)** : les appliquer une fois, sans perdre les données (elles sont ré-exécutables) :
 
 ```bash
 docker exec -i creatura-db psql -U creatura -d creatura < ../db/init/04_evolution_reglage_echec.sql
+docker exec -i creatura-db psql -U creatura -d creatura < ../db/init/05_evolution_salle_echange.sql
 ```
 
 Pour développer avec rechargement automatique (base toujours dans Docker) :
@@ -46,6 +47,31 @@ uv run uvicorn app.main:app --reload
 
 `DATABASE_URL` suit le format de l'équipe (`postgres://creatura:creatura@localhost:5432/creatura`) ;
 le back le convertit pour SQLAlchemy. En production (RDS) : ajouter `?sslmode=require`.
+
+### Viser RDS (authentification IAM)
+
+Garder ces valeurs dans `backend/.env.rds` (ignoré par git, voir `.env.example`), puis
+`cp .env.rds .env` pour viser RDS et `rm .env` pour revenir à la base locale :
+
+```
+DATABASE_URL=postgres://creatura_back@<endpoint-rds>:5432/creatura?sslmode=require
+DB_IAM_AUTH=true
+AWS_REGION=eu-north-1
+AWS_ACCESS_KEY_ID=…        # poste local uniquement
+AWS_SECRET_ACCESS_KEY=…
+```
+
+Le back n'a pas de mot de passe : à chaque nouvelle connexion, il signe un jeton IAM
+(`boto3`, valable 15 min) et l'envoie comme mot de passe. `docker compose up -d --build` et
+`uv run uvicorn …` lisent tous deux ce `.env` ; sans lui, le back vise la base locale.
+
+- Le poste doit pouvoir joindre RDS sur le port 5432 (groupe de sécurité de l'instance).
+- L'utilisateur PostgreSQL (`creatura_back`) doit avoir le rôle `rds_iam`, et l'identité IAM
+  la permission `rds-db:connect` sur cet utilisateur.
+- Sur EKS : pas de clés AWS dans le Secret, le rôle IAM du pod (IRSA / Pod Identity) suffit.
+- Le schéma de RDS est appliqué par le Job de l'image `db/` (`appliquer.sh`), pas par l'API.
+- `ADMIN_LOGIN` / `ADMIN_PASSWORD` vides dans `.env` : pas de création automatique d'un
+  compte admin sur la base partagée.
 
 ## Tests
 
@@ -62,9 +88,10 @@ Ils vérifient les règles du schéma et les preuves qualité :
 - persistance de la collection après reconnexion ;
 - refus de l'accès admin à un joueur ;
 - un seul booster par jour, même avec des requêtes simultanées ;
-- échanges concurrents qui ne consomment jamais le même exemplaire (vraies transactions parallèles) ;
+- échanges conclus en même temps qui ne consomment jamais le même exemplaire (vraies transactions parallèles) ;
+- salle d'échange en WebSocket : tapis, validations croisées, discussion, présence, refus d'accès ;
 - `stock_total = stock_restant + Σ quantités en collection`, aucune quantité négative ;
-- un échange accepté modifie les deux collections, ou aucune ; sinon il passe en `FAILED` ;
+- un échange conclu modifie les deux collections, ou aucune ; une carte disparue est retirée du tapis ;
 - format du contrat : champs en camelCase, codes d'erreur, pagination, validation en 400 ;
 - connexion avec un hash pgcrypto `$2a$10$` (comptes de démo) et traduction des contraintes.
 
@@ -140,8 +167,9 @@ sauf indication contraire.
 | Booster    | `GET /me/boosters/today` · `POST /me/boosters`                            | UC-03, UC-04 |
 | Collection | `GET /me/collection?ownership=all\|owned\|missing&duplicatesOnly=&search=&family=&rarity=` | UC-06, UC-07 |
 | Joueurs    | `GET /players?search=` (début du pseudo) · `GET /players/{playerId}/tradeable-cards` | UC-08 |
-| Échanges   | `POST /trades` · `POST /trades/{tradeId}/cancel`                           | UC-09        |
-|            | `POST /trades/{tradeId}/accept` · `POST /trades/{tradeId}/refuse`          | UC-10        |
+|            | `GET /creatures/{creatureId}/owners` (qui possède cette carte ?)          | UC-08        |
+| Échanges   | `POST /trades` (ouvre la salle) · `POST /trades/{tradeId}/cancel`          | UC-09        |
+|            | WebSocket `GET /trades/{tradeId}/live?access_token=` · `POST /trades/{tradeId}/refuse` | UC-09, UC-10 |
 |            | `GET /trades?role=all\|sent\|received&status=PENDING` · `GET /trades/{tradeId}` | UC-11  |
 | Admin      | `GET /admin/stats?from=&to=` · `GET /admin/trades?from=&to=&status=&playerId=` | UC-12, UC-13 |
 |            | `GET /admin/rarity-distribution?from=&to=`                                | UC-14        |
@@ -151,16 +179,23 @@ sauf indication contraire.
 **Listes** : paginées (`page` à partir de 1, `pageSize` de 1 à 100, 20 par défaut). Réponse :
 `items`, `page`, `pageSize`, `totalItems`, `totalPages`.
 
-Proposer un échange (n cartes ↔ n cartes, au moins une de chaque côté) :
+**Salle d'échange** : `POST /trades` ouvre une salle, tapis vides (`wantedCreatureId` facultatif :
+la carte cherchée). S'il y a déjà un échange en cours entre les deux joueurs, il est renvoyé (200).
+Les joueurs entrent ensuite dans la salle en WebSocket, le jeton d'accès dans l'adresse :
 
-```json
-POST /api/v1/trades
-{
-  "recipientId": "00000000-0000-4000-8000-000000000003",
-  "offered":   [{"creatureId": "1", "quantity": 2}],
-  "requested": [{"creatureId": "9", "quantity": 1}]
-}
+```text
+ws://localhost:8000/api/v1/trades/{tradeId}/live?access_token=<accessToken>
+
+← {"type": "init", "trade": {…}, "messages": [...], "online": ["<id>"]}
+→ {"type": "offer", "items": [{"creatureId": "1", "quantity": 2}]}   mon tapis complet
+→ {"type": "ready", "ready": true}                                    je valide (ou retire)
+→ {"type": "chat", "text": "Salut !"}
+← {"type": "trade", "trade": {…}}  ·  {"type": "chat", "message": {…}}
+← {"type": "presence", "playerId": "<id>", "online": false}  ·  {"type": "error", "problem": {…}}
 ```
+
+Une ouverture refusée répond en HTTP (401, 403, 404) avec le même Problem Details. Une action
+refusée renvoie `error` à son auteur seulement ; une action acceptée diffuse `trade` aux deux.
 
 **Erreurs** : format Problem Details (`application/problem+json`) avec un `code` stable :
 
@@ -177,9 +212,9 @@ POST /api/v1/trades
 | `NOT_FOUND` | 404 | Créature, joueur, échange ou route inconnus |
 | `LOGIN_ALREADY_USED` / `PSEUDO_ALREADY_USED` | 409 | Inscription |
 | `BOOSTER_ALREADY_CLAIMED` | 409 | Booster du jour déjà ouvert |
-| `TRADE_NOT_PENDING` | 409 | Échange déjà accepté, refusé, annulé ou échoué |
-| `CARDS_UNAVAILABLE` | 409 | Carte plus disponible à l'acceptation (l'échange passe en `FAILED`), ou stock épuisé |
-| `CARDS_NOT_OWNED` / `TRADE_WITH_SELF` | 422 | Proposition d'échange |
+| `TRADE_NOT_PENDING` | 409 | Échange déjà conclu, refusé ou annulé (salle fermée) |
+| `CARDS_UNAVAILABLE` | 409 | Carte posée plus disponible au moment de conclure (retirée du tapis), ou stock épuisé |
+| `CARDS_NOT_OWNED` / `TRADE_WITH_SELF` | 422 | Carte posée non possédée / échange avec soi-même |
 | `INTERNAL_ERROR` | 500 | Erreur inattendue |
 
 Si une contrainte de la base refuse malgré tout une écriture, son nom est traduit selon le
@@ -194,14 +229,17 @@ tableau de `db/README.md` (`uq_utilisateur_pseudo` → `PSEUDO_ALREADY_USED`, `f
   créatures encore en stock ; chaque carte décrémente `stock_restant`. Si le stock ne suffit
   plus, le booster est partiel ; si tout est épuisé, il est annulé et le joueur ne le perd pas.
   `isNew` signale une créature que le joueur ne possédait pas encore.
-- **Échange** : les cartes doivent être possédées en quantité suffisante à la proposition,
-  puis sont revérifiées à l'acceptation. Le transfert se fait dans une seule transaction avec
-  des décréments conditionnels (`quantite >= q`) : ni perte ni duplication, même en
-  concurrence. Si une carte n'est plus disponible : 409 `CARDS_UNAVAILABLE`, aucun transfert,
-  et l'échange passe en `FAILED` (`failureReason: CARDS_UNAVAILABLE`). Les échanges ne touchent
-  pas au stock.
-- **Cartes échangeables** (`/players/{playerId}/tradeable-cards`) : les doublons seulement, un
-  exemplaire reste toujours au joueur (règle du contrat, à valider au point client).
+- **Échange (salle)** : chaque joueur pose sur son tapis des cartes qu'il possède (10 cartes
+  différentes au plus), et ne modifie que son tapis, tant qu'il n'a pas validé. Toute
+  modification d'un tapis retire les deux validations ; on ne valide qu'avec au moins une carte
+  sur chaque tapis. Les deux tapis sont revérifiés à chaque validation : une carte qui n'est plus
+  possédée est retirée du tapis, les validations tombent et les deux joueurs reçoivent
+  `CARDS_UNAVAILABLE` (l'échange reste ouvert). Quand le second joueur valide, le transfert se
+  fait dans une seule transaction avec des décréments conditionnels (`quantite >= q`) : ni perte
+  ni duplication, même en concurrence. Chaque action verrouille la ligne de l'échange
+  (`SELECT … FOR UPDATE`). Les échanges ne touchent pas au stock.
+- **Cartes échangeables** (`/players/{playerId}/tradeable-cards`) : toutes les cartes du
+  joueur, dernier exemplaire compris.
 
 ## Écarts et points ouverts
 
@@ -217,4 +255,9 @@ de `creatura-api.openapi.yaml`) :
   mais ils restent valides jusqu'à expiration (15 min pour l'accès, 7 jours pour le
   rafraîchissement) ; `POST /auth/refresh` ne fait pas de rotation.
 - **Pas de limitation des tentatives** (`RATE_LIMITED`, 429) sur la connexion.
-- À valider au point client : rareté garantie (non implémentée), règle des cartes échangeables.
+- **Salle d'échange en mémoire** : les connexions WebSocket sont tenues par le processus de
+  l'API. Il faut **une seule réplique** (ou des sessions collantes par échange sur l'ALB) tant
+  qu'aucun bus de messages (ex. Redis pub/sub) ne relie les répliques. Les données (tapis,
+  validations, discussion) sont en base : rien n'est perdu au redémarrage, les clients se
+  reconnectent. L'ALB doit laisser passer les WebSocket (`Upgrade`) sur `/api/*`.
+- À valider au point client : rareté garantie (non implémentée).

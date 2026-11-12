@@ -18,9 +18,19 @@ class PlayerOut(ApiModel):
 
 class TradeableCardOut(ApiModel):
     creature: CreatureSummaryOut
-    available_quantity: int = Field(ge=1)  # exemplaires possédés - 1 : un exemplaire reste au joueur
+    available_quantity: int = Field(ge=1)  # exemplaires possédés : tous peuvent être échangés
 
 
 class TradeableCardsOut(ApiModel):
     player: PlayerOut
     items: list[TradeableCardOut]
+
+
+class CreatureOwnerOut(ApiModel):
+    player: PlayerOut
+    quantity: int = Field(ge=1)
+
+
+class CreatureOwnersOut(ApiModel):
+    creature: CreatureSummaryOut
+    items: list[CreatureOwnerOut]

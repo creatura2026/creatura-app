@@ -17,7 +17,7 @@ import { usePeriod } from '@/usePeriod'
 const STATUSES: { value: TradeStatus | ''; label: string }[] = [
   { value: '', label: 'Tous les états' },
   { value: 'PENDING', label: 'En attente' },
-  { value: 'ACCEPTED', label: 'Acceptés' },
+  { value: 'ACCEPTED', label: 'Conclus' },
   { value: 'REFUSED', label: 'Refusés' },
   { value: 'CANCELLED', label: 'Annulés' },
   { value: 'FAILED', label: 'Échoués' },

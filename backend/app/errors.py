@@ -27,6 +27,23 @@ ERROR_CODES: dict[str, tuple[int, str]] = {
 }
 
 
+PROBLEM_TYPE = "https://app.creatura.fr/problems/"
+
+
+def problem_body(error: "DomainError") -> dict:
+    """Corps Problem Details (RFC 9457) avec le code stable du contrat ; HTTP et salle d'échange."""
+    body = {
+        "type": PROBLEM_TYPE + error.code.lower().replace("_", "-"),
+        "title": error.title,
+        "status": error.status_code,
+        "code": error.code,
+        "detail": error.detail,
+    }
+    if error.errors:
+        body["errors"] = error.errors
+    return body
+
+
 class DomainError(Exception):
     """Erreur métier : un code du contrat et un message affichable à l'utilisateur."""
 

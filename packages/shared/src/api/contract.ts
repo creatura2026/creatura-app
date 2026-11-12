@@ -15,6 +15,7 @@ import type {
   CollectionQuery,
   CreateTradeRequest,
   Creature,
+  CreatureOwners,
   CreaturePage,
   Family,
   ListCreaturesQuery,
@@ -29,7 +30,9 @@ import type {
   SearchPlayersQuery,
   Trade,
   TradeableCards,
+  TradeClientMessage,
   TradePage,
+  TradeServerMessage,
   UpdateBoosterSettingsRequest,
   User,
 } from './types'
@@ -39,6 +42,16 @@ export interface AuthApi {
   login(body: LoginRequest): Promise<AuthTokens>
   logout(): Promise<void>
   getMe(): Promise<Me>
+}
+
+/**
+ * Connexion à une salle d'échange (WebSocket `/trades/{tradeId}/live`).
+ * Le serveur répond à chaque action par un message : `trade` pour tout le monde si elle est acceptée,
+ * `error` pour son auteur si elle est refusée.
+ */
+export interface TradeConnection {
+  send(message: TradeClientMessage): void
+  close(): void
 }
 
 export interface PlayerApi extends AuthApi {
@@ -51,12 +64,14 @@ export interface PlayerApi extends AuthApi {
   getMyCollection(query?: CollectionQuery): Promise<CollectionPage>
   searchPlayers(query: SearchPlayersQuery): Promise<PlayerPage>
   getTradeableCards(playerId: string): Promise<TradeableCards>
+  listCreatureOwners(creatureId: string): Promise<CreatureOwners>
   createTrade(body: CreateTradeRequest): Promise<Trade>
   listMyTrades(query?: ListMyTradesQuery): Promise<TradePage>
   getTrade(tradeId: string): Promise<Trade>
-  acceptTrade(tradeId: string): Promise<Trade>
   refuseTrade(tradeId: string): Promise<Trade>
   cancelTrade(tradeId: string): Promise<Trade>
+  /** Entre dans la salle d'échange ; `onMessage` reçoit `init`, puis chaque événement. */
+  joinTrade(tradeId: string, onMessage: (message: TradeServerMessage) => void): TradeConnection
 }
 
 export interface AdminApi extends AuthApi {

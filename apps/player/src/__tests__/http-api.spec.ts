@@ -155,3 +155,90 @@ describe('API HTTP du joueur', () => {
     expect((error as Error).message).toMatch(/serveur/)
   })
 })
+
+/** WebSocket du navigateur, simulé : le test décide quand il s'ouvre, reçoit ou se ferme. */
+class FakeSocket {
+  static OPEN = 1
+  static all: FakeSocket[] = []
+  readyState = 0
+  sent: unknown[] = []
+  onmessage: ((event: { data: string }) => void) | null = null
+  onclose: (() => void) | null = null
+
+  constructor(public url: string) {
+    FakeSocket.all.push(this)
+  }
+  send(data: string) {
+    this.sent.push(JSON.parse(data))
+  }
+  close() {
+    this.readyState = 3
+  }
+  /** Le serveur accepte et envoie l'état de la salle. */
+  open(trade: unknown = { id: 't1' }) {
+    this.readyState = FakeSocket.OPEN
+    this.onmessage?.({ data: JSON.stringify({ type: 'init', trade, messages: [], online: [] }) })
+  }
+  drop() {
+    this.readyState = 3
+    this.onclose?.()
+  }
+}
+
+describe('Salle d’échange (WebSocket)', () => {
+  afterEach(() => {
+    FakeSocket.all = []
+    vi.useRealTimers()
+  })
+
+  function join(fetches: (Response | Error)[] = []) {
+    vi.stubGlobal('WebSocket', FakeSocket)
+    vi.stubGlobal('location', { href: 'https://app.creatura.fr/echanges/t1' })
+    mockFetch(...fetches)
+    const received: { type: string; problem?: { code: string } }[] = []
+    const connection = createHttpPlayerApi(memorySession()).joinTrade('t1', (m) => received.push(m))
+    return { connection, received }
+  }
+
+  it('ouvre la salle en wss:// avec le jeton dans l’adresse et relaie les messages', () => {
+    const { connection, received } = join()
+    const socket = FakeSocket.all[0]!
+
+    expect(socket.url).toBe('wss://app.creatura.fr/api/v1/trades/t1/live?access_token=access-1')
+    socket.open()
+    connection.send({ type: 'ready', ready: true })
+
+    expect(received.map((m) => m.type)).toEqual(['init'])
+    expect(socket.sent).toEqual([{ type: 'ready', ready: true }])
+  })
+
+  it('donne la raison d’un refus d’ouverture, demandée en HTTP', async () => {
+    const forbidden = { code: 'FORBIDDEN', status: 403, title: 'Accès refusé', type: 'x' }
+    const { received } = join([json(403, forbidden, 'application/problem+json')])
+
+    FakeSocket.all[0]!.drop()
+    await vi.waitFor(() => expect(received).toHaveLength(1))
+
+    expect(received[0]).toMatchObject({ type: 'error', problem: { code: 'FORBIDDEN' } })
+    expect(FakeSocket.all).toHaveLength(1) // pas de nouvelle tentative
+  })
+
+  it('se reconnecte après une coupure, et plus rien après close()', () => {
+    vi.useFakeTimers()
+    const { connection, received } = join()
+    FakeSocket.all[0]!.open()
+
+    FakeSocket.all[0]!.drop()
+    expect(received[received.length - 1]).toMatchObject({
+      type: 'error',
+      problem: { code: 'INTERNAL_ERROR' },
+    })
+    vi.advanceTimersByTime(1000)
+    expect(FakeSocket.all).toHaveLength(2)
+
+    connection.close()
+    FakeSocket.all[1]!.drop()
+    vi.advanceTimersByTime(60_000)
+    expect(FakeSocket.all).toHaveLength(2)
+  })
+})

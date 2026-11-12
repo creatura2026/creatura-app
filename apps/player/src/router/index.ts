@@ -81,7 +81,14 @@ const router = createRouter({
           path: 'echanges/nouveau',
           name: 'new-trade',
           component: () => import('@/views/NewTradeView.vue'),
-          meta: { title: 'Proposer un échange' },
+          meta: { title: 'Ouvrir un échange' },
+        },
+        {
+          path: 'echanges/:id',
+          name: 'trade',
+          component: () => import('@/views/TradeRoomView.vue'),
+          props: true,
+          meta: { title: 'Échange' },
         },
         {
           path: 'profil',

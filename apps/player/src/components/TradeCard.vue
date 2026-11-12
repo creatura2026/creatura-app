@@ -1,93 +1,83 @@
 <script setup lang="ts">
-/** Un échange, vu du joueur connecté (UC-10 décider, UC-11 historique). */
+/** Un échange dans la liste « Mes échanges », vu du joueur connecté. Toute la carte mène à la salle. */
 import { computed } from 'vue'
 import type { Trade } from '@creatura/shared/api/types'
 import TradeStatusBadge from '@creatura/shared/ui/TradeStatusBadge.vue'
 import TradeItems from '@creatura/shared/ui/TradeItems.vue'
+import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
 import { formatDateTime } from '@creatura/shared/format'
 
-import type { TradeDecision } from '@/api/queries'
+import { awaitsMe, seatsOf } from '@/composables/tradeSeats'
 
-const props = defineProps<{ trade: Trade; meId: string; busy?: TradeDecision | null }>()
-defineEmits<{ decide: [decision: TradeDecision] }>()
+const props = defineProps<{ trade: Trade; meId: string }>()
 
-const received = computed(() => props.trade.recipient.id === props.meId)
-const other = computed(() => (received.value ? props.trade.proposer : props.trade.recipient))
-const gives = computed(() => (received.value ? props.trade.requested : props.trade.offered))
-const gets = computed(() => (received.value ? props.trade.offered : props.trade.requested))
+const seats = computed(() => seatsOf(props.trade, props.meId))
 const pending = computed(() => props.trade.status === 'PENDING')
+const myTurn = computed(() => awaitsMe(props.trade, props.meId))
+
+const progress = computed(() => {
+  const { mine, theirs } = seats.value
+  if (mine.ready) return `Vous avez validé, en attente de ${theirs.player.pseudo}`
+  if (theirs.ready) return `${theirs.player.pseudo} a validé`
+  return 'Personne n’a encore validé'
+})
 </script>
 
 <template>
-  <article class="card-pixel-sm bg-white">
+  <RouterLink
+    :to="{ name: 'trade', params: { id: trade.id } }"
+    class="card-pixel-sm block bg-white transition-transform hover:-translate-y-0.5"
+  >
     <header
       class="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink px-4 py-2.5"
     >
-      <p class="font-semibold">
-        <template v-if="received">
-          <span class="font-pixel">{{ other.pseudo }}</span> vous propose
-        </template>
-        <template v-else>
-          Proposé à <span class="font-pixel">{{ other.pseudo }}</span>
-        </template>
+      <p class="flex items-center gap-2 font-semibold">
+        <PixelIcon name="user" :size="18" />
+        <span class="font-pixel">{{ seats.theirs.player.pseudo }}</span>
       </p>
       <div class="flex items-center gap-2">
         <time class="text-xs text-ink/75" :datetime="trade.decidedAt ?? trade.createdAt">
           {{ formatDateTime(trade.decidedAt ?? trade.createdAt) }}
         </time>
-        <TradeStatusBadge :status="trade.status" />
+        <span
+          v-if="myTurn"
+          class="inline-flex items-center border-2 border-ink bg-sun px-2 py-0.5 text-xs font-bold whitespace-nowrap"
+        >
+          À vous de jouer
+        </span>
+        <TradeStatusBadge v-else :status="trade.status" />
       </div>
     </header>
 
     <div class="flex flex-col items-stretch gap-2 p-4 sm:flex-row sm:items-center sm:gap-3">
-      <TradeItems label="Vous donnez" :items="gives" tone="bg-sky" />
+      <TradeItems
+        :label="pending ? 'Vous donnez' : 'Vous avez donné'"
+        :items="seats.mine.cards"
+        tone="bg-sky"
+        empty-text="Aucune carte"
+      />
       <span
         class="self-center font-pixel text-3xl leading-none font-bold text-brick"
         aria-hidden="true"
       >
         <span class="sm:hidden">⇅</span><span class="hidden sm:inline">⇄</span>
       </span>
-      <TradeItems label="Vous recevez" :items="gets" tone="bg-mint" />
+      <TradeItems
+        :label="pending ? 'Vous recevez' : 'Vous avez reçu'"
+        :items="seats.theirs.cards"
+        tone="bg-mint"
+        empty-text="Aucune carte"
+      />
     </div>
-
-    <p
-      v-if="trade.status === 'FAILED'"
-      class="mx-4 mb-4 border-2 border-brick bg-salmon/50 px-3 py-2 text-sm"
-    >
-      Une carte n’était plus disponible au moment de l’acceptation : aucun transfert n’a eu lieu.
-    </p>
 
     <footer
       v-if="pending"
-      class="flex flex-wrap justify-end gap-3 border-t-2 border-dashed border-ink/30 px-4 py-3"
+      class="flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-ink/30 px-4 py-3 text-sm"
     >
-      <template v-if="received">
-        <button
-          type="button"
-          class="btn btn-danger flex-1 sm:flex-none"
-          :disabled="!!busy"
-          @click="$emit('decide', 'refuse')"
-        >
-          {{ busy === 'refuse' ? 'Refus…' : 'Refuser' }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-success flex-1 sm:flex-none"
-          :disabled="!!busy"
-          @click="$emit('decide', 'accept')"
-        >
-          {{ busy === 'accept' ? 'Transfert…' : 'Accepter' }}
-        </button>
-      </template>
-      <button
-        v-else
-        type="button"
-        class="btn btn-secondary"
-        :disabled="!!busy"
-        @click="$emit('decide', 'cancel')"
-      >
-        {{ busy === 'cancel' ? 'Annulation…' : 'Annuler ma proposition' }}
-      </button>
+      <span>{{ progress }}</span>
+      <span class="inline-flex items-center gap-1.5 font-semibold">
+        Entrer dans l’échange <PixelIcon name="arrow-right" :size="16" />
+      </span>
     </footer>
-  </article>
+  </RouterLink>
 </template>

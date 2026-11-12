@@ -10,7 +10,10 @@ erDiagram
     creature    ||--o{ collection : "est possédée dans"
     utilisateur ||--o{ echange : "propose"
     utilisateur ||--o{ echange : "reçoit"
-    echange     ||--|{ echange_ligne : "contient"
+    echange     ||--o{ echange_ligne : "tapis"
+    echange     ||--o{ echange_message : "discussion"
+    utilisateur ||--o{ echange_message : "écrit"
+    creature    |o--o{ echange : "est cherchée dans"
     creature    ||--o{ echange_ligne : "est échangée dans"
     utilisateur |o--o{ reglage : "a modifié"
 
@@ -50,6 +53,9 @@ erDiagram
         timestamptz cree_le
         timestamptz decide_le            "NULL tant qu'en attente"
         varchar     motif_echec          "rempli si et seulement si ECHOUE"
+        boolean     proposeur_pret       "a validé les deux tapis"
+        boolean     destinataire_pret    "a validé les deux tapis"
+        integer     creature_cherchee_id FK "NULL si non indiquée"
     }
 
     echange_ligne {
@@ -57,6 +63,14 @@ erDiagram
         integer     creature_id       PK, FK
         varchar     sens              PK "OFFERT | DEMANDE"
         integer     quantite             "> 0"
+    }
+
+    echange_message {
+        uuid        id                PK
+        uuid        echange_id        FK
+        uuid        auteur_id         FK "proposeur ou destinataire"
+        varchar     texte                "1 à 500 caractères"
+        timestamptz envoye_le
     }
 
     reglage {
@@ -132,7 +146,16 @@ Index : `(creature_id) WHERE quantite > 0` — « qui possède cette carte ? » 
 | decide_le | timestamptz | NULL ; CHECK : NULL si et seulement si `EN_ATTENTE` | Date de décision (ou d'échec) |
 | motif_echec | varchar(30) | NULL ; CHECK : rempli si et seulement si `ECHOUE` | Code de l'échec (ex. `CARDS_UNAVAILABLE`) |
 
-Index : `(destinataire_id, statut)`, `(proposeur_id)`.
+| proposeur_pret | boolean | NOT NULL, défaut `false` | Le proposeur a validé les deux tapis tels qu'ils sont |
+| destinataire_pret | boolean | NOT NULL, défaut `false` | Le destinataire a validé les deux tapis tels qu'ils sont |
+| creature_cherchee_id | integer | NULL, FK → creature, ON DELETE SET NULL | Carte que le proposeur cherche chez le destinataire |
+
+Index : `(destinataire_id, statut)`, `(proposeur_id)`, `(proposeur_id, destinataire_id) WHERE statut = 'EN_ATTENTE'`.
+
+Les trois dernières colonnes viennent de `init/05_evolution_salle_echange.sql` : un échange est une
+**salle** où chaque joueur pose ses cartes sur son tapis (`echange_ligne`), discute (`echange_message`)
+et valide. L'échange est conclu quand les deux joueurs ont validé ; toute modification d'un tapis
+retire les deux validations (règle appliquée par l'API).
 
 ### echange_ligne
 | Colonne | Type | Contraintes | Description |
@@ -141,6 +164,21 @@ Index : `(destinataire_id, statut)`, `(proposeur_id)`.
 | creature_id | integer | PK, FK → creature | Créature échangée |
 | sens | varchar(8) | PK, CHECK `OFFERT`/`DEMANDE` | `OFFERT` = donnée par le proposeur, `DEMANDE` = donnée par le destinataire |
 | quantite | integer | NOT NULL, CHECK `> 0` | Nombre d'exemplaires |
+
+Un tapis peut être vide tant que l'échange est en cours : la salle s'ouvre tapis vides.
+
+### echange_message
+Ajoutée par `init/05_evolution_salle_echange.sql`.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| id | uuid | PK, défaut `gen_random_uuid()` | Identifiant |
+| echange_id | uuid | NOT NULL, FK → echange, ON DELETE CASCADE | Échange concerné |
+| auteur_id | uuid | NOT NULL, FK → utilisateur | Proposeur ou destinataire (vérifié par l'API) |
+| texte | varchar(500) | NOT NULL, CHECK non vide | Message |
+| envoye_le | timestamptz | NOT NULL, défaut `now()` | Date d'envoi |
+
+Index : `(echange_id, envoye_le)` — la discussion d'un échange, dans l'ordre.
 
 ### reglage
 Ajoutée par `init/04_evolution_reglage_echec.sql` (avec `echange.motif_echec` et le statut `ECHOUE`).

@@ -39,7 +39,7 @@ async function resetData() {
 
 <template>
   <section>
-    <PageHeader eyebrow="Expérience joueur" title="Mon profil" />
+    <PageHeader title="Mon profil" />
 
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
       <div v-if="me" class="grid gap-5 md:grid-cols-2">
@@ -76,7 +76,6 @@ async function resetData() {
               label="Progression"
             />
           </div>
-          <p class="mt-4 text-sm">La progression reste associée au compte entre les sessions.</p>
         </div>
 
         <div v-if="USE_MOCK_API" class="card-pixel-sm border-dashed bg-butter p-5 md:col-span-2">

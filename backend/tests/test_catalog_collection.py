@@ -41,7 +41,7 @@ def test_catalog_page_and_creature_format(client):
         "description": moussou["description"],
         "family": {"code": "NATURE", "label": "Nature"},
         "rarity": {"code": "COMMON", "label": "Commun"},
-        "imageUrl": "https://d3tkhh3xjmflkh.cloudfront.net/sprites/moss_puff.png",
+        "imageUrl": "https://cdn.test/sprites/moss_puff.png",
     }
     assert "mousse" in moussou["description"]
 

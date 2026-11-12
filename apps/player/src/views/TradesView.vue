@@ -1,100 +1,77 @@
 <script setup lang="ts">
-/** UC-10 · Décider — UC-11 · Historique des échanges. */
+/** UC-10 · UC-11 — Échanges en cours et historique. */
 import { computed, ref } from 'vue'
 import type { ListMyTradesQuery, TradeStatus } from '@creatura/shared/api/types'
-import { errorMessage, isApiError } from '@creatura/shared/api/types'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import EmptyState from '@creatura/shared/ui/EmptyState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
-import { toast } from '@creatura/shared/toast'
 
 import TradeCard from '@/components/TradeCard.vue'
-import { useMyTrades, useTradeDecision, type TradeDecision } from '@/api/queries'
+import { useMyTrades } from '@/api/queries'
+import { awaitsMe } from '@/composables/tradeSeats'
 import { useAuthStore } from '@/stores/auth'
 
-type Tab = 'received' | 'sent' | 'history'
+type Tab = 'open' | 'history'
 
 const TABS: { value: Tab; label: string }[] = [
-  { value: 'received', label: 'Reçus' },
-  { value: 'sent', label: 'Envoyés' },
+  { value: 'open', label: 'En cours' },
   { value: 'history', label: 'Historique' },
 ]
 
 const STATUSES: { value: TradeStatus | ''; label: string }[] = [
   { value: '', label: 'Tous' },
-  { value: 'ACCEPTED', label: 'Acceptés' },
+  { value: 'ACCEPTED', label: 'Conclus' },
   { value: 'REFUSED', label: 'Refusés' },
   { value: 'CANCELLED', label: 'Annulés' },
   { value: 'FAILED', label: 'Échoués' },
 ]
 
-const tab = ref<Tab>('received')
+const tab = ref<Tab>('open')
 const historyStatus = ref<TradeStatus | ''>('')
 
 const query = computed<ListMyTradesQuery>(() =>
   tab.value === 'history'
     ? { role: 'all', status: historyStatus.value || undefined, pageSize: 100 }
-    : { role: tab.value, status: 'PENDING', pageSize: 100 },
-)
-
-const { data, isPending, error, refetch } = useMyTrades(query)
-const history = computed(() =>
-  tab.value === 'history'
-    ? (data.value?.items ?? []).filter((t) => t.status !== 'PENDING')
-    : (data.value?.items ?? []),
+    : { role: 'all', status: 'PENDING', pageSize: 100 },
 )
 
 const auth = useAuthStore()
-const decision = useTradeDecision()
-const busy = ref<{ id: string; decision: TradeDecision } | null>(null)
+const meId = computed(() => auth.user?.id ?? '')
+const { data, isPending, error, refetch } = useMyTrades(query)
 
-const MESSAGES: Record<TradeDecision, string> = {
-  accept: 'Échange accepté : les cartes ont été transférées.',
-  refuse: 'Échange refusé. Aucune carte n’a bougé.',
-  cancel: 'Proposition annulée.',
-}
-
-async function decide(id: string, d: TradeDecision) {
-  busy.value = { id, decision: d }
-  try {
-    await decision.mutateAsync({ id, decision: d })
-    toast(MESSAGES[d], d === 'accept' ? 'success' : 'info')
-  } catch (e) {
-    toast(
-      isApiError(e, 'CARDS_UNAVAILABLE') ? `Échec : ${e.message}` : errorMessage(e),
-      'error',
-      6000,
-    )
-  } finally {
-    busy.value = null
-  }
-}
+/** En cours : ceux qui attendent le joueur d'abord. Historique : tout sauf ce qui est en cours. */
+const trades = computed(() => {
+  const items = data.value?.items ?? []
+  if (tab.value === 'history') return items.filter((t) => t.status !== 'PENDING')
+  return [...items].sort(
+    (a, b) => Number(awaitsMe(b, meId.value)) - Number(awaitsMe(a, meId.value)),
+  )
+})
 
 const EMPTY: Record<Tab, { title: string; text: string }> = {
-  received: {
-    title: 'Rien en attente',
-    text: 'Aucune proposition reçue ne demande votre réponse.',
+  open: {
+    title: 'Aucun échange en cours',
+    text: 'Ouvrez un échange avec un joueur, ou cherchez une carte qui vous manque.',
   },
-  sent: { title: 'Aucune proposition', text: 'Vous n’avez pas de proposition en attente.' },
   history: { title: 'Historique vide', text: 'Vos échanges terminés apparaîtront ici.' },
 }
 </script>
 
 <template>
   <section>
-    <PageHeader eyebrow="Expérience joueur" title="Échanges">
+    <PageHeader title="Échanges">
       <template #actions>
         <RouterLink to="/echanges/nouveau" class="btn btn-primary">
-          <PixelIcon name="plus" :size="18" /> Proposer un échange
+          <PixelIcon name="plus" :size="18" /> Ouvrir un échange
         </RouterLink>
       </template>
     </PageHeader>
 
     <div
       role="tablist"
-      aria-label="Type d’échanges"
-      class="mb-5 grid grid-cols-3 border-2 border-ink bg-white sm:inline-grid"
+      aria-label="Échanges"
+      class="mb-5 grid grid-cols-2 border-2 border-ink bg-white sm:inline-grid"
     >
       <button
         v-for="t in TABS"
@@ -124,37 +101,14 @@ const EMPTY: Record<Tab, { title: string; text: string }> = {
     </div>
 
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
-      <ul v-if="history.length" class="grid gap-5 lg:grid-cols-2">
-        <li v-for="t in history" :key="t.id">
-          <TradeCard
-            :trade="t"
-            :me-id="auth.user?.id ?? ''"
-            :busy="busy?.id === t.id ? busy.decision : null"
-            @decide="decide(t.id, $event)"
-          />
+      <ul v-if="trades.length" class="grid gap-5 lg:grid-cols-2">
+        <li v-for="t in trades" :key="t.id">
+          <TradeCard :trade="t" :me-id="meId" />
         </li>
       </ul>
       <EmptyState v-else :title="EMPTY[tab].title" :text="EMPTY[tab].text">
-        <RouterLink to="/echanges/nouveau" class="btn btn-secondary"
-          >Proposer un échange</RouterLink
-        >
+        <RouterLink to="/echanges/nouveau" class="btn btn-secondary">Ouvrir un échange</RouterLink>
       </EmptyState>
     </AsyncState>
-
-    <aside class="mt-8 grid gap-4 md:grid-cols-2">
-      <div class="card-pixel-sm bg-sky p-4 text-sm">
-        <p class="font-bold">Disponibilité</p>
-        <p class="mt-1">
-          Seules les cartes possédées et disponibles peuvent être échangées. Un exemplaire de chaque
-          carte vous reste toujours.
-        </p>
-      </div>
-      <div class="card-pixel-sm bg-salmon p-4 text-sm">
-        <p class="font-bold">Transfert</p>
-        <p class="mt-1">
-          Les deux collections changent ensemble ou aucune : ni perte, ni duplication.
-        </p>
-      </div>
-    </aside>
   </section>
 </template>

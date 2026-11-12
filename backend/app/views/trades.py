@@ -1,21 +1,90 @@
-"""Échanges — UC-09, UC-10, UC-11."""
+"""Échanges — UC-09, UC-10, UC-11 : salle d'échange (WebSocket), abandon et historique."""
 
+import logging
 import uuid
+from typing import Callable, TypeVar
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, WebSocket, WebSocketDisconnect, status
+from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
 
 from app.controllers import trade
-from app.dependencies import CurrentUser, DbSession, Pagination
+from app.database import SessionLocal
+from app.dependencies import CurrentUser, DbSession, Pagination, user_from_token
+from app.errors import DomainError, NotFound, Unauthorized, problem_body
+from app.models import Utilisateur
+from app.realtime import Room, Seat, rooms
 from app.schemas.base import Page
-from app.schemas.trade import STATUT_OF, TradeCreateIn, TradeOut, TradeRole, TradeStatus
+from app.schemas.trade import (
+    STATUT_OF,
+    TradeChatCommand,
+    TradeCreateIn,
+    TradeMessageOut,
+    TradeOfferCommand,
+    TradeOut,
+    TradeRole,
+    TradeStatus,
+    client_message,
+)
+from app.security import ACCESS
+from app.validation import validation_problem
 
 router = APIRouter(prefix="/trades", tags=["Échanges"])
+log = logging.getLogger(__name__)
+T = TypeVar("T")
+
+
+# ── Accès à la base depuis le code asynchrone ────────────────────────────────
+
+
+def _in_session(fn: Callable[..., T], *args) -> T:
+    with SessionLocal() as db:
+        return fn(db, *args)
+
+
+async def _db(fn: Callable[..., T], *args) -> T:
+    """Exécute `fn(db, *args)` dans une session courte, hors de la boucle d'événements."""
+    return await run_in_threadpool(_in_session, fn, *args)
+
+
+def _as_player(db: Session, player_id: uuid.UUID, fn: Callable[..., T], *args) -> T:
+    me = db.get(Utilisateur, player_id)
+    if me is None:
+        raise Unauthorized("Compte introuvable, reconnectez-vous.")
+    return fn(db, me, *args)
+
+
+def _trade_json(db: Session, trade_id: uuid.UUID) -> dict:
+    return TradeOut.of(trade.load(db, trade_id)).model_dump(mode="json")
+
+
+async def _push_trade(trade_id: uuid.UUID, room: Room) -> None:
+    """Diffuse l'état de l'échange tel qu'il est en base."""
+    await rooms.broadcast(room.seats, {"type": "trade", "trade": await _db(_trade_json, trade_id)})
+
+
+async def notify_room(trade_id: uuid.UUID) -> None:
+    """L'échange a changé hors de la salle (ouverture, refus, annulation) : la salle est prévenue."""
+    if rooms.get(trade_id) is None:
+        return
+    async with rooms.use(trade_id) as room:
+        if room.seats:
+            await _push_trade(trade_id, room)
+
+
+# ── Routes HTTP ──────────────────────────────────────────────────────────────
 
 
 @router.post("", response_model=TradeOut, status_code=status.HTTP_201_CREATED)
-def create_trade(data: TradeCreateIn, user: CurrentUser, db: DbSession):
-    """Propose des cartes contre des cartes d'un autre joueur (au moins 1 de chaque côté)."""
-    return TradeOut.of(trade.create_trade(db, user, data))
+async def create_trade(data: TradeCreateIn, user: CurrentUser, db: DbSession, response: Response):
+    """Ouvre une salle d'échange, tapis vides. S'il en existe déjà une avec ce joueur : 200, elle est renvoyée."""
+    opened, created, changed = await run_in_threadpool(trade.create_trade, db, user, data)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    if changed:
+        await notify_room(opened.id)
+    return TradeOut.of(opened)
 
 
 @router.get("", response_model=Page[TradeOut])
@@ -36,23 +105,123 @@ def get_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N8
     return TradeOut.of(trade.get_trade(db, user, tradeId))
 
 
-@router.post("/{tradeId}/accept", response_model=TradeOut)
-def accept_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803
-    """Le destinataire accepte : les cartes sont transférées en une seule transaction.
-
-    Si une carte n'est plus disponible : 409 `CARDS_UNAVAILABLE`, rien n'est transféré et
-    l'échange passe en FAILED.
-    """
-    return TradeOut.of(trade.accept_trade(db, user, tradeId))
-
-
 @router.post("/{tradeId}/refuse", response_model=TradeOut)
-def refuse_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803
-    """Le destinataire refuse : aucun transfert."""
-    return TradeOut.of(trade.refuse_trade(db, user, tradeId))
+async def refuse_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803
+    """Le destinataire abandonne : la salle est fermée, aucun transfert."""
+    closed = await run_in_threadpool(trade.refuse_trade, db, user, tradeId)
+    await notify_room(closed.id)
+    return TradeOut.of(closed)
 
 
 @router.post("/{tradeId}/cancel", response_model=TradeOut)
-def cancel_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803
-    """Le proposant retire sa proposition, tant qu'elle est en attente."""
-    return TradeOut.of(trade.cancel_trade(db, user, tradeId))
+async def cancel_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803
+    """Le proposant abandonne : la salle est fermée, aucun transfert."""
+    closed = await run_in_threadpool(trade.cancel_trade, db, user, tradeId)
+    await notify_room(closed.id)
+    return TradeOut.of(closed)
+
+
+# ── Salle d'échange (WebSocket) ──────────────────────────────────────────────
+
+
+def _enter(db: Session, token: str, trade_id: uuid.UUID) -> uuid.UUID:
+    """Contrôle d'accès à l'ouverture : jeton valide, joueur de l'échange."""
+    me = user_from_token(db, token, ACCESS)
+    trade.get_trade(db, me, trade_id)
+    return me.id
+
+
+def _init_state(db: Session, trade_id: uuid.UUID) -> tuple[dict, list[dict]]:
+    return (
+        _trade_json(db, trade_id),
+        [TradeMessageOut.of(m).model_dump(mode="json") for m in trade.messages(db, trade_id)],
+    )
+
+
+async def _deny(websocket: WebSocket, error: DomainError) -> None:
+    """Refuse l'ouverture avec la réponse HTTP du contrat (401, 403, 404) quand le serveur le permet."""
+    from app.main import problem_response  # import tardif : main importe les vues
+
+    if "websocket.http.response" in websocket.scope.get("extensions", {}):
+        await websocket.send_denial_response(problem_response(error))
+    else:
+        await websocket.close(code=1008, reason=error.code)
+
+
+async def _handle(trade_id: uuid.UUID, seat: Seat, raw: str) -> None:
+    """Applique l'action d'un joueur puis prévient la salle ; une action refusée ne revient qu'à son auteur."""
+    try:
+        command = client_message.validate_json(raw)
+    except ValidationError as exc:
+        await rooms.send(seat, {"type": "error", "problem": problem_body(validation_problem(exc.errors()))})
+        return
+
+    player = seat.player_id
+    async with rooms.use(trade_id) as room:
+        try:
+            if isinstance(command, TradeChatCommand):
+                sent = await _db(_as_player, player, trade.say, trade_id, command.text)
+                message = TradeMessageOut.of(sent).model_dump(mode="json")
+                await rooms.broadcast(room.seats, {"type": "chat", "message": message})
+                return
+            unavailable = False
+            if isinstance(command, TradeOfferCommand):
+                await _db(_as_player, player, trade.set_offer, trade_id, command.items)
+            else:
+                _, unavailable = await _db(_as_player, player, trade.set_ready, trade_id, command.ready)
+            await _push_trade(trade_id, room)
+            if unavailable:
+                problem = DomainError(
+                    "Une carte posée n'est plus disponible : elle a été retirée du tapis. "
+                    "Vérifiez l'échange avant de valider.",
+                    "CARDS_UNAVAILABLE",
+                )
+                await rooms.broadcast(room.seats, {"type": "error", "problem": problem_body(problem)})
+        except DomainError as error:
+            await rooms.send(seat, {"type": "error", "problem": problem_body(error)})
+        except Exception:
+            log.exception("Action refusée dans la salle d'échange %s", trade_id)
+            error = DomainError("Une erreur inattendue est survenue.", "INTERNAL_ERROR")
+            await rooms.send(seat, {"type": "error", "problem": problem_body(error)})
+
+
+@router.websocket("/{tradeId}/live")
+async def join_trade(websocket: WebSocket, tradeId: str, access_token: str | None = None):  # noqa: N803
+    """Salle d'échange : `init` à l'entrée, puis `trade`, `chat`, `presence` et `error`.
+
+    Le jeton d'accès passe dans `access_token` (un navigateur n'envoie pas d'en-tête sur un WebSocket).
+    """
+    try:
+        try:
+            trade_id = uuid.UUID(tradeId)
+        except ValueError:
+            raise NotFound("Cet échange n'existe pas.")
+        if not access_token:
+            raise Unauthorized("Connectez-vous pour continuer.")
+        player_id = await _db(_enter, access_token, trade_id)
+    except DomainError as error:
+        await _deny(websocket, error)
+        return
+
+    await websocket.accept()
+    seat = Seat(websocket, player_id)
+    async with rooms.use(trade_id) as room:
+        arriving = not room.is_present(player_id)
+        room.seats.add(seat)
+        trade_json, messages = await _db(_init_state, trade_id)
+        await rooms.send(seat, {"type": "init", "trade": trade_json, "messages": messages, "online": room.online()})
+        if arriving:
+            presence = {"type": "presence", "playerId": str(player_id), "online": True}
+            await rooms.broadcast(room.seats - {seat}, presence)
+
+    try:
+        while True:
+            received = await websocket.receive()
+            if received["type"] == "websocket.disconnect":
+                break
+            raw = received.get("text") or (received.get("bytes") or b"").decode("utf-8", "replace")
+            await _handle(trade_id, seat, raw)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await rooms.leave(trade_id, seat)

@@ -6,7 +6,9 @@
 #   docker compose logs -f api       suivre les logs
 #   docker compose down              arrêter l'API (la base continue de tourner)
 #
-# Valeurs de développement uniquement : en K8S, elles viennent d'un Secret.
+# Sans fichier .env : base locale de db/ (valeurs de développement).
+# Avec backend/.env (ignoré par git) : ses valeurs remplacent celles-ci, par exemple pour
+# viser RDS (DATABASE_URL, DB_IAM_AUTH, AWS_*). En K8S, elles viennent d'un Secret.
 
 name: creatura-backend
 
@@ -14,15 +16,18 @@ services:
   api:
     build: .
     container_name: creatura-api
+    env_file:
+      - path: .env  # AWS_*, DB_IAM_AUTH, IMAGE_BASE_URL…
+        required: false
     environment:
-      # Le conteneur de la base s'appelle creatura-db sur le réseau de db/docker-compose.yml.
-      DATABASE_URL: postgres://creatura:creatura@creatura-db:5432/creatura
-      JWT_SECRET: dev-only-secret-change-me-in-production-please-0123456789
+      # Par défaut, le conteneur de la base locale (réseau de db/docker-compose.yml).
+      DATABASE_URL: ${DATABASE_URL:-postgres://creatura:creatura@creatura-db:5432/creatura}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-in-production-please-0123456789}
       # Le compte admin existe déjà avec les données de démo (CREATURA_DEMO=true) ;
-      # sinon, l'API le crée au démarrage avec ces valeurs.
-      ADMIN_LOGIN: admin
-      ADMIN_PASSWORD: admin
-      CORS_ORIGINS: "*"
+      # sinon, l'API le crée au démarrage avec ces valeurs (vides dans .env : pas de création).
+      ADMIN_LOGIN: ${ADMIN_LOGIN-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD-admin}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
     ports:
       - "127.0.0.1:8000:8000"
     networks:

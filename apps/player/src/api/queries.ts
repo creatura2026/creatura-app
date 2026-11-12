@@ -19,8 +19,10 @@ export const keys = {
   booster: ['booster', 'today'] as const,
   collection: (q: CollectionQuery) => ['collection', q] as const,
   players: (search: string) => ['players', search] as const,
-  tradeable: (playerId: string) => ['tradeable', playerId] as const,
+  playerCards: (playerId: string) => ['player-cards', playerId] as const,
+  owners: (creatureId: string) => ['owners', creatureId] as const,
   trades: (q: ListMyTradesQuery) => ['trades', q] as const,
+  trade: (id: string) => ['trade', id] as const,
 }
 
 export function useMe() {
@@ -78,11 +80,21 @@ export function useSearchPlayers(search: MaybeRefOrGetter<string>) {
   })
 }
 
-export function useTradeableCards(playerId: MaybeRefOrGetter<string | null>) {
+/** Les cartes d'un autre joueur : toutes peuvent être échangées. */
+export function usePlayerCards(playerId: MaybeRefOrGetter<string | null>) {
   return useQuery({
-    queryKey: computed(() => keys.tradeable(toValue(playerId) ?? '')),
+    queryKey: computed(() => keys.playerCards(toValue(playerId) ?? '')),
     queryFn: () => api.getTradeableCards(toValue(playerId)!),
     enabled: computed(() => !!toValue(playerId)),
+  })
+}
+
+/** Les joueurs qui possèdent une créature. */
+export function useCreatureOwners(creatureId: MaybeRefOrGetter<string | null>) {
+  return useQuery({
+    queryKey: computed(() => keys.owners(toValue(creatureId) ?? '')),
+    queryFn: () => api.listCreatureOwners(toValue(creatureId)!),
+    enabled: computed(() => !!toValue(creatureId)),
   })
 }
 
@@ -93,15 +105,28 @@ export function useMyTrades(query: MaybeRefOrGetter<ListMyTradesQuery>) {
   })
 }
 
+/** Les échanges en cours du joueur (badge de navigation, accueil, liste). */
+export function useOpenTrades() {
+  return useMyTrades({ status: 'PENDING', pageSize: 100 })
+}
+
+export function useTrade(id: MaybeRefOrGetter<string>) {
+  return useQuery({
+    queryKey: computed(() => keys.trade(toValue(id))),
+    queryFn: () => api.getTrade(toValue(id)),
+  })
+}
+
 /** Après un changement de collection, on rafraîchit tout ce qui en dépend. */
-function useInvalidateCollection() {
+export function useInvalidateCollection() {
   const client = useQueryClient()
   return () =>
     Promise.all([
       client.invalidateQueries({ queryKey: keys.me }),
       client.invalidateQueries({ queryKey: ['collection'] }),
       client.invalidateQueries({ queryKey: ['trades'] }),
-      client.invalidateQueries({ queryKey: ['tradeable'] }),
+      client.invalidateQueries({ queryKey: ['player-cards'] }),
+      client.invalidateQueries({ queryKey: ['owners'] }),
       client.invalidateQueries({ queryKey: keys.booster }),
     ])
 }
@@ -111,26 +136,28 @@ export function useClaimBooster() {
   return useMutation({ mutationFn: () => api.claimBooster(), onSettled: invalidate })
 }
 
+/** Ouvre une salle d'échange avec un joueur (ou rouvre celle qui existe déjà). */
 export function useCreateTrade() {
-  const invalidate = useInvalidateCollection()
+  const client = useQueryClient()
   return useMutation({
     mutationFn: (body: CreateTradeRequest) => api.createTrade(body),
-    onSuccess: invalidate,
+    onSuccess: (trade) => {
+      client.setQueryData(keys.trade(trade.id), trade)
+      return client.invalidateQueries({ queryKey: ['trades'] })
+    },
   })
 }
 
-export type TradeDecision = 'accept' | 'refuse' | 'cancel'
-
-export function useTradeDecision() {
-  const invalidate = useInvalidateCollection()
+/** Abandonne un échange en cours : le destinataire le refuse, le proposant l'annule. */
+export function useLeaveTrade() {
+  const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, decision }: { id: string; decision: TradeDecision }) =>
-      decision === 'accept'
-        ? api.acceptTrade(id)
-        : decision === 'refuse'
-          ? api.refuseTrade(id)
-          : api.cancelTrade(id),
-    // Même en cas d'échec (carte indisponible → FAILED), l'état a changé côté serveur.
-    onSettled: invalidate,
+    mutationFn: ({ id, asProposer }: { id: string; asProposer: boolean }) =>
+      asProposer ? api.cancelTrade(id) : api.refuseTrade(id),
+    onSettled: (_trade, _error, { id }) =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ['trades'] }),
+        client.invalidateQueries({ queryKey: keys.trade(id) }),
+      ]),
   })
 }

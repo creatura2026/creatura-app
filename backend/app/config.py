@@ -13,6 +13,17 @@ class Settings(BaseSettings):
     # En production (RDS), ajouter ?sslmode=require.
     database_url: str = "postgres://creatura:creatura@localhost:5432/creatura"
 
+    # Authentification IAM sur RDS : à chaque nouvelle connexion, le mot de passe est un jeton
+    # signé avec les identifiants AWS (valable 15 min). DATABASE_URL ne contient alors pas de
+    # mot de passe et doit avoir ?sslmode=require.
+    # Identifiants AWS : ceux ci-dessous s'ils sont renseignés (poste local), sinon la chaîne
+    # standard d'AWS (variables d'environnement, rôle IAM du pod sur EKS…).
+    db_iam_auth: bool = False
+    aws_region: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_session_token: str | None = None
+
     jwt_secret: str = "dev-only-secret-change-me-in-production-please-0123456789"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 15
@@ -26,12 +37,17 @@ class Settings(BaseSettings):
 
     # CDN des illustrations (CloudFront devant le bucket S3) : la clé stockée en base
     # (sprites/moss_puff.png) y est concaténée.
-    image_base_url: str = "https://d3tkhh3xjmflkh.cloudfront.net"
+    image_base_url: str = "https://d2qfl3ji3yaa9i.cloudfront.net"
 
     # Compte administrateur créé au démarrage s'il n'existe pas (mot de passe haché par le back).
     admin_login: str | None = None
     admin_password: str | None = None
     admin_pseudo: str = "Admin"
+
+    @field_validator("aws_region", "aws_access_key_id", "aws_secret_access_key", "aws_session_token")
+    @classmethod
+    def _empty_is_none(cls, value: str | None) -> str | None:
+        return value or None
 
     @field_validator("database_url")
     @classmethod

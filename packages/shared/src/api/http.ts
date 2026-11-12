@@ -7,9 +7,18 @@
  *   ou `VITE_API_BASE_URL` pour un serveur sur un autre domaine.
  * - Jeton d'accès expiré (401) : renouvellement automatique avec le refresh token, une fois.
  * - Erreurs : le Problem Details du serveur devient une `ApiError` (même code que le mock).
+ * - Salle d'échange : WebSocket `/trades/{tradeId}/live`, reconnecté après une coupure.
  */
-import type { AdminApi, AuthApi, PlayerApi } from './contract'
-import { ApiError, type AuthTokens, type ErrorCode, type Problem } from './types'
+import type { AdminApi, AuthApi, PlayerApi, TradeConnection } from './contract'
+import {
+  ApiError,
+  isApiError,
+  type AuthTokens,
+  type ErrorCode,
+  type Problem,
+  type TradeClientMessage,
+  type TradeServerMessage,
+} from './types'
 import type { Session } from '../session'
 
 export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
@@ -129,6 +138,128 @@ export function createHttpClient(session: SessionStore, baseUrl: string = API_BA
 
 type HttpClient = ReturnType<typeof createHttpClient>
 
+/** Délai avant la reconnexion n° `attempt` : 1 s, 2 s, 4 s… jusqu'à 15 s. */
+const reconnectDelay = (attempt: number) => Math.min(1000 * 2 ** (attempt - 1), 15_000)
+
+function clientProblem(code: ErrorCode, status: number, detail: string): Problem {
+  return { type: 'about:blank', title: 'Salle d’échange', status, code, detail }
+}
+
+/** Adresse WebSocket d'une route de l'API : même hôte que l'API, en ws:// ou wss://. */
+function webSocketUrl(baseUrl: string, path: string, accessToken: string): string {
+  const url = new URL(`${baseUrl}${path}`, globalThis.location?.href ?? 'http://localhost/')
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.searchParams.set('access_token', accessToken)
+  return url.toString()
+}
+
+/**
+ * Salle d'échange en WebSocket. Le jeton d'accès passe dans l'adresse (un navigateur n'envoie
+ * pas d'en-tête sur un WebSocket).
+ *
+ * - Un navigateur ne donne pas la raison d'un refus d'ouverture : on la demande en HTTP
+ *   (`GET /trades/{tradeId}`, qui renouvelle le jeton si besoin). Refus définitif (403, 404,
+ *   session expirée) : un message `error`, comme le mock. Sinon (jeton renouvelé, serveur
+ *   redémarré…), nouvelle tentative.
+ * - Coupure en cours de route : un message `error` prévient le joueur, puis reconnexion ;
+ *   le serveur renvoie alors `init`, l'état complet de la salle.
+ */
+function joinTradeRoom(
+  http: HttpClient,
+  baseUrl: string,
+  tradeId: string,
+  onMessage: (message: TradeServerMessage) => void,
+): TradeConnection {
+  let socket: WebSocket | null = null
+  let closed = false
+  let attempts = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const fail = (problem: Problem) => onMessage({ type: 'error', problem })
+
+  async function refusal(): Promise<Problem | null> {
+    try {
+      await http.get(`/trades/${encodeURIComponent(tradeId)}`)
+      return null
+    } catch (error) {
+      return isApiError(error) && error.problem.status < 500 ? error.problem : null
+    }
+  }
+
+  function retry() {
+    attempts += 1
+    timer = setTimeout(connect, reconnectDelay(attempts))
+  }
+
+  function connect() {
+    if (closed) return
+    const token = http.session.read()?.accessToken
+    if (!token) {
+      fail(clientProblem('UNAUTHENTICATED', 401, 'Connectez-vous pour continuer.'))
+      return
+    }
+    const ws = new WebSocket(
+      webSocketUrl(baseUrl, `/trades/${encodeURIComponent(tradeId)}/live`, token),
+    )
+    socket = ws
+    let entered = false
+
+    ws.onmessage = (event: MessageEvent) => {
+      let message: TradeServerMessage
+      try {
+        message = JSON.parse(String(event.data)) as TradeServerMessage
+      } catch {
+        return
+      }
+      if (message.type === 'init') {
+        entered = true
+        attempts = 0
+      }
+      onMessage(message)
+    }
+    ws.onclose = () => {
+      if (socket === ws) socket = null
+      if (closed) return
+      if (entered) {
+        fail(
+          clientProblem(
+            'INTERNAL_ERROR',
+            503,
+            'Connexion à la salle d’échange perdue. Reconnexion en cours…',
+          ),
+        )
+        retry()
+        return
+      }
+      void refusal().then((problem) => {
+        if (closed) return
+        if (problem) fail(problem)
+        else retry()
+      })
+    }
+  }
+
+  connect()
+  return {
+    send(message: TradeClientMessage) {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
+      else
+        fail(
+          clientProblem(
+            'INTERNAL_ERROR',
+            503,
+            'Connexion à la salle d’échange en cours : réessayez dans un instant.',
+          ),
+        )
+    },
+    close() {
+      closed = true
+      clearTimeout(timer)
+      socket?.close(1000)
+      socket = null
+    },
+  }
+}
+
 const id = (value: string) => encodeURIComponent(value)
 
 function authApi(http: HttpClient): AuthApi {
@@ -144,8 +275,11 @@ function authApi(http: HttpClient): AuthApi {
   }
 }
 
-export function createHttpPlayerApi(session: SessionStore): PlayerApi {
-  const http = createHttpClient(session)
+export function createHttpPlayerApi(
+  session: SessionStore,
+  baseUrl: string = API_BASE_URL,
+): PlayerApi {
+  const http = createHttpClient(session, baseUrl)
   return {
     ...authApi(http),
     listFamilies: () => http.get('/families'),
@@ -157,12 +291,13 @@ export function createHttpPlayerApi(session: SessionStore): PlayerApi {
     getMyCollection: (query) => http.get('/me/collection', query),
     searchPlayers: (query) => http.get('/players', query),
     getTradeableCards: (playerId) => http.get(`/players/${id(playerId)}/tradeable-cards`),
+    listCreatureOwners: (creatureId) => http.get(`/creatures/${id(creatureId)}/owners`),
     createTrade: (body) => http.post('/trades', body),
     listMyTrades: (query) => http.get('/trades', query),
     getTrade: (tradeId) => http.get(`/trades/${id(tradeId)}`),
-    acceptTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/accept`),
     refuseTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/refuse`),
     cancelTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/cancel`),
+    joinTrade: (tradeId, onMessage) => joinTradeRoom(http, baseUrl, tradeId, onMessage),
   }
 }
 
