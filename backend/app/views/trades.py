@@ -92,8 +92,46 @@ def _message_json(db: Session, trade_id: uuid.UUID, message_id: uuid.UUID) -> di
     return TradeMessageOut.of(message).model_dump(mode="json")
 
 
+def _presence(player_id: uuid.UUID, online: bool) -> dict:
+    return {"type": "presence", "playerId": str(player_id), "online": online}
+
+
+async def _publish(trade_id: uuid.UUID, event: str, player_id: uuid.UUID) -> None:
+    """Annonce de présence aux autres processus ; une base injoignable ne bloque ni l'entrée ni la
+    sortie de la salle (la présence se rétablit à la reconnexion de l'écoute)."""
+    try:
+        await _db(bus.publish, trade_id, event, player_id)
+    except Exception:
+        log.warning("Présence non annoncée aux autres processus (échange %s)", trade_id, exc_info=True)
+
+
+async def _on_presence(notice: bus.Notice) -> None:
+    """Un joueur entre, est déjà là, ou sort sur un autre processus."""
+    trade_id, player_id = notice.trade_id, notice.player_id
+    if player_id is None:
+        return
+    if notice.event == bus.LEAVE:
+        changed, online = rooms.remote_leave(trade_id, notice.pod, player_id), False
+    else:
+        changed, online = rooms.remote_join(trade_id, notice.pod, player_id), True
+    room = rooms.get(trade_id)
+    if room is None:
+        return
+    async with rooms.use(trade_id) as room:
+        if changed and room.seats:
+            await rooms.broadcast(room.seats, _presence(player_id, online))
+        local = room.players()
+    if notice.event == bus.JOIN:
+        # Le processus qui vient d'accueillir ce joueur apprend qui est déjà là, ici.
+        for here in local:
+            await _publish(trade_id, bus.HERE, here)
+
+
 async def _on_notice(notice: bus.Notice) -> None:
     """Un autre processus a changé une salle : ses joueurs servis ici sont prévenus, d'après la base."""
+    if notice.event in (bus.JOIN, bus.HERE, bus.LEAVE):
+        await _on_presence(notice)
+        return
     if rooms.get(notice.trade_id) is None:
         return  # personne n'est dans cette salle sur ce processus
     async with rooms.use(notice.trade_id) as room:
@@ -111,16 +149,39 @@ async def _on_notice(notice: bus.Notice) -> None:
 
 async def _resync() -> None:
     """Écoute rétablie : les annonces manquées sont perdues, chaque salle ouverte ici reçoit son
-    état complet (`init`, que le client applique en remplaçant ce qu'il affiche)."""
+    état complet (`init`, que le client applique en remplaçant ce qu'il affiche).
+
+    La présence des autres processus est réapprise : chaque joueur d'ici est annoncé (JOIN), les
+    autres processus répondent HERE pour les leurs, ce qui envoie les `presence` manquantes."""
+    rooms.forget_remote()
     for trade_id in rooms.open_trades():
         async with rooms.use(trade_id) as room:
+            if not room.seats:
+                continue
+            trade_json, messages = await _db(_init_state, trade_id)
+            init = {"type": "init", "trade": trade_json, "messages": messages, "online": rooms.online(trade_id)}
+            await rooms.broadcast(room.seats, init)
+            local = room.players()
+        for player_id in local:
+            await _publish(trade_id, bus.JOIN, player_id)
+
+
+async def _forget_gone_pods() -> None:
+    """Toutes les 30 s : un processus arrêté sans prévenir (tué, nœud perdu) n'a plus de connexion
+    d'écoute ; ses joueurs sont retirés de la présence."""
+    pods = rooms.remote_pods()
+    if not pods:
+        return
+    gone_pods = pods - await _db(bus.live_pods)
+    for trade_id, player_id in rooms.forget_pods(gone_pods):
+        if rooms.get(trade_id) is None:
+            continue
+        async with rooms.use(trade_id) as room:
             if room.seats:
-                trade_json, messages = await _db(_init_state, trade_id)
-                init = {"type": "init", "trade": trade_json, "messages": messages, "online": room.online()}
-                await rooms.broadcast(room.seats, init)
+                await rooms.broadcast(room.seats, _presence(player_id, False))
 
 
-bus.listener.subscribe(_on_notice, _resync)
+bus.listener.subscribe(_on_notice, _resync, _forget_gone_pods)
 
 
 # ── Routes HTTP ──────────────────────────────────────────────────────────────
@@ -251,13 +312,15 @@ async def join_trade(websocket: WebSocket, tradeId: str, access_token: str | Non
     await websocket.accept()
     seat = Seat(websocket, player_id)
     async with rooms.use(trade_id) as room:
-        arriving = not room.is_present(player_id)
+        arriving = not rooms.is_online(trade_id, player_id)  # nouveau pour toute la salle
+        first_here = not room.is_present(player_id)  # première connexion sur ce processus
         room.seats.add(seat)
         trade_json, messages = await _db(_init_state, trade_id)
-        await rooms.send(seat, {"type": "init", "trade": trade_json, "messages": messages, "online": room.online()})
+        await rooms.send(seat, {"type": "init", "trade": trade_json, "messages": messages, "online": rooms.online(trade_id)})
         if arriving:
-            presence = {"type": "presence", "playerId": str(player_id), "online": True}
-            await rooms.broadcast(room.seats - {seat}, presence)
+            await rooms.broadcast(room.seats - {seat}, _presence(player_id, True))
+    if first_here:
+        await _publish(trade_id, bus.JOIN, player_id)  # les autres processus répondent HERE
 
     try:
         while True:
@@ -269,4 +332,5 @@ async def join_trade(websocket: WebSocket, tradeId: str, access_token: str | Non
     except WebSocketDisconnect:
         pass
     finally:
-        await rooms.leave(trade_id, seat)
+        if await rooms.leave(trade_id, seat):
+            await _publish(trade_id, bus.LEAVE, player_id)
