@@ -881,6 +881,8 @@ export interface components {
              */
             cardsPerBooster: number;
             rarityWeights: components["schemas"]["RarityWeights"];
+            /** @description Réglages enregistrés, appliqués au prochain minuit (heure de Paris) ; null si aucun */
+            scheduled: components["schemas"]["ScheduledBoosterSettings"] | null;
             /**
              * Format: date-time
              * @description Dernière modification ; null tant que la valeur par défaut n'a jamais été changée
@@ -892,6 +894,39 @@ export interface components {
         UpdateBoosterSettingsRequest: {
             cardsPerBooster: number;
             rarityWeights?: components["schemas"]["RarityWeights"];
+        };
+        ScheduledBoosterSettings: {
+            cardsPerBooster: number;
+            rarityWeights: components["schemas"]["RarityWeights"];
+            /** Format: date */
+            effectiveFrom: string;
+        };
+        AdminCreature: components["schemas"]["Creature"] & {
+            /** @description Clé du fichier sur le CDN (sprites/….png) */
+            image: string;
+            /** @description Légendaire : exemplaires de l'édition limitée ; null = illimité */
+            stockTotal: number | null;
+            stockRemaining: number | null;
+            /** Format: date */
+            availableFrom: string;
+            scheduledChange: {
+                rarity: components["schemas"]["RaritySummary"];
+                stock: number | null;
+                /** Format: date */
+                effectiveFrom: string;
+            } | null;
+        };
+        AdminCreatureInput: {
+            name: string;
+            description?: string;
+            family: string;
+            rarity: string;
+            image: string;
+            stock?: number | null;
+        };
+        RarityChangeInput: {
+            rarity: string;
+            stock?: number | null;
         };
         /** @description Poids de tirage de chaque rareté (de 0 à 1000, 0 retire la rareté du tirage). Les quatre sont obligatoires ; commune et peu commune ne peuvent pas être toutes deux à 0. */
         RarityWeights: {

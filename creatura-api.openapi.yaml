@@ -46,7 +46,12 @@ info:
       l'identifiant d'un booster n'est pas réutilisable et `BOOSTER_ALREADY_CLAIMED` ne porte pas de `boosterId`.
     - `boostersOpenedPerDay` (`/admin/stats`) et `/admin/rarity-distribution` viennent de l'historique des tirages
       (table `booster_carte`), sur la période demandée. La répartition observée ne compte que les cartes tirées selon
-      les poids : la rare garantie du premier booster est exclue.
+      les poids et la rare garantie du premier booster.
+    - Toute modification de l'administrateur (réglages des boosters, nouvelle carte, rareté d'une carte) s'applique au
+      prochain minuit, heure de Paris. Un administrateur ne joue pas : booster, collection, joueurs et échanges lui
+      répondent 403.
+    - La répartition observée (`/admin/rarity-distribution`) compte toutes les cartes tirées, rare garantie du premier
+      booster comprise.
     - Tirage : rareté selon les poids (`rarityWeights`, réglables), puis créature au hasard ; au plus une rare ou une
       légendaire par booster ; rare garantie au premier booster ; la carte la plus rare est la dernière de `cards`.
       `dropRate` est la probabilité exacte qu'une carte soit de cette rareté, règle d'exclusion comprise.
@@ -801,6 +806,78 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /admin/creatures:
+    get:
+      tags: [Administration]
+      operationId: listAdminCreatures
+      summary: Toutes les cartes, y compris celles qui n'apparaissent qu'au prochain minuit
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Cartes, avec stock, date de disponibilité et changement de rareté prévu
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/AdminCreature'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Administration]
+      operationId: createAdminCreature
+      summary: Ajoute une carte, visible et tirable au prochain minuit (heure de Paris)
+      description: Une légendaire est une édition limitée - `stock` (nombre d'exemplaires) est alors obligatoire, et interdit pour les autres raretés.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminCreatureInput'}
+      responses:
+        '201':
+          description: Carte créée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminCreature'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /admin/creatures/{creatureId}/rarity:
+    parameters:
+      - {name: creatureId, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [Administration]
+      operationId: scheduleRarityChange
+      summary: Change la rareté d'une carte au prochain minuit
+      description: Les exemplaires déjà possédés restent dans les collections. Vers légendaire, `stock` nouveaux exemplaires sont à tirer ; une légendaire qui change de rareté devient illimitée.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RarityChangeInput'}
+      responses:
+        '200':
+          description: Changement prévu (`scheduledChange`)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminCreature'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Administration]
+      operationId: cancelRarityChange
+      summary: Annule le changement de rareté prévu
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Carte sans changement prévu
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminCreature'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
 components:
   securitySchemes:
     bearerAuth:
@@ -1662,7 +1739,7 @@ components:
 
     BoosterSettings:
       type: object
-      required: [cardsPerBooster, rarityWeights, updatedAt, updatedBy]
+      required: [cardsPerBooster, rarityWeights, scheduled, updatedAt, updatedBy]
       properties:
         cardsPerBooster:
           type: integer
@@ -1672,6 +1749,11 @@ components:
           examples: [5]
         rarityWeights:
           $ref: '#/components/schemas/RarityWeights'
+        scheduled:
+          description: Réglages enregistrés, appliqués au prochain minuit (heure de Paris) ; null si aucun
+          oneOf:
+            - $ref: '#/components/schemas/ScheduledBoosterSettings'
+            - type: 'null'
         updatedAt:
           type: [string, 'null']
           format: date-time
@@ -1693,6 +1775,54 @@ components:
           maximum: 10
         rarityWeights:
           $ref: '#/components/schemas/RarityWeights'
+
+    ScheduledBoosterSettings:
+      type: object
+      required: [cardsPerBooster, rarityWeights, effectiveFrom]
+      properties:
+        cardsPerBooster: {type: integer, minimum: 3, maximum: 10}
+        rarityWeights: {$ref: '#/components/schemas/RarityWeights'}
+        effectiveFrom: {type: string, format: date, description: Jour (heure de Paris) où les réglages s'appliquent, à minuit}
+
+    AdminCreature:
+      allOf:
+        - $ref: '#/components/schemas/Creature'
+        - type: object
+          required: [image, stockTotal, stockRemaining, availableFrom, scheduledChange]
+          properties:
+            image: {type: string, description: Clé du fichier sur le CDN, examples: [sprites/moss_puff.png]}
+            stockTotal: {type: [integer, 'null'], description: Légendaire - exemplaires de l'édition limitée ; null = illimitée}
+            stockRemaining: {type: [integer, 'null']}
+            availableFrom: {type: string, format: date, description: Jour où la carte devient visible et tirable}
+            scheduledChange:
+              oneOf:
+                - type: object
+                  required: [rarity, stock, effectiveFrom]
+                  properties:
+                    rarity: {$ref: '#/components/schemas/RaritySummary'}
+                    stock: {type: [integer, 'null']}
+                    effectiveFrom: {type: string, format: date}
+                - type: 'null'
+
+    AdminCreatureInput:
+      type: object
+      required: [name, family, rarity, image]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 2, maxLength: 50}
+        description: {type: string, maxLength: 500}
+        family: {type: string, enum: [NATURE, CRISTAL, BRUME, LUEUR]}
+        rarity: {type: string, enum: [COMMON, UNCOMMON, RARE, LEGENDARY]}
+        image: {type: string, pattern: '^sprites/[a-z0-9_-]+\.png$', description: Fichier déjà présent sur le CDN}
+        stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Obligatoire pour une légendaire (édition limitée), interdit sinon}
+
+    RarityChangeInput:
+      type: object
+      required: [rarity]
+      additionalProperties: false
+      properties:
+        rarity: {type: string, enum: [COMMON, UNCOMMON, RARE, LEGENDARY]}
+        stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Exemplaires à tirer, obligatoire vers légendaire}
 
     RarityWeights:
       type: object

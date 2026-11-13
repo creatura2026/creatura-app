@@ -12,6 +12,7 @@ const NAV: { name: string; label: string; uc: string; icon: IconName }[] = [
   { name: 'dashboard', label: 'Statistiques', uc: 'UC-12', icon: 'chart' },
   { name: 'trades', label: 'Échanges', uc: 'UC-13', icon: 'trade' },
   { name: 'rarities', label: 'Raretés', uc: 'UC-14', icon: 'gem' },
+  { name: 'creatures', label: 'Cartes', uc: '', icon: 'collection' },
   { name: 'settings', label: 'Réglages booster', uc: '', icon: 'booster' },
 ]
 
@@ -75,7 +76,7 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
       </div>
       <nav class="flex flex-1 flex-col gap-1.5 px-3 py-4" aria-label="Navigation du dashboard">
         <p class="px-2 pb-2 font-pixel text-xs tracking-widest text-sun uppercase">
-          Administration · consultation
+          Administration
         </p>
         <RouterLink
           v-for="item in NAV"

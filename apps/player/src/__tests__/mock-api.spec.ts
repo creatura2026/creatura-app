@@ -141,6 +141,7 @@ describe('API simulée — booster quotidien (UC-03, UC-04)', () => {
     writeMockBoosterSettings({
       cardsPerBooster: 8,
       rarityWeights: { COMMON: 70, UNCOMMON: 20, RARE: 8, LEGENDARY: 2 },
+      scheduled: null,
       updatedAt: null,
       updatedBy: null,
     })

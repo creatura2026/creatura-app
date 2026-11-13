@@ -1,6 +1,12 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import type { AdminTradesQuery, Period } from '@creatura/shared/api/types'
+import type {
+  AdminCreatureInput,
+  AdminTradesQuery,
+  Period,
+  RarityChangeInput,
+  UpdateBoosterSettingsRequest,
+} from '@creatura/shared/api/types'
 
 import { api } from '.'
 
@@ -46,7 +52,36 @@ export function useBoosterSettings() {
 export function useUpdateBoosterSettings() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (cardsPerBooster: number) => api.updateBoosterSettings({ cardsPerBooster }),
+    mutationFn: (body: UpdateBoosterSettingsRequest) => api.updateBoosterSettings(body),
     onSuccess: (settings) => client.setQueryData(['admin', 'booster-settings'], settings),
+  })
+}
+
+export function useAdminCreatures() {
+  return useQuery({ queryKey: ['admin', 'creatures'], queryFn: () => api.listAdminCreatures() })
+}
+
+export function useCreateCreature() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: AdminCreatureInput) => api.createAdminCreature(body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
+  })
+}
+
+export function useScheduleRarityChange() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: RarityChangeInput }) =>
+      api.scheduleRarityChange(id, body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
+  })
+}
+
+export function useCancelRarityChange() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.cancelRarityChange(id),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
   })
 }

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-/** Réglage du nombre de cartes tirées à chaque ouverture de booster. */
+/** Réglages des boosters (nombre de cartes, poids des raretés), appliqués au prochain minuit. */
 import { computed, ref, watch } from 'vue'
-import { errorMessage } from '@creatura/shared/api/types'
+import { errorMessage, type RarityWeights } from '@creatura/shared/api/types'
 import { MAX_CARDS_PER_BOOSTER, MIN_CARDS_PER_BOOSTER } from '@creatura/shared/api/mock-settings'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
-import { formatDateTime } from '@creatura/shared/format'
+import { formatDate, formatDateTime } from '@creatura/shared/format'
 import { toast } from '@creatura/shared/toast'
 
 import { USE_MOCK_API } from '@/api'
@@ -15,16 +15,32 @@ import { useBoosterSettings, useUpdateBoosterSettings } from '@/api/queries'
 const { data: settings, isPending, error, refetch } = useBoosterSettings()
 const update = useUpdateBoosterSettings()
 
-const draft = ref(5)
-watch(
-  settings,
-  (s) => {
-    if (s) draft.value = s.cardsPerBooster
-  },
-  { immediate: true },
-)
+const RARITY_FIELDS: { code: keyof RarityWeights; label: string }[] = [
+  { code: 'COMMON', label: 'Commune' },
+  { code: 'UNCOMMON', label: 'Peu commune' },
+  { code: 'RARE', label: 'Rare' },
+  { code: 'LEGENDARY', label: 'Légendaire' },
+]
 
-const dirty = computed(() => !!settings.value && draft.value !== settings.value.cardsPerBooster)
+const draft = ref(5)
+const weights = ref<RarityWeights>({ COMMON: 70, UNCOMMON: 20, RARE: 8, LEGENDARY: 2 })
+
+/** Valeurs de référence du formulaire : celles prévues à minuit, sinon celles du jour. */
+const target = computed(() => settings.value?.scheduled ?? settings.value)
+function reset() {
+  if (!target.value) return
+  draft.value = target.value.cardsPerBooster
+  weights.value = { ...target.value.rarityWeights }
+}
+watch(target, reset, { immediate: true })
+
+const weightTotal = computed(() => Object.values(weights.value).reduce((a, b) => a + (b || 0), 0))
+const dirty = computed(
+  () =>
+    !!target.value &&
+    (draft.value !== target.value.cardsPerBooster ||
+      RARITY_FIELDS.some((r) => weights.value[r.code] !== target.value!.rarityWeights[r.code])),
+)
 
 function step(delta: number) {
   draft.value = Math.min(
@@ -35,8 +51,12 @@ function step(delta: number) {
 
 async function save() {
   try {
-    const saved = await update.mutateAsync(draft.value)
-    toast(`Les prochains boosters contiendront ${saved.cardsPerBooster} carte(s).`, 'success')
+    const saved = await update.mutateAsync({
+      cardsPerBooster: draft.value,
+      rarityWeights: weights.value,
+    })
+    const when = saved.scheduled ? formatDate(saved.scheduled.effectiveFrom) : 'demain'
+    toast(`Réglages enregistrés : appliqués à partir du ${when}, minuit.`, 'success')
   } catch (e) {
     toast(errorMessage(e), 'error')
   }
@@ -104,6 +124,33 @@ const fan = computed(() =>
             <span>{{ MAX_CARDS_PER_BOOSTER }}</span>
           </div>
 
+          <fieldset class="mt-6">
+            <legend class="font-sans text-lg font-bold">Poids des raretés</legend>
+            <p class="mt-1 text-sm">
+              On tire d’abord la rareté selon ces poids, puis une carte au hasard. Au plus une rare
+              ou une légendaire par booster.
+            </p>
+            <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <label v-for="r in RARITY_FIELDS" :key="r.code" class="text-sm font-semibold">
+                {{ r.label }}
+                <input
+                  v-model.number="weights[r.code]"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="1"
+                  class="mt-1 w-full border-2 border-ink bg-white px-2 py-1.5 font-pixel text-lg tabular-nums"
+                />
+                <span class="text-xs font-normal">
+                  {{
+                    weightTotal ? Math.round(((weights[r.code] || 0) * 1000) / weightTotal) / 10 : 0
+                  }}
+                  % par tirage
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
           <!-- Aperçu : les dos de cartes tels qu'ils sortiront du sachet -->
           <div class="mt-6 flex h-28 items-end justify-center" aria-hidden="true">
             <span
@@ -121,7 +168,7 @@ const fan = computed(() =>
               type="button"
               class="btn btn-secondary"
               :disabled="!dirty || update.isPending.value"
-              @click="draft = settings.cardsPerBooster"
+              @click="reset()"
             >
               Annuler
             </button>
@@ -140,12 +187,28 @@ const fan = computed(() =>
           <div class="card-pixel-sm bg-sky p-4 text-sm">
             <p class="font-bold">Quand le changement s’applique-t-il ?</p>
             <p class="mt-1">
-              Aux boosters ouverts après l’enregistrement. Les boosters déjà ouverts ne changent
-              pas.
+              Au prochain minuit (heure de Paris). Les boosters du jour gardent les réglages en
+              vigueur ; une nouvelle modification dans la journée remplace la précédente.
+            </p>
+          </div>
+          <div v-if="settings.scheduled" class="card-pixel-sm bg-butter p-4 text-sm">
+            <p class="font-bold">
+              Prévu le {{ formatDate(settings.scheduled.effectiveFrom) }}, minuit
+            </p>
+            <p class="mt-1">
+              {{ settings.scheduled.cardsPerBooster }} cartes · poids
+              {{ settings.scheduled.rarityWeights.COMMON }} /
+              {{ settings.scheduled.rarityWeights.UNCOMMON }} /
+              {{ settings.scheduled.rarityWeights.RARE }} /
+              {{ settings.scheduled.rarityWeights.LEGENDARY }}
             </p>
           </div>
           <div class="card-pixel-sm bg-white p-4 text-sm">
-            <p class="font-bold">Valeur actuelle : {{ settings.cardsPerBooster }}</p>
+            <p class="font-bold">En vigueur aujourd’hui : {{ settings.cardsPerBooster }} cartes</p>
+            <p class="mt-1">
+              Poids {{ settings.rarityWeights.COMMON }} / {{ settings.rarityWeights.UNCOMMON }} /
+              {{ settings.rarityWeights.RARE }} / {{ settings.rarityWeights.LEGENDARY }}
+            </p>
             <p v-if="settings.updatedAt" class="mt-1">
               Modifiée le {{ formatDateTime(settings.updatedAt) }}
               <template v-if="settings.updatedBy">par {{ settings.updatedBy.pseudo }}</template

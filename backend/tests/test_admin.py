@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from conftest import API, conclude_trade, give, not_first_booster, problem, register_and_login, set_weights
+from conftest import API, conclude_trade, give, not_first_booster, pass_midnight, problem, register_and_login, set_weights
 
 ADMIN_ROUTES = ("/admin/stats", "/admin/trades", "/admin/rarity-distribution", "/admin/settings/booster")
 
@@ -40,9 +40,10 @@ def test_admin_dashboard(client, admin_headers):
 
     dist = client.get(f"{API}/admin/rarity-distribution", headers=admin_headers).json()
     assert dist["period"] == stats["period"]
-    # 2 premiers boosters de 5 cartes : la rare garantie ne compte pas ; les cartes données non plus.
-    assert dist["totalCardsDistributed"] == 8
-    assert sum(i["observedCount"] for i in dist["items"]) == 8
+    # 2 premiers boosters de 5 cartes, rare garantie comprise ; les cartes données ne comptent pas.
+    assert dist["totalCardsDistributed"] == 10
+    assert sum(i["observedCount"] for i in dist["items"]) == 10
+    assert next(i for i in dist["items"] if i["rarity"]["code"] == "RARE")["observedCount"] >= 2
     assert [i["rarity"]["code"] for i in dist["items"]] == ["COMMON", "UNCOMMON", "RARE", "LEGENDARY"]
     assert abs(sum(i["observedRate"] for i in dist["items"]) - 1) < 0.001
     assert abs(sum(i["expectedRate"] for i in dist["items"]) - 1) < 0.001
@@ -63,6 +64,7 @@ def test_booster_settings(client, admin_headers):
     assert settings == {
         "cardsPerBooster": 5,
         "rarityWeights": {"COMMON": 70, "UNCOMMON": 20, "RARE": 8, "LEGENDARY": 2},
+        "scheduled": None,
         "updatedAt": None,
         "updatedBy": None,
     }
@@ -70,9 +72,15 @@ def test_booster_settings(client, admin_headers):
     r = client.put(f"{API}/admin/settings/booster", json={"cardsPerBooster": 7}, headers=admin_headers)
     assert r.status_code == 200
     updated = r.json()
-    assert updated["cardsPerBooster"] == 7 and updated["updatedAt"] is not None
-    assert updated["updatedBy"]["pseudo"] == "Admin"
+    # Enregistré pour le prochain minuit : la valeur du jour ne change pas.
+    assert updated["cardsPerBooster"] == 5 and updated["scheduled"]["cardsPerBooster"] == 7
+    assert updated["scheduled"]["rarityWeights"] == settings["rarityWeights"]
+    assert updated["updatedAt"] is not None and updated["updatedBy"]["pseudo"] == "Admin"
     assert client.get(f"{API}/admin/settings/booster", headers=admin_headers).json() == updated
+
+    pass_midnight()
+    applied = client.get(f"{API}/admin/settings/booster", headers=admin_headers).json()
+    assert applied["cardsPerBooster"] == 7 and applied["scheduled"] is None
 
     for wrong in (0, 2, 11):  # de 3 à 10 cartes
         r = client.put(f"{API}/admin/settings/booster", json={"cardsPerBooster": wrong}, headers=admin_headers)
@@ -84,7 +92,9 @@ def test_rarity_weights_settings(client, admin_headers):
     r = client.put(
         f"{API}/admin/settings/booster", json={"cardsPerBooster": 5, "rarityWeights": weights}, headers=admin_headers
     )
-    assert r.status_code == 200 and r.json()["rarityWeights"] == weights
+    assert r.status_code == 200 and r.json()["scheduled"]["rarityWeights"] == weights
+    assert r.json()["rarityWeights"]["LEGENDARY"] == 2  # en vigueur jusqu'à minuit
+    pass_midnight()
 
     # Le taux affiché aux joueurs suit les nouveaux poids (calcul exact avec l'exclusion).
     rates = {x["code"]: x["dropRate"] for x in client.get(f"{API}/rarities", headers=admin_headers).json()}

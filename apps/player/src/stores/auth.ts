@@ -6,11 +6,22 @@ import { api } from '@/api'
 import { readSession, writeSession } from '@/api/token'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(readSession()?.user ?? null)
+  // Une session d'administrateur n'a rien à faire dans l'app joueur.
+  const stored = readSession()?.user ?? null
+  const user = ref<User | null>(stored?.role === 'ADMIN' ? null : stored)
   const isAuthenticated = computed(() => user.value !== null)
 
   async function login(credentials: LoginRequest) {
     const tokens = await api.login(credentials)
+    // Un administrateur gère le jeu mais n'y joue pas : il passe par le dashboard.
+    if (tokens.user.role === 'ADMIN') {
+      writeSession(tokens)
+      await api.logout().catch(() => {})
+      writeSession(null)
+      throw new Error(
+        'Compte administrateur : il ne joue pas. Connectez-vous au dashboard (/admin/).',
+      )
+    }
     writeSession(tokens)
     user.value = tokens.user
     return tokens.user

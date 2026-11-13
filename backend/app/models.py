@@ -1,4 +1,4 @@
-"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_ à 07_).
+"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_ à 08_).
 
 Le schéma est la source de vérité : le back ne crée ni ne modifie aucune table
 (pas de `create_all`). Les noms suivent la base : français, snake_case, sans accents.
@@ -80,6 +80,11 @@ class Creature(Base):
     # Édition limitée : seules les légendaires ont un stock ; None = illimité (07_evolution_…).
     stock_total: Mapped[int | None] = mapped_column(Integer)
     stock_restant: Mapped[int | None] = mapped_column(Integer)
+    # Changements de l'administrateur, appliqués au prochain minuit (08_evolution_…).
+    disponible_le: Mapped[date] = mapped_column(Date, default=date(2000, 1, 1))
+    rarete_suivante: Mapped[Rarete | None] = mapped_column(_varchar_enum(Rarete, 20))
+    stock_suivant: Mapped[int | None] = mapped_column(Integer)
+    changement_le: Mapped[date | None] = mapped_column(Date)
 
 
 class Collection(Base):
@@ -152,6 +157,9 @@ class Reglage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=ID)
     cartes_par_booster: Mapped[int] = mapped_column(Integer)
+    # Réglages à venir (08_evolution_…), appliqués à partir de suivant_a_partir_du.
+    cartes_par_booster_suivant: Mapped[int | None] = mapped_column(Integer)
+    suivant_a_partir_du: Mapped[date | None] = mapped_column(Date)
     modifie_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     modifie_par_id: Mapped[uuid.UUID | None] = mapped_column("modifie_par", ForeignKey("utilisateur.id"))
 
@@ -165,6 +173,7 @@ class RareteTirage(Base):
 
     rarete: Mapped[Rarete] = mapped_column(_varchar_enum(Rarete, 20), primary_key=True)
     poids: Mapped[int] = mapped_column(Integer)
+    poids_suivant: Mapped[int | None] = mapped_column(Integer)
 
 
 class MotifTirage(str, enum.Enum):

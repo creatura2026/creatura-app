@@ -51,6 +51,23 @@ def require_admin(user: CurrentUser) -> Utilisateur:
 AdminUser = Annotated[Utilisateur, Depends(require_admin)]
 
 
+def require_player(user: CurrentUser) -> Utilisateur:
+    """Un administrateur gère le jeu mais n'y joue pas : ni booster, ni collection, ni échange."""
+    if user.role != Role.JOUEUR:
+        raise Forbidden("Un compte administrateur ne joue pas : utilisez un compte joueur.")
+    return user
+
+
+PlayerUser = Annotated[Utilisateur, Depends(require_player)]
+
+
+def apply_scheduled_changes(db: DbSession) -> None:
+    """Applique les changements de l'administrateur arrivés à échéance (minuit, heure de Paris)."""
+    from app.controllers.planning import apply_due  # import tardif : planning importe booster
+
+    apply_due(db)
+
+
 def page_params(
     page: int = Query(1, ge=1, description="Numéro de page, à partir de 1"),
     page_size: int = Query(20, ge=1, le=100, alias="pageSize", description="Nombre d'éléments par page"),

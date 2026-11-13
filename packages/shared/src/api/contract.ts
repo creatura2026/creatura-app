@@ -35,6 +35,9 @@ import type {
   TradeServerMessage,
   UpdateBoosterSettingsRequest,
   User,
+  AdminCreature,
+  AdminCreatureInput,
+  RarityChangeInput,
 } from './types'
 
 export interface AuthApi {
@@ -81,5 +84,13 @@ export interface AdminApi extends AuthApi {
   listAdminTrades(query?: AdminTradesQuery): Promise<TradePage>
   getRarityDistribution(query?: RarityDistributionQuery): Promise<RarityDistribution>
   getBoosterSettings(): Promise<BoosterSettings>
+  /** Appliqué au prochain minuit (heure de Paris), voir `scheduled` dans la réponse. */
   updateBoosterSettings(body: UpdateBoosterSettingsRequest): Promise<BoosterSettings>
+  /** Toutes les cartes, y compris celles qui n'apparaissent qu'au prochain minuit. */
+  listAdminCreatures(): Promise<AdminCreature[]>
+  /** Nouvelle carte, visible et tirable au prochain minuit. */
+  createAdminCreature(body: AdminCreatureInput): Promise<AdminCreature>
+  /** Nouvelle rareté d'une carte, appliquée au prochain minuit. */
+  scheduleRarityChange(creatureId: string, body: RarityChangeInput): Promise<AdminCreature>
+  cancelRarityChange(creatureId: string): Promise<AdminCreature>
 }

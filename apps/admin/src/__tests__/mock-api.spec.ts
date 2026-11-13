@@ -73,13 +73,32 @@ describe('API d’administration simulée', () => {
 })
 
 describe('Réglage des boosters (simulé)', () => {
-  it('permet à un administrateur de changer le nombre de cartes', async () => {
+  it('enregistre le nombre de cartes pour le prochain minuit', async () => {
     const { api, loginAs } = setup()
     await loginAs('admin')
+    const before = (await api.getBoosterSettings()).cardsPerBooster
     const saved = await api.updateBoosterSettings({ cardsPerBooster: 7 })
-    expect(saved.cardsPerBooster).toBe(7)
+    expect(saved.cardsPerBooster).toBe(before) // inchangé jusqu'à minuit
+    expect(saved.scheduled?.cardsPerBooster).toBe(7)
     expect(saved.updatedBy?.pseudo).toBe('Admin')
-    expect((await api.getBoosterSettings()).cardsPerBooster).toBe(7)
+    expect((await api.getBoosterSettings()).scheduled?.cardsPerBooster).toBe(7)
+  })
+
+  it('ajoute une carte en édition limitée, visible au prochain minuit', async () => {
+    const { api, loginAs } = setup()
+    await loginAs('admin')
+    const card = await api.createAdminCreature({
+      name: 'Pixelion',
+      family: 'LUEUR',
+      rarity: 'LEGENDARY',
+      image: 'sprites/eye_orb_2.png',
+      stock: 3,
+    })
+    expect(card.stockTotal).toBe(3)
+    expect(card.availableFrom > new Date().toISOString().slice(0, 10)).toBe(true)
+    await expect(
+      api.createAdminCreature({ name: 'X', family: 'LUEUR', rarity: 'LEGENDARY', image: 'sprites/x.png' }),
+    ).rejects.toSatisfy((e) => isApiError(e, 'VALIDATION_ERROR'))
   })
 
   it('refuse une valeur hors limites', async () => {

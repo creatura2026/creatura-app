@@ -188,6 +188,15 @@ def only_creatures(rarete: str, names: list[str]) -> None:
         db.commit()
 
 
+def pass_midnight() -> None:
+    """Simule le passage de minuit : les changements prévus « demain » deviennent dus aujourd'hui."""
+    with SessionLocal() as db:
+        db.execute(text("UPDATE reglage SET suivant_a_partir_du = suivant_a_partir_du - 1 WHERE suivant_a_partir_du IS NOT NULL"))
+        db.execute(text("UPDATE creature SET disponible_le = disponible_le - 1"))
+        db.execute(text("UPDATE creature SET changement_le = changement_le - 1 WHERE changement_le IS NOT NULL"))
+        db.commit()
+
+
 def not_first_booster(*user_ids: uuid.UUID) -> None:
     """Fait comme si ces joueurs avaient déjà ouvert un booster (hier) : pas de rare garantie."""
     with SessionLocal() as db:

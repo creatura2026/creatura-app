@@ -17,6 +17,7 @@ from conftest import (
     problem,
     register_and_login,
     set_booster_size,
+    pass_midnight,
     set_stock,
     set_weights,
 )
@@ -147,6 +148,9 @@ def test_booster_size_follows_admin_setting(client, admin_headers):
     h = register_and_login(client, "Lina")["headers"]
     client.put(f"{API}/admin/settings/booster", json={"cardsPerBooster": 3}, headers=admin_headers)
 
+    # Pris en compte au prochain minuit seulement : les boosters du jour gardent 5 cartes.
+    assert client.get(f"{API}/me/boosters/today", headers=h).json()["cardsPerBooster"] == 5
+    pass_midnight()
     assert client.get(f"{API}/me/boosters/today", headers=h).json()["cardsPerBooster"] == 3
     assert len(client.post(f"{API}/me/boosters", headers=h).json()["cards"]) == 3
 

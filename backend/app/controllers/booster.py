@@ -79,7 +79,7 @@ def get_today(db: Session, user: Utilisateur) -> BoosterTodayOut:
 
 def _draw(db: Session, count: int, first_booster: bool) -> tuple[list[draw.DrawnCard], dict[int, Creature]]:
     """Tire les cartes d'un booster ; renvoie aussi les créatures du catalogue, par id."""
-    creatures = {c.id: c for c in db.scalars(select(Creature))}
+    creatures = {c.id: c for c in db.scalars(select(Creature).where(Creature.disponible_le <= today_sql()))}
     candidates = [draw.Candidate(c.id, c.rarete.value, c.stock_restant) for c in creatures.values()]
     weights = {r.value: w for r, w in rarity_weights(db).items()}
     cards = draw.draw_booster(candidates, weights, count, first_booster=first_booster, rng=_rng)

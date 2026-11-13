@@ -7,6 +7,7 @@
  * Avec le vrai back, ce fichier disparaît (le serveur fait autorité, voir `/admin/settings/booster`).
  */
 import type { BoosterSettings } from './types'
+import { parisToday } from '../format'
 
 export const DEFAULT_CARDS_PER_BOOSTER = 5
 export const MIN_CARDS_PER_BOOSTER = 3
@@ -19,6 +20,7 @@ export const DEFAULT_RARITY_WEIGHTS = { COMMON: 70, UNCOMMON: 20, RARE: 8, LEGEN
 const DEFAULTS: BoosterSettings = {
   cardsPerBooster: DEFAULT_CARDS_PER_BOOSTER,
   rarityWeights: { ...DEFAULT_RARITY_WEIGHTS },
+  scheduled: null,
   updatedAt: null,
   updatedBy: null,
 }
@@ -35,7 +37,19 @@ export function readMockBoosterSettings(): BoosterSettings {
     if (!Number.isInteger(n) || n < MIN_CARDS_PER_BOOSTER || n > MAX_CARDS_PER_BOOSTER) {
       return { ...DEFAULTS }
     }
-    return { ...parsed, rarityWeights: parsed.rarityWeights ?? { ...DEFAULT_RARITY_WEIGHTS } }
+    const settings: BoosterSettings = {
+      ...parsed,
+      rarityWeights: parsed.rarityWeights ?? { ...DEFAULT_RARITY_WEIGHTS },
+      scheduled: parsed.scheduled ?? null,
+    }
+    // Comme le serveur : les réglages enregistrés s'appliquent au prochain minuit.
+    if (settings.scheduled && settings.scheduled.effectiveFrom <= parisToday()) {
+      const { cardsPerBooster, rarityWeights } = settings.scheduled
+      const applied = { ...settings, cardsPerBooster, rarityWeights, scheduled: null }
+      writeMockBoosterSettings(applied)
+      return applied
+    }
+    return settings
   } catch {
     return { ...DEFAULTS }
   }

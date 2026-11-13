@@ -1,8 +1,12 @@
 """UC-12 à UC-14 : tableau de bord administrateur, et réglage des boosters.
 
 Boosters ouverts par jour et répartition observée des raretés viennent de l'historique des
-tirages (`booster_carte`, une ligne par carte), sur la période demandée. Le taux attendu est le
-calcul exact de `app.draw.expected_card_rates` (règle d'exclusion rare / légendaire comprise).
+tirages (`booster_carte`, une ligne par carte, rare garantie du premier booster comprise), sur la
+période demandée. Le taux attendu est le calcul exact de `app.draw.expected_card_rates` (règle
+d'exclusion rare / légendaire comprise, sans la garantie du premier booster).
+
+Toute modification (réglages des boosters, nouvelle carte, rareté d'une carte) s'applique au
+prochain minuit, heure de Paris (`app.controllers.planning`).
 """
 
 import uuid
@@ -14,9 +18,11 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.controllers.booster import settings as booster_settings
 from app.controllers.booster import today
-from app.controllers.catalog import paginate, rarity_drop_rates, rarity_weights
-from app.errors import BadRequest, field_error
-from app.models import BoosterCarte, Echange, MotifTirage, Rarete, RareteTirage, Reglage, Role, Statut, Utilisateur
+from app.controllers.catalog import CATALOG_ORDER, parse_creature_id, paginate, rarity_drop_rates, rarity_weights
+from app.controllers.planning import next_midnight_day
+from app.errors import BadRequest, NotFound, field_error
+from app.models import BoosterCarte, Creature, Echange, Rarete, RareteTirage, Reglage, Role, Statut, Utilisateur
+from app.schemas.admin import AdminCreatureIn, RarityChangeIn
 from app.schemas.admin import (
     AdminStatsOut,
     CompletedTrades,
@@ -108,18 +114,12 @@ def list_trades(
 
 
 def rarity_distribution(db: Session, period: Period) -> RarityDistributionOut:
-    """Compare la probabilité de chaque rareté aux cartes réellement tirées sur la période.
-
-    Seules les cartes tirées selon les poids comptent : la rare garantie du premier booster
-    fausserait le taux observé des rares.
-    """
+    """Compare la probabilité de chaque rareté à toutes les cartes sorties des boosters sur la
+    période, rare garantie du premier booster comprise."""
     drawn = dict(
         db.execute(
             select(BoosterCarte.rarete, func.count())
-            .where(
-                BoosterCarte.jour.between(period.date_from, period.date_to),
-                BoosterCarte.motif == MotifTirage.TIRAGE,
-            )
+            .where(BoosterCarte.jour.between(period.date_from, period.date_to))
             .group_by(BoosterCarte.rarete)
         ).all()
     )
@@ -140,8 +140,12 @@ def rarity_distribution(db: Session, period: Period) -> RarityDistributionOut:
     )
 
 
-def get_booster_settings(db: Session) -> tuple[Reglage, dict[Rarete, int]]:
-    return booster_settings(db), rarity_weights(db)
+def _weight_rows(db: Session) -> list[RareteTirage]:
+    return list(db.scalars(select(RareteTirage)))
+
+
+def get_booster_settings(db: Session) -> tuple[Reglage, list[RareteTirage]]:
+    return booster_settings(db), _weight_rows(db)
 
 
 def _check_weights(weights: dict[RarityCode, int]) -> dict[Rarete, int]:
@@ -160,15 +164,91 @@ def _check_weights(weights: dict[RarityCode, int]) -> dict[Rarete, int]:
 
 def update_booster_settings(
     db: Session, admin: Utilisateur, cards_per_booster: int, weights: dict[RarityCode, int] | None = None
-) -> tuple[Reglage, dict[Rarete, int]]:
-    """S'applique aux boosters ouverts après la modification."""
+) -> tuple[Reglage, list[RareteTirage]]:
+    """Enregistre les réglages pour le prochain minuit ; les boosters du jour ne changent pas.
+
+    Une nouvelle modification le même jour remplace la précédente.
+    """
     by_rarete = _check_weights(weights) if weights is not None else None
     reglage = booster_settings(db)
-    reglage.cartes_par_booster = cards_per_booster
+    reglage.cartes_par_booster_suivant = cards_per_booster
+    reglage.suivant_a_partir_du = next_midnight_day(db)
     reglage.modifie_le = func.now()
     reglage.modifie_par_id = admin.id
-    for rarete, poids in (by_rarete or {}).items():
-        db.execute(update(RareteTirage).where(RareteTirage.rarete == rarete).values(poids=poids))
+    for row in _weight_rows(db):
+        row.poids_suivant = by_rarete[row.rarete] if by_rarete is not None else row.poids_suivant
     db.commit()
     db.refresh(reglage)
-    return reglage, rarity_weights(db)
+    return reglage, _weight_rows(db)
+
+
+# ── Cartes du catalogue ───────────────────────────────────────────────────
+
+
+def _check_stock(rarete: Rarete, stock: int | None) -> None:
+    if rarete == Rarete.LEGENDAIRE and stock is None:
+        raise field_error(
+            "VALIDATION_ERROR", "stock", "Une légendaire est une édition limitée : indiquez le nombre d'exemplaires."
+        )
+    if rarete != Rarete.LEGENDAIRE and stock is not None:
+        raise field_error("VALIDATION_ERROR", "stock", "Seule une légendaire (édition limitée) a un nombre d'exemplaires.")
+
+
+def list_creatures(db: Session) -> list[Creature]:
+    """Toutes les cartes, y compris celles qui n'apparaissent qu'au prochain minuit."""
+    return list(db.scalars(select(Creature).order_by(*CATALOG_ORDER)))
+
+
+def get_creature(db: Session, creature_id: str) -> Creature:
+    creature = db.get(Creature, parse_creature_id(creature_id))
+    if creature is None:
+        raise NotFound("Cette créature n'existe pas.")
+    return creature
+
+
+def create_creature(db: Session, data: AdminCreatureIn) -> Creature:
+    """Nouvelle carte, visible et tirable à partir du prochain minuit."""
+    rarete = RARETE_OF[data.rarity]
+    _check_stock(rarete, data.stock)
+    creature = Creature(
+        nom=data.name.strip(),
+        description=data.description.strip() or None,
+        famille=data.family,
+        rarete=rarete,
+        image=data.image,
+        stock_total=data.stock,
+        stock_restant=data.stock,
+        disponible_le=next_midnight_day(db),
+    )
+    db.add(creature)
+    db.commit()  # nom déjà pris : uq_creature_nom, traduit en erreur de champ (app.errors)
+    db.refresh(creature)
+    return creature
+
+
+def schedule_rarity_change(db: Session, creature_id: str, data: RarityChangeIn) -> Creature:
+    """Nouvelle rareté (et stock si légendaire) appliquée au prochain minuit.
+
+    Les exemplaires déjà possédés restent dans les collections. Une carte qui devient légendaire
+    reçoit `stock` nouveaux exemplaires à tirer ; une légendaire qui change de rareté devient
+    illimitée.
+    """
+    creature = get_creature(db, creature_id)
+    rarete = RARETE_OF[data.rarity]
+    _check_stock(rarete, data.stock)
+    if rarete == creature.rarete and rarete != Rarete.LEGENDAIRE:
+        raise field_error("VALIDATION_ERROR", "rarity", "La carte a déjà cette rareté.")
+    creature.rarete_suivante = rarete
+    creature.stock_suivant = data.stock
+    creature.changement_le = next_midnight_day(db)
+    db.commit()
+    db.refresh(creature)
+    return creature
+
+
+def cancel_rarity_change(db: Session, creature_id: str) -> Creature:
+    creature = get_creature(db, creature_id)
+    creature.rarete_suivante = creature.stock_suivant = creature.changement_le = None
+    db.commit()
+    db.refresh(creature)
+    return creature

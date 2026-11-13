@@ -1,20 +1,20 @@
 """Collection — UC-06, UC-07."""
 
-from fastapi import APIRouter, Query
+from fastapi import Depends, APIRouter, Query
 
 from app.controllers import collection
-from app.dependencies import CurrentUser, DbSession, Pagination
+from app.dependencies import apply_scheduled_changes, PlayerUser, DbSession, Pagination
 from app.models import Famille
 from app.schemas.catalog import RARETE_OF, CreatureSummaryOut, RarityCode
 from app.schemas.collection import CollectionEntryOut, CollectionPageOut, Ownership
 from app.views.catalog import Search
 
-router = APIRouter(tags=["Collection"])
+router = APIRouter(tags=["Collection"], dependencies=[Depends(apply_scheduled_changes)])
 
 
 @router.get("/me/collection", response_model=CollectionPageOut)
 def my_collection(
-    user: CurrentUser,
+    user: PlayerUser,
     db: DbSession,
     page: Pagination,
     search: str | None = Search,

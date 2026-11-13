@@ -54,6 +54,12 @@ const router = createRouter({
           meta: { title: 'Raretés' },
         },
         {
+          path: 'cartes',
+          name: 'creatures',
+          component: () => import('@/views/CreaturesView.vue'),
+          meta: { title: 'Cartes' },
+        },
+        {
           path: 'reglages',
           name: 'settings',
           component: () => import('@/views/SettingsView.vue'),

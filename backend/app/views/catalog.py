@@ -1,14 +1,14 @@
 """Catalogue — UC-05 et filtres."""
 
-from fastapi import APIRouter, Query
+from fastapi import Depends, APIRouter, Query
 
 from app.controllers import catalog
-from app.dependencies import CurrentUser, DbSession, Pagination
+from app.dependencies import apply_scheduled_changes, CurrentUser, DbSession, Pagination
 from app.models import Famille
 from app.schemas.base import Page
 from app.schemas.catalog import RARETE_OF, CreatureOut, FamilyOut, RarityCode, RarityOut
 
-router = APIRouter(tags=["Catalogue"])
+router = APIRouter(tags=["Catalogue"], dependencies=[Depends(apply_scheduled_changes)])
 
 Search = Query(None, min_length=1, max_length=50, description="Nom de la créature, sans casse ni accents")
 

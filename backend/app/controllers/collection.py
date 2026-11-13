@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.controllers.catalog import CATALOG_ORDER, filter_creatures, paginate
+from app.controllers.catalog import _today as today_sql
 from app.models import Collection, Creature, Famille, Rarete, Utilisateur
 from app.schemas.auth import CollectionProgress
 from app.schemas.base import PageParams, PageResult
@@ -53,7 +54,7 @@ def owned_quantity(db: Session, user_id: uuid.UUID, creature_id: int) -> int:
 
 
 def progress(db: Session, user_id: uuid.UUID) -> CollectionProgress:
-    total_creatures = db.scalar(select(func.count(Creature.id))) or 0
+    total_creatures = db.scalar(select(func.count(Creature.id)).where(Creature.disponible_le <= today_sql())) or 0
     owned_creatures, total_cards = db.execute(
         select(
             func.count().filter(Collection.quantite >= 1),

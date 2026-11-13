@@ -108,6 +108,7 @@ _CONSTRAINTS: dict[str, DomainError] = {
     "ck_reglage_cartes_par_booster": field_error(
         "VALIDATION_ERROR", "cardsPerBooster", "Un booster contient de 3 à 10 cartes."
     ),
+    "uq_creature_nom": field_error("VALIDATION_ERROR", "name", "Une carte porte déjà ce nom."),
     "ck_rarete_tirage_poids": field_error(
         "VALIDATION_ERROR", "rarityWeights", "Le poids d'une rareté va de 0 à 1000."
     ),

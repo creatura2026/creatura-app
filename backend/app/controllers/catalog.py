@@ -2,7 +2,7 @@
 
 import unicodedata
 
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Date, Select, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import draw
@@ -15,6 +15,13 @@ from app.schemas.catalog import RARITY_CODES, RARITY_LABELS, RARITY_RANK, Family
 # l'extension unaccent, on retire les accents français avec translate().
 _ACCENTS = "àáâãäåçèéêëìíîïñòóôõöùúûüýÿ"
 _PLAIN = "aaaaaaceeeeiiiinooooouuuuyy"
+
+
+def _today():
+    """Date du jour à l'heure de Paris, calculée par Postgres (comme app.controllers.booster)."""
+    from app.config import get_settings
+
+    return cast(func.timezone(get_settings().timezone, func.now()), Date)
 
 
 def normalize(text: str) -> str:
@@ -43,6 +50,8 @@ CATALOG_ORDER = (_FAMILY_ORDER, _RARITY_ORDER, Creature.nom)
 def filter_creatures(
     query: Select, search: str | None, family: Famille | None, rarity: Rarete | None
 ) -> Select:
+    # Une créature ajoutée par l'administrateur n'apparaît qu'à partir de son jour de disponibilité.
+    query = query.where(Creature.disponible_le <= _today())
     if search and (needle := normalize(search)):
         query = query.where(plain(Creature.nom).contains(needle, autoescape=True))
     if family is not None:
@@ -73,7 +82,7 @@ def list_creatures(
 
 def get_creature(db: Session, creature_id: str) -> Creature:
     creature = db.get(Creature, parse_creature_id(creature_id))
-    if creature is None:
+    if creature is None or creature.disponible_le > db.scalar(select(_today())):
         raise NotFound("Cette créature n'existe pas.")
     return creature
 
@@ -95,7 +104,10 @@ def drawable_rarities(db: Session) -> set[Rarete]:
     return set(
         db.scalars(
             select(Creature.rarete)
-            .where(or_(Creature.stock_restant.is_(None), Creature.stock_restant > 0))
+            .where(
+                or_(Creature.stock_restant.is_(None), Creature.stock_restant > 0),
+                Creature.disponible_le <= _today(),
+            )
             .distinct()
         )
     )

@@ -11,6 +11,7 @@ import {
   writeMockBoosterSettings,
 } from '@creatura/shared/api/mock-settings'
 import type {
+  AdminCreature,
   DailyCount,
   PlayerSummary,
   Role,
@@ -26,7 +27,7 @@ import {
   problem,
   seededRandom,
 } from '@creatura/shared/api/mock-utils'
-import { CREATURES, RARITIES } from '@creatura/shared/fixtures/catalog'
+import { CREATURES, FAMILIES, RARITIES } from '@creatura/shared/fixtures/catalog'
 import { addDays, parisToday } from '@creatura/shared/format'
 
 export const DEMO_ACCOUNTS = {
@@ -380,14 +381,98 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
           errors: [{ field: 'cardsPerBooster', message }],
         })
       }
+      const current = readMockBoosterSettings()
       const settings = {
-        cardsPerBooster: n,
-        rarityWeights: body.rarityWeights ?? readMockBoosterSettings().rarityWeights,
+        ...current,
+        // Comme le serveur : appliqué au prochain minuit, les valeurs du jour ne changent pas.
+        scheduled: {
+          cardsPerBooster: n,
+          rarityWeights: body.rarityWeights ?? current.rarityWeights,
+          effectiveFrom: addDays(parisToday(), 1),
+        },
         updatedAt: new Date().toISOString(),
         updatedBy: { id: account.id, pseudo: account.pseudo },
       }
       writeMockBoosterSettings(settings)
       return clone(settings)
     },
+
+    async listAdminCreatures() {
+      await delay(100, 220)
+      admin()
+      return clone(mockCreatures())
+    },
+
+    async createAdminCreature(body) {
+      await delay()
+      admin()
+      const legendary = body.rarity === 'LEGENDARY'
+      if (legendary !== (body.stock != null)) {
+        const message = legendary
+          ? 'Une légendaire est une édition limitée : indiquez le nombre d’exemplaires.'
+          : 'Seule une légendaire (édition limitée) a un nombre d’exemplaires.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'stock', message }] })
+      }
+      if (mockCreatures().some((c) => normalize(c.name) === normalize(body.name))) {
+        const message = 'Une carte porte déjà ce nom.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'name', message }] })
+      }
+      const family = FAMILIES.find((f) => f.code === body.family) ?? FAMILIES[0]!
+      const rarity = RARITIES.find((r) => r.code === body.rarity) ?? RARITIES[0]!
+      const created: AdminCreature = {
+        id: String(1000 + addedCreatures.length),
+        name: body.name.trim(),
+        description: body.description ?? '',
+        family,
+        rarity: { code: rarity.code, label: rarity.label },
+        image: body.image,
+        imageUrl: body.image,
+        stockTotal: body.stock ?? null,
+        stockRemaining: body.stock ?? null,
+        availableFrom: addDays(parisToday(), 1),
+        scheduledChange: null,
+      }
+      addedCreatures.push(created)
+      return clone(created)
+    },
+
+    async scheduleRarityChange(creatureId, body) {
+      await delay()
+      admin()
+      const creature = mockCreatures().find((c) => c.id === creatureId)
+      if (!creature) throw problem('NOT_FOUND', 'Cette créature n’existe pas.')
+      const rarity = RARITIES.find((r) => r.code === body.rarity) ?? RARITIES[0]!
+      rarityChanges.set(creatureId, {
+        rarity: { code: rarity.code, label: rarity.label },
+        stock: body.stock ?? null,
+        effectiveFrom: addDays(parisToday(), 1),
+      })
+      return clone(mockCreatures().find((c) => c.id === creatureId)!)
+    },
+
+    async cancelRarityChange(creatureId) {
+      await delay()
+      admin()
+      rarityChanges.delete(creatureId)
+      const creature = mockCreatures().find((c) => c.id === creatureId)
+      if (!creature) throw problem('NOT_FOUND', 'Cette créature n’existe pas.')
+      return clone(creature)
+    },
   }
+}
+
+// Cartes ajoutées et changements de rareté de la démo : en mémoire, perdus au rechargement.
+const addedCreatures: AdminCreature[] = []
+const rarityChanges = new Map<string, NonNullable<AdminCreature['scheduledChange']>>()
+
+function mockCreatures(): AdminCreature[] {
+  const base: AdminCreature[] = CREATURES.map((c) => ({
+    ...c,
+    image: c.imageUrl,
+    stockTotal: null,
+    stockRemaining: null,
+    availableFrom: '2026-01-01',
+    scheduledChange: null,
+  }))
+  return [...base, ...addedCreatures].map((c) => ({ ...c, scheduledChange: rarityChanges.get(c.id) ?? null }))
 }

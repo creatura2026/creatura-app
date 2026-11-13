@@ -64,6 +64,11 @@ export type AdminStats = Schemas['AdminStats']
 export type RarityDistribution = Schemas['RarityDistribution']
 export type BoosterSettings = Schemas['BoosterSettings']
 export type UpdateBoosterSettingsRequest = Schemas['UpdateBoosterSettingsRequest']
+export type ScheduledBoosterSettings = Schemas['ScheduledBoosterSettings']
+export type RarityWeights = Schemas['RarityWeights']
+export type AdminCreature = Schemas['AdminCreature']
+export type AdminCreatureInput = Schemas['AdminCreatureInput']
+export type RarityChangeInput = Schemas['RarityChangeInput']
 
 /** Erreur levée par les clients API (réelle ou simulée), porteuse du Problem Details du serveur. */
 export class ApiError extends Error {

@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session
 from app import bus
 from app.controllers import trade
 from app.database import SessionLocal
-from app.dependencies import CurrentUser, DbSession, Pagination, user_from_token
-from app.errors import DomainError, NotFound, Unauthorized, problem_body
-from app.models import EchangeMessage, Utilisateur
+from app.dependencies import PlayerUser, DbSession, Pagination, user_from_token
+from app.errors import DomainError, Forbidden, NotFound, Unauthorized, problem_body
+from app.models import EchangeMessage, Utilisateur, Role
 from app.realtime import Room, Seat, rooms
 from app.schemas.base import Page
 from app.schemas.trade import (
@@ -188,7 +188,7 @@ bus.listener.subscribe(_on_notice, _resync, _forget_gone_pods)
 
 
 @router.post("", response_model=TradeOut, status_code=status.HTTP_201_CREATED)
-async def create_trade(data: TradeCreateIn, user: CurrentUser, db: DbSession, response: Response):
+async def create_trade(data: TradeCreateIn, user: PlayerUser, db: DbSession, response: Response):
     """Ouvre une salle d'échange, tapis vides. S'il en existe déjà une avec ce joueur : 200, elle est renvoyée."""
     opened, created, changed = await run_in_threadpool(trade.create_trade, db, user, data)
     if not created:
@@ -200,7 +200,7 @@ async def create_trade(data: TradeCreateIn, user: CurrentUser, db: DbSession, re
 
 @router.get("", response_model=Page[TradeOut])
 def list_trades(
-    user: CurrentUser,
+    user: PlayerUser,
     db: DbSession,
     page: Pagination,
     role: TradeRole = TradeRole.all,
@@ -212,12 +212,12 @@ def list_trades(
 
 
 @router.get("/{tradeId}", response_model=TradeOut)
-def get_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803 (nom du contrat)
+def get_trade(tradeId: uuid.UUID, user: PlayerUser, db: DbSession):  # noqa: N803 (nom du contrat)
     return TradeOut.of(trade.get_trade(db, user, tradeId))
 
 
 @router.post("/{tradeId}/refuse", response_model=TradeOut)
-async def refuse_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803
+async def refuse_trade(tradeId: uuid.UUID, user: PlayerUser, db: DbSession):  # noqa: N803
     """Le destinataire abandonne : la salle est fermée, aucun transfert."""
     closed = await run_in_threadpool(trade.refuse_trade, db, user, tradeId)
     await notify_room(closed.id)
@@ -225,7 +225,7 @@ async def refuse_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  #
 
 
 @router.post("/{tradeId}/cancel", response_model=TradeOut)
-async def cancel_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  # noqa: N803
+async def cancel_trade(tradeId: uuid.UUID, user: PlayerUser, db: DbSession):  # noqa: N803
     """Le proposant abandonne : la salle est fermée, aucun transfert."""
     closed = await run_in_threadpool(trade.cancel_trade, db, user, tradeId)
     await notify_room(closed.id)
@@ -238,6 +238,8 @@ async def cancel_trade(tradeId: uuid.UUID, user: CurrentUser, db: DbSession):  #
 def _enter(db: Session, token: str, trade_id: uuid.UUID) -> uuid.UUID:
     """Contrôle d'accès à l'ouverture : jeton valide, joueur de l'échange."""
     me = user_from_token(db, token, ACCESS)
+    if me.role != Role.JOUEUR:
+        raise Forbidden("Un compte administrateur ne joue pas : utilisez un compte joueur.")
     trade.get_trade(db, me, trade_id)
     return me.id
 

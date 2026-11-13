@@ -132,6 +132,7 @@ export function createHttpClient(session: SessionStore, baseUrl: string = API_BA
     post: <T>(path: string, body?: unknown, auth = true) =>
       request<T>('POST', path, { body, auth }),
     put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
+    del: <T>(path: string) => request<T>('DELETE', path, {}),
     session,
   }
 }
@@ -312,5 +313,9 @@ export function createHttpAdminApi(session: SessionStore): AdminApi {
     getRarityDistribution: (query) => http.get('/admin/rarity-distribution', query),
     getBoosterSettings: () => http.get('/admin/settings/booster'),
     updateBoosterSettings: (body) => http.put('/admin/settings/booster', body),
+    listAdminCreatures: () => http.get('/admin/creatures'),
+    createAdminCreature: (body) => http.post('/admin/creatures', body),
+    scheduleRarityChange: (creatureId, body) => http.put(`/admin/creatures/${id(creatureId)}/rarity`, body),
+    cancelRarityChange: (creatureId) => http.del(`/admin/creatures/${id(creatureId)}/rarity`),
   }
 }
