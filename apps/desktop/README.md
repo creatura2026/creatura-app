@@ -12,8 +12,9 @@ Première fois, après `pnpm install` à la racine :
 cp apps/desktop/config.example.json apps/desktop/config.json
 ```
 
-Dans `config.json`, remplacer `dxxxxxxxxxxxxx` par le domaine CloudFront de l'infra (voir
-[Trouver l'adresse du backend](#trouver-ladresse-du-backend)). Puis, depuis la racine du dépôt :
+Le modèle contient déjà le domaine du site, `https://creatura.creasmaloud.dev` : rien à modifier
+tant qu'il ne change pas (voir [Trouver l'adresse du backend](#trouver-ladresse-du-backend)). Puis,
+depuis la racine du dépôt :
 
 ```sh
 pnpm desktop        # exe branché sur le backend AWS (adresse de config.json)
@@ -45,6 +46,32 @@ Détails) et dans `latest.json`. Avant de publier une nouvelle version, l'augmen
 cd apps/desktop
 npm version patch --no-git-tag-version   # 0.1.0 → 0.1.1 (minor : 0.2.0, major : 1.0.0)
 ```
+
+## Dans la CI
+
+Le job « Application Windows » de [.github/workflows/ci.yml](../../.github/workflows/ci.yml)
+construit l'exe sur un runner Windows, après le job « Front », à chaque push sur `main` ou
+`develop` (pas sur les pull requests, pour ne pas consommer de minutes Windows à chaque mise à jour).
+
+- **Adresse du backend** : variable `CUSTOM_DOMAIN` de l'environnement GitHub `production` du dépôt
+  creatura-app (Settings → Environments → production), le domaine qui pointe sur CloudFront :
+  `https://creatura.creasmaloud.dev` (https:// est ajouté s'il manque). Contrairement au domaine
+  CloudFront, il ne change pas quand l'infra est recréée. Sans elle, la CI produit la version démo
+  et le signale par un avertissement.
+- **Échec** : le job est facultatif (`continue-on-error`) ; s'il échoue, la CI reste verte.
+- **Récupérer l'exe** : page du run → section *Artifacts* → `creatura-windows-<version>` (les deux
+  exe et `latest.json`).
+- **Release** : pousser un tag `v<version>` (par exemple `v0.1.1`, identique à la version de
+  `package.json`, sinon le job échoue) publie les fichiers dans une Release GitHub.
+
+```sh
+cd apps/desktop && npm version patch --no-git-tag-version && cd ../..
+git commit -am "chore(desktop): version 0.1.1"
+git tag v0.1.1 && git push --follow-tags
+```
+
+Le dépôt creatura-infra construit aussi l'exe au déploiement du front (job « Publish Windows app ») :
+il le publie dans `telechargements/` avec l'adresse du site qu'il vient de mettre en ligne.
 
 ## Publier sur le site
 
@@ -82,25 +109,22 @@ en ligne lit le bucket S3.
 
 ## Trouver l'adresse du backend
 
-L'adresse à donner est le **domaine CloudFront**, pas celui du load balancer :
+L'adresse à donner est le **domaine du site**, `https://creatura.creasmaloud.dev`, jamais celle du
+load balancer :
 
 ```
-exe ──https──▶ CloudFront ──▶ /api/*  ──▶ ALB ──▶ pods du back (EKS) ──▶ RDS
-                          └─▶ sprites (S3)
+exe ──https──▶ creatura.creasmaloud.dev (CloudFront) ──▶ /api/*  ──▶ ALB ──▶ pods du back (EKS) ──▶ RDS
+                                                    └─▶ sprites (S3)
 ```
 
 L'ALB de l'EKS n'accepte que le trafic venant de CloudFront (`creatura-infra/eks/api.tf`) : une
-connexion directe est refusée. Le domaine se lit dans le dépôt creatura-infra :
+connexion directe est refusée. Pour vérifier : `https://creatura.creasmaloud.dev/api/v1/health` doit
+répondre `{"status":"ok","database":"ok"}`.
 
-```sh
-terraform -chdir=infra output -raw cloudfront_domain_name
-```
-
-ou dans la console AWS → CloudFront → Distributions → colonne *Domain name*. Pour vérifier :
-`https://<domaine>/api/v1/health` doit répondre `{"status":"ok","database":"ok"}`.
-
-**Le domaine change à chaque recréation de l'infra.** Il faut alors mettre à jour `config.json`
-avant le prochain build, ou corriger un exe déjà distribué (section suivante).
+Le domaine du site ne change pas quand l'infra est recréée, contrairement au nom CloudFront
+(`dxxxx.cloudfront.net`, sortie `cloudfront_domain_name` de la stack `infra/`). Ce nom CloudFront
+reste utilisable, mais il faut alors mettre à jour `config.json` à chaque recréation, ou corriger un
+exe déjà distribué (section suivante).
 
 ## Où l'exe lit l'adresse du backend
 
@@ -116,7 +140,7 @@ Au démarrage, l'exe prend la première adresse définie parmi :
 Le fichier `creatura.json` a le même format que `config.json` :
 
 ```json
-{ "apiUrl": "https://dnouveaudomaine.cloudfront.net" }
+{ "apiUrl": "https://creatura.creasmaloud.dev" }
 ```
 
 Pour l'installeur, il se pose dans le dossier d'installation (par défaut

@@ -42,7 +42,7 @@ const creature = (name: string, family: string) => ({
   name,
   family: { code: family, label: family },
   rarity: { code: 'COMMON', label: 'Commun' },
-  imageUrl: `https://d3tkhh3xjmflkh.cloudfront.net/sprites/${name.toLowerCase()}.png`,
+  imageUrl: `https://d37thcbqe85nlg.cloudfront.net/sprites/${name.toLowerCase()}.png`,
 })
 
 afterEach(() => vi.unstubAllGlobals())
@@ -74,7 +74,7 @@ describe('API HTTP du joueur', () => {
     const page = await createHttpPlayerApi(memorySession()).listCreatures()
 
     expect(page.items[0]!.imageUrl).toBe(
-      'https://d3tkhh3xjmflkh.cloudfront.net/sprites/moussou.png',
+      'https://d37thcbqe85nlg.cloudfront.net/sprites/moussou.png',
     )
   })
 
