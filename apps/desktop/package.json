@@ -1,0 +1,18 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Créatura pour Windows : la PWA joueur dans Electron",
+  "author": "Créatura",
+  "main": "main.cjs",
+  "scripts": {
+    "dist": "node scripts/build.cjs",
+    "dist:demo": "node scripts/build.cjs --demo",
+    "start": "node scripts/build.cjs --start",
+    "start:demo": "node scripts/build.cjs --demo --start"
+  },
+  "devDependencies": {
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0"
+  }
+}

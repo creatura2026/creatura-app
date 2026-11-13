@@ -6,6 +6,8 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+import { localDownloads } from './vite/localDownloads'
+
 // En local, `/api` est relayé vers le back (uvicorn ou docker compose de backend/) :
 // le front appelle la même origine, comme derrière l'Ingress sur EKS.
 // Autre adresse : variable API_PROXY_TARGET.
@@ -25,6 +27,8 @@ export default defineConfig({
     vue(),
     vueDevTools(),
     tailwindcss(),
+    // Exe de l'application Windows servis depuis apps/desktop/release/ (pnpm desktop).
+    localDownloads(fileURLToPath(new URL('../desktop/release', import.meta.url))),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
