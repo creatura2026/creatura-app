@@ -54,7 +54,7 @@ class Server:
 
     def log_tail(self, lines: int = 40) -> str:
         try:
-            return "\n".join(self.log.read_text(errors="replace").splitlines()[-lines:])
+            return "\n".join(self.log.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
         except OSError:
             return "(journal illisible)"
 
@@ -86,7 +86,7 @@ def _run_server(name: str, log_dir: Path):
     log = log_dir / f"{name.replace(' ', '-')}.log"
     # Même environnement que les tests (base creatura_test, JWT_SECRET…) : conftest l'a préparé.
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    with log.open("w") as out:
+    with log.open("w", encoding="utf-8") as out:
         process = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],
             cwd=BACKEND_DIR,
@@ -338,3 +338,59 @@ def test_listener_reconnects_and_resends_full_state(two_servers):
         b.send(type="chat", text="Toujours là ?")
         b.expect("chat", "message de Bob après la reconnexion (sur son propre serveur)")
         assert a.expect("chat", "message de Bob après la reconnexion")["message"]["text"] == "Toujours là ?"
+
+
+# ── Présence entre instances ─────────────────────────────────────────────────
+
+PRUNE_TIMEOUT = 45.0  # processus tué : retiré à la vérification suivante (toutes les 30 s)
+
+
+def _sees_online(room: Live, player_id: uuid.UUID, what: str, timeout: float = RECEIVE_TIMEOUT) -> None:
+    """`player_id` est en ligne pour `room` : dans son `init`, ou par un `presence` qui suit."""
+    if str(player_id) in room.init["online"]:
+        return
+    room.expect(
+        "presence",
+        what,
+        timeout=timeout,
+        where=lambda m: m["playerId"] == str(player_id) and m["online"] is True,
+    )
+
+
+def test_presence_is_shared_between_servers(two_servers):
+    """Chacun voit l'autre en ligne, puis hors ligne quand il quitte la salle."""
+    s1, s2, alice, bob, trade = _setup(two_servers)
+    with live(alice, s1, trade["id"]) as a:
+        with live(bob, s2, trade["id"]) as b:
+            _sees_online(a, bob["id"], "Bob entré sur le serveur 2")
+            _sees_online(b, alice["id"], "Alice déjà présente sur le serveur 1")
+        a.expect(
+            "presence",
+            "Bob sorti du serveur 2",
+            where=lambda m: m["playerId"] == str(bob["id"]) and m["online"] is False,
+        )
+        # Bob revient : de nouveau en ligne pour Alice.
+        with live(bob, s2, trade["id"]) as b:
+            _sees_online(a, bob["id"], "Bob revenu sur le serveur 2")
+            assert str(alice["id"]) in b.init["online"], "Alice absente de l'init de Bob au retour"
+
+
+def test_killed_server_players_go_offline(two_servers):
+    """Le serveur 2 est tué sans prévenir : Bob passe hors ligne pour Alice (serveur 1) dès la
+    vérification suivante des processus disparus."""
+    s1, s2, alice, bob, trade = _setup(two_servers)
+    with live(alice, s1, trade["id"]) as a:
+        b = Live(bob, s2, trade["id"])
+        _sees_online(a, bob["id"], "Bob entré sur le serveur 2")
+        s2.process.kill()
+        s2.process.wait(10)
+        a.expect(
+            "presence",
+            "Bob hors ligne après l'arrêt brutal du serveur 2",
+            timeout=PRUNE_TIMEOUT,
+            where=lambda m: m["playerId"] == str(bob["id"]) and m["online"] is False,
+        )
+        try:
+            b.close()
+        except Exception:
+            pass

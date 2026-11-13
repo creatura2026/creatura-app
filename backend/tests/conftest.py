@@ -66,7 +66,7 @@ def reset_database() -> None:
         cur = raw.cursor()
         cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
         for sql_file in init_scripts():
-            cur.execute(sql_file.read_text())
+            cur.execute(sql_file.read_text(encoding="utf-8"))  # Windows lirait en cp1252
     finally:
         raw.close()
     engine.dispose()
