@@ -1,11 +1,19 @@
 """Salles d'échange en temps réel : les connexions WebSocket ouvertes, par échange.
 
-Tenues en mémoire par ce processus : l'API doit tourner en une seule réplique (ou avec des
-sessions collantes par échange) tant qu'aucun bus de messages ne relie les répliques.
+Tenues en mémoire par ce processus. Avec plusieurs répliques de l'API, les deux joueurs d'un
+échange peuvent être servis par deux processus : chaque action est aussi annoncée aux autres
+processus par PostgreSQL LISTEN/NOTIFY (`bus.py`), qui relisent la base et préviennent leurs
+propres connexions. Si l'écoute est coupée, chaque salle reçoit son état complet à la reprise.
 
-Chaque salle a un verrou : une action (ou une diffusion après un refus, une annulation…)
-s'applique puis se diffuse avant la suivante. Les deux joueurs voient donc les événements
-dans le même ordre, et le dernier `trade` reçu est toujours l'état de la base.
+Ordre des événements :
+- dans un processus, chaque salle a un verrou : une action (ou une diffusion après un refus,
+  une annulation, une annonce d'un autre processus…) s'applique puis se diffuse avant la
+  suivante. Les connexions d'un même processus voient les événements dans le même ordre ;
+- entre processus, les actions sur un échange sont sérialisées par la base (SELECT … FOR UPDATE),
+  les annonces arrivent après le COMMIT, dans l'ordre des COMMIT, et chaque processus les traite
+  une par une en relisant la base. Les états `trade` reçus par un joueur ne reculent donc jamais
+  et le dernier est l'état de la base. En revanche, deux actions *simultanées* des deux joueurs,
+  traitées par deux processus, peuvent apparaître dans un ordre différent sur les deux écrans.
 """
 
 import asyncio
@@ -48,6 +56,10 @@ class TradeRooms:
 
     def get(self, trade_id: uuid.UUID) -> Room | None:
         return self._rooms.get(trade_id)
+
+    def open_trades(self) -> list[uuid.UUID]:
+        """Échanges qui ont une salle sur ce processus."""
+        return list(self._rooms)
 
     def use(self, trade_id: uuid.UUID) -> "_RoomUse":
         """`async with rooms.use(id) as room:` : la salle, verrouillée pendant le bloc."""

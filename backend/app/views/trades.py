@@ -9,11 +9,12 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
+from app import bus
 from app.controllers import trade
 from app.database import SessionLocal
 from app.dependencies import CurrentUser, DbSession, Pagination, user_from_token
 from app.errors import DomainError, NotFound, Unauthorized, problem_body
-from app.models import Utilisateur
+from app.models import EchangeMessage, Utilisateur
 from app.realtime import Room, Seat, rooms
 from app.schemas.base import Page
 from app.schemas.trade import (
@@ -64,6 +65,14 @@ async def _push_trade(trade_id: uuid.UUID, room: Room) -> None:
     await rooms.broadcast(room.seats, {"type": "trade", "trade": await _db(_trade_json, trade_id)})
 
 
+def _cards_unavailable() -> DomainError:
+    return DomainError(
+        "Une carte posée n'est plus disponible : elle a été retirée du tapis. "
+        "Vérifiez l'échange avant de valider.",
+        "CARDS_UNAVAILABLE",
+    )
+
+
 async def notify_room(trade_id: uuid.UUID) -> None:
     """L'échange a changé hors de la salle (ouverture, refus, annulation) : la salle est prévenue."""
     if rooms.get(trade_id) is None:
@@ -71,6 +80,47 @@ async def notify_room(trade_id: uuid.UUID) -> None:
     async with rooms.use(trade_id) as room:
         if room.seats:
             await _push_trade(trade_id, room)
+
+
+# ── Annonces des autres processus (bus.py) ───────────────────────────────────
+
+
+def _message_json(db: Session, trade_id: uuid.UUID, message_id: uuid.UUID) -> dict | None:
+    message = db.get(EchangeMessage, message_id)
+    if message is None or message.echange_id != trade_id:
+        return None
+    return TradeMessageOut.of(message).model_dump(mode="json")
+
+
+async def _on_notice(notice: bus.Notice) -> None:
+    """Un autre processus a changé une salle : ses joueurs servis ici sont prévenus, d'après la base."""
+    if rooms.get(notice.trade_id) is None:
+        return  # personne n'est dans cette salle sur ce processus
+    async with rooms.use(notice.trade_id) as room:
+        if not room.seats:
+            return
+        if notice.event == bus.CHAT and notice.message_id is not None:
+            message = await _db(_message_json, notice.trade_id, notice.message_id)
+            if message is not None:
+                await rooms.broadcast(room.seats, {"type": "chat", "message": message})
+        elif notice.event in (bus.TRADE, bus.UNAVAILABLE):
+            await _push_trade(notice.trade_id, room)
+            if notice.event == bus.UNAVAILABLE:
+                await rooms.broadcast(room.seats, {"type": "error", "problem": problem_body(_cards_unavailable())})
+
+
+async def _resync() -> None:
+    """Écoute rétablie : les annonces manquées sont perdues, chaque salle ouverte ici reçoit son
+    état complet (`init`, que le client applique en remplaçant ce qu'il affiche)."""
+    for trade_id in rooms.open_trades():
+        async with rooms.use(trade_id) as room:
+            if room.seats:
+                trade_json, messages = await _db(_init_state, trade_id)
+                init = {"type": "init", "trade": trade_json, "messages": messages, "online": room.online()}
+                await rooms.broadcast(room.seats, init)
+
+
+bus.listener.subscribe(_on_notice, _resync)
 
 
 # ── Routes HTTP ──────────────────────────────────────────────────────────────
@@ -171,12 +221,7 @@ async def _handle(trade_id: uuid.UUID, seat: Seat, raw: str) -> None:
                 _, unavailable = await _db(_as_player, player, trade.set_ready, trade_id, command.ready)
             await _push_trade(trade_id, room)
             if unavailable:
-                problem = DomainError(
-                    "Une carte posée n'est plus disponible : elle a été retirée du tapis. "
-                    "Vérifiez l'échange avant de valider.",
-                    "CARDS_UNAVAILABLE",
-                )
-                await rooms.broadcast(room.seats, {"type": "error", "problem": problem_body(problem)})
+                await rooms.broadcast(room.seats, {"type": "error", "problem": problem_body(_cards_unavailable())})
         except DomainError as error:
             await rooms.send(seat, {"type": "error", "problem": problem_body(error)})
         except Exception:
