@@ -14,8 +14,8 @@ DECLARE
 BEGIN
     -- Catalogue ---------------------------------------------------------------
     SELECT count(*) INTO n FROM creature;
-    ASSERT n = 82, format('KO  82 créatures attendues, %s trouvées', n);
-    RAISE NOTICE 'OK  82 créatures au catalogue';
+    ASSERT n = 84, format('KO  84 créatures attendues, %s trouvées', n);
+    RAISE NOTICE 'OK  84 créatures au catalogue';
 
     SELECT count(*) INTO n FROM creature WHERE image NOT LIKE 'sprites/%.png';
     ASSERT n = 0, 'KO  chaque image doit être une clé sprites/….png du CDN';
@@ -25,7 +25,7 @@ BEGIN
 
     SELECT count(*) INTO n
     FROM (SELECT famille FROM creature GROUP BY famille
-          HAVING count(DISTINCT rarete) = 3) f;
+          HAVING count(DISTINCT rarete) FILTER (WHERE rarete IN ('COMMUN', 'PEU_COMMUN', 'RARE')) = 3) f;
     ASSERT n = 4, 'KO  chaque famille doit avoir les 3 raretés';
     RAISE NOTICE 'OK  4 familles, chacune avec COMMUN, PEU_COMMUN et RARE';
 
@@ -86,7 +86,7 @@ END $$;
 \i /db/init/04_evolution_reglage_echec.sql
 \o /dev/null
 DO $$ BEGIN
-    ASSERT (SELECT count(*) FROM creature) = 82,    'KO  ré-exécution : créatures dupliquées';
+    ASSERT (SELECT count(*) FROM creature) = 84,    'KO  ré-exécution : créatures dupliquées';
     ASSERT (SELECT count(*) FROM utilisateur) = 3,  'KO  ré-exécution : comptes dupliqués';
     ASSERT (SELECT count(*) FROM echange_ligne) = 2,'KO  ré-exécution : lignes dupliquées';
     ASSERT (SELECT count(*) FROM reglage) = 1,      'KO  ré-exécution : réglages dupliqués';

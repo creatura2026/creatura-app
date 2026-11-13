@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 1 à 3 gemmes pixel de la couleur de la rareté. Le libellé est porté par l'aria-label. */
+/** 1 à 4 gemmes pixel de la couleur de la rareté (4 : légendaire). Le libellé est porté par l'aria-label. */
 import { computed } from 'vue'
 import { rarityColor } from '../rarity'
 
@@ -7,15 +7,17 @@ const props = withDefaults(defineProps<{ code: string; label: string; size?: num
   size: 16,
 })
 
-const RARITY_GEMS: Record<string, number> = { COMMON: 1, UNCOMMON: 2, RARE: 3 }
+const RARITY_GEMS: Record<string, number> = { COMMON: 1, UNCOMMON: 2, RARE: 3, LEGENDARY: 4 }
 const count = computed(() => RARITY_GEMS[props.code] ?? 1)
+// Trois emplacements d'ordinaire ; un quatrième seulement pour une carte légendaire.
+const slots = computed(() => Math.max(3, count.value))
 const color = computed(() => rarityColor(props.code))
 </script>
 
 <template>
   <p class="flex gap-1" role="img" :aria-label="`Rareté : ${label}`">
     <svg
-      v-for="i in 3"
+      v-for="i in slots"
       :key="i"
       viewBox="0 0 8 8"
       :width="size"

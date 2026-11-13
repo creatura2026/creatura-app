@@ -3,7 +3,7 @@
 -- Ticket : AS-41
 -- À appliquer PARTOUT (local, dev, prod) après 01_schema.sql.
 --
--- 82 créatures, une par sprite du CDN (dossier sprites/ du bucket S3).
+-- 84 créatures, une par sprite du CDN (dossier sprites/ du bucket S3).
 -- Les variantes presque identiques (eye_orb_2, star_moth_3, moon_bat_2…) ne
 -- sont pas utilisées. Moussou, Cristille, Brumel et Flammille viennent du
 -- cahier des charges.
@@ -12,6 +12,7 @@
 --   COMMUN          33       182    500    60 %
 --   PEU_COMMUN      32        94    200    30 %
 --   RARE            17        59     50    10 %
+--   LEGENDAIRE       2        59     50   (en plus : ~1,2 % du tirage)
 --
 -- Le poids d'une créature dépend de sa rareté et du nombre de créatures de
 -- cette rareté : la part de chaque rareté reste 60/30/10 (à valider au point
@@ -195,7 +196,12 @@ VALUES
     ('Paonciel', 'Paon aux plumes irisées : chaque ocelle reflète un ciel différent. Il fait la roue pour saluer l''aurore.',
      'LUEUR', 'RARE', 59, 'sprites/peacock.png', 50, 50),
     ('Triplouf', 'Chiot à trois têtes qui garde l''entrée des rêves. Une tête dort, une tête joue, une tête veille.',
-     'LUEUR', 'RARE', 59, 'sprites/cerberus_pup.png', 50, 50)
+     'LUEUR', 'RARE', 59, 'sprites/cerberus_pup.png', 50, 50),
+    -- Légendaires (rareté ajoutée par 06_evolution_rarete_legendaire.sql)
+    ('Serazou', 'Charmant et attentionné, il surprend par ses bouclettes d''Argan.',
+     'LUEUR', 'LEGENDAIRE', 59, 'sprites/serazou.png', 50, 50),
+    ('DioDaLionseau', 'Lionceau boudeur à la crinière d''automne. Il tire la langue à qui ose le traiter de chaton.',
+     'NATURE', 'LEGENDAIRE', 59, 'sprites/diodalionseau.png', 50, 50)
 ON CONFLICT ON CONSTRAINT uq_creature_nom DO UPDATE
     SET description = EXCLUDED.description,
         image       = EXCLUDED.image,

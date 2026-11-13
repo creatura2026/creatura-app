@@ -48,30 +48,53 @@ uv run uvicorn app.main:app --reload
 `DATABASE_URL` suit le format de l'équipe (`postgres://creatura:creatura@localhost:5432/creatura`) ;
 le back le convertit pour SQLAlchemy. En production (RDS) : ajouter `?sslmode=require`.
 
-### Viser RDS (authentification IAM)
+### Viser RDS (tunnel SSM et authentification IAM)
 
-Garder ces valeurs dans `backend/.env.rds` (ignoré par git, voir `.env.example`), puis
-`cp .env.rds .env` pour viser RDS et `rm .env` pour revenir à la base locale :
+Guide complet : « Accéder à la RDS Creatura : back, tunnel et IAM » (MDi). En résumé :
 
-```
-DATABASE_URL=postgres://creatura_back@<endpoint-rds>:5432/creatura?sslmode=require
-DB_IAM_AUTH=true
-AWS_REGION=eu-north-1
-AWS_ACCESS_KEY_ID=…        # poste local uniquement
-AWS_SECRET_ACCESS_KEY=…
-```
+1. **Ouvrir le tunnel** (à laisser tourner) : la RDS répond alors sur `localhost:15432`, en
+   passant par le port 443 (marche aussi sur le réseau de l'école). Prérequis : AWS CLI v2 et
+   `session-manager-plugin` (`brew install awscli session-manager-plugin`).
+
+   ```bash
+   ./scripts/tunnel-rds.sh
+   ```
+
+   Attendu : `Port 15432 opened…` puis `Waiting for connections...`. La clé AWS est lue dans
+   `.env.rds` / `.env` si elle y est, sinon dans le profil `aws configure`.
+
+2. **Configurer le back** dans `backend/.env.rds` (ignoré par git), puis `cp .env.rds .env`
+   (et `rm .env` pour revenir à la base locale) :
+
+   ```
+   DATABASE_URL=postgres://creatura_back@host.docker.internal:15432/creatura?sslmode=require
+   DB_IAM_AUTH=true
+   DB_IAM_HOST=<endpoint-rds>   # vraie adresse de la RDS : le jeton est signé pour elle
+   DB_IAM_PORT=5432
+   AWS_REGION=eu-north-1
+   AWS_ACCESS_KEY_ID=…          # poste local uniquement, jamais commité
+   AWS_SECRET_ACCESS_KEY=…
+   ```
+
+   `host.docker.internal` pour l'API dans Docker ; `localhost` pour `uv run uvicorn` sur le poste.
+
+3. **Relancer l'API** : `docker compose up -d --build`, puis vérifier
+   `curl localhost:8000/api/v1/health` → `{"status":"ok","database":"ok"}`.
 
 Le back n'a pas de mot de passe : à chaque nouvelle connexion, il signe un jeton IAM
-(`boto3`, valable 15 min) et l'envoie comme mot de passe. `docker compose up -d --build` et
-`uv run uvicorn …` lisent tous deux ce `.env` ; sans lui, le back vise la base locale.
+(`boto3`, valable 15 min, signé localement) et l'envoie comme mot de passe.
 
-- Le poste doit pouvoir joindre RDS sur le port 5432 (groupe de sécurité de l'instance).
-- L'utilisateur PostgreSQL (`creatura_back`) doit avoir le rôle `rds_iam`, et l'identité IAM
-  la permission `rds-db:connect` sur cet utilisateur.
-- Sur EKS : pas de clés AWS dans le Secret, le rôle IAM du pod (IRSA / Pod Identity) suffit.
-- Le schéma de RDS est appliqué par le Job de l'image `db/` (`appliquer.sh`), pas par l'API.
+- `PAM authentication failed for user "creatura_back"` : jeton signé pour `localhost:15432`
+  (vérifier `DB_IAM_HOST` / `DB_IAM_PORT`), ou clé IAM sans `rds-db:connect`.
+- `Connection refused` / `database: unreachable` : le tunnel est fermé.
+- L'utilisateur PostgreSQL `creatura_back` n'a que les droits sur les données : le schéma de
+  RDS (évolutions `NN_evolution_*.sql` comprises) est appliqué par l'administratrice avec le
+  compte `creatura`, via le Job de l'image `db/` (`appliquer.sh`), jamais par l'API.
 - `ADMIN_LOGIN` / `ADMIN_PASSWORD` vides dans `.env` : pas de création automatique d'un
   compte admin sur la base partagée.
+- Sur EKS (même VPC que la base) : ni tunnel ni clé personnelle. `DATABASE_URL` vise
+  directement la RDS, `DB_IAM_HOST` / `DB_IAM_PORT` restent vides, et le rôle IAM du pod
+  (IRSA / Pod Identity) porte `rds-db:connect`.
 
 ## Tests
 
@@ -144,7 +167,7 @@ clés JSON (camelCase) et valeurs en anglais. Les schémas Pydantic font la trad
 | Base | API |
 |---|---|
 | `JOUEUR`, `ADMIN` | `PLAYER`, `ADMIN` |
-| `COMMUN`, `PEU_COMMUN`, `RARE` | `COMMON`, `UNCOMMON`, `RARE` |
+| `COMMUN`, `PEU_COMMUN`, `RARE`, `LEGENDAIRE` | `COMMON`, `UNCOMMON`, `RARE`, `LEGENDARY` |
 | `EN_ATTENTE`, `ACCEPTE`, `REFUSE`, `ANNULE`, `ECHOUE` | `PENDING`, `ACCEPTED`, `REFUSED`, `CANCELLED`, `FAILED` |
 | `creature.id` (entier) | `"id": "3"` (texte) |
 | `creature.image` (`sprites/moss_puff.png`) | `imageUrl` = `IMAGE_BASE_URL` (CDN CloudFront) + `/` + clé |

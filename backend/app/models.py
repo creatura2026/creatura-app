@@ -35,6 +35,7 @@ class Rarete(str, enum.Enum):
     COMMUN = "COMMUN"
     PEU_COMMUN = "PEU_COMMUN"
     RARE = "RARE"
+    LEGENDAIRE = "LEGENDAIRE"
 
 
 class Statut(str, enum.Enum):

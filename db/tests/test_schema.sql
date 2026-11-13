@@ -98,7 +98,7 @@ SELECT pg_temp.doit_echouer('famille inconnue refusée',
     'ck_creature_famille');
 SELECT pg_temp.doit_echouer('rareté inconnue refusée',
     $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('X', 'NATURE', 'LEGENDAIRE', 1, 'x.png', 1, 1)$q$,
+       VALUES ('X', 'NATURE', 'MYTHIQUE', 1, 'x.png', 1, 1)$q$,
     'ck_creature_rarete');
 SELECT pg_temp.doit_echouer('poids nul refusé',
     $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)

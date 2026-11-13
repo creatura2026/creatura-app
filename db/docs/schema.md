@@ -32,7 +32,7 @@ erDiagram
         varchar     nom               UK
         text        description
         varchar     famille              "NATURE | CRISTAL | BRUME | LUEUR"
-        varchar     rarete               "COMMUN | PEU_COMMUN | RARE"
+        varchar     rarete               "COMMUN | PEU_COMMUN | RARE | LEGENDAIRE"
         integer     poids                "> 0, probabilité de tirage"
         varchar     image                "clé S3 du CDN, ex. sprites/moss_puff.png"
         integer     stock_total          ">= 0"
@@ -120,7 +120,7 @@ erDiagram
 | nom | varchar(50) | NOT NULL, UNIQUE | Nom de l'espèce |
 | description | text | | Texte affiché dans le catalogue |
 | famille | varchar(20) | NOT NULL, CHECK `NATURE`/`CRISTAL`/`BRUME`/`LUEUR` | Famille (filtre UC-07) |
-| rarete | varchar(20) | NOT NULL, CHECK `COMMUN`/`PEU_COMMUN`/`RARE` | Rareté de l'espèce |
+| rarete | varchar(20) | NOT NULL, CHECK `COMMUN`/`PEU_COMMUN`/`RARE`/`LEGENDAIRE` | Rareté de l'espèce (`LEGENDAIRE` : 06_evolution_rarete_legendaire.sql) |
 | poids | integer | NOT NULL, CHECK `> 0` | Poids de tirage |
 | image | varchar(255) | NOT NULL | Clé du fichier dans le bucket S3 (ex. `sprites/moss_puff.png`) ; le back y ajoute l'URL du CDN CloudFront |
 | stock_total | integer | NOT NULL, CHECK `>= 0` | Exemplaires existant au total |

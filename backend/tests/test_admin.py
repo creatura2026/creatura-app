@@ -42,7 +42,7 @@ def test_admin_dashboard(client, admin_headers):
     assert dist["period"] == stats["period"]
     assert dist["totalCardsDistributed"] == 12  # 2 boosters de 5 + 2 cartes données
     assert sum(i["observedCount"] for i in dist["items"]) == 12
-    assert [i["rarity"]["code"] for i in dist["items"]] == ["COMMON", "UNCOMMON", "RARE"]
+    assert [i["rarity"]["code"] for i in dist["items"]] == ["COMMON", "UNCOMMON", "RARE", "LEGENDARY"]
     assert abs(sum(i["observedRate"] for i in dist["items"]) - 1) < 0.001
     assert abs(sum(i["expectedRate"] for i in dist["items"]) - 1) < 0.001
 

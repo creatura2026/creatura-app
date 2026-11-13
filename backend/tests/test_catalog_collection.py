@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.models import Creature
 
 FAMILIES = ["NATURE", "CRISTAL", "BRUME", "LUEUR"]
-RARITIES = ["COMMON", "UNCOMMON", "RARE"]
+RARITIES = ["COMMON", "UNCOMMON", "RARE", "LEGENDARY"]
 
 
 def names(page: dict) -> list[str]:
@@ -87,7 +87,7 @@ def test_families_and_rarities(client):
     ]
     rarities = client.get(f"{API}/rarities", headers=h).json()
     assert [(r["code"], r["label"], r["rank"]) for r in rarities] == [
-        ("COMMON", "Commun", 1), ("UNCOMMON", "Peu commun", 2), ("RARE", "Rare", 3),
+        ("COMMON", "Commun", 1), ("UNCOMMON", "Peu commun", 2), ("RARE", "Rare", 3), ("LEGENDARY", "Légendaire", 4),
     ]  # fmt: skip
     assert abs(sum(r["dropRate"] for r in rarities) - 1) < 0.001
 
@@ -103,6 +103,7 @@ def test_draw_probabilities_follow_weights_and_stock(client):
         "COMMON": round(poids["Moussou"] / total, 4),
         "UNCOMMON": 0.0,
         "RARE": round(poids["Brumel"] / total, 4),
+        "LEGENDARY": 0.0,
     }
 
 

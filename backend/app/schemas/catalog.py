@@ -22,12 +22,23 @@ class RarityCode(str, enum.Enum):
     COMMON = "COMMON"
     UNCOMMON = "UNCOMMON"
     RARE = "RARE"
+    LEGENDARY = "LEGENDARY"
 
 
-RARITY_CODES = {Rarete.COMMUN: RarityCode.COMMON, Rarete.PEU_COMMUN: RarityCode.UNCOMMON, Rarete.RARE: RarityCode.RARE}
+RARITY_CODES = {
+    Rarete.COMMUN: RarityCode.COMMON,
+    Rarete.PEU_COMMUN: RarityCode.UNCOMMON,
+    Rarete.RARE: RarityCode.RARE,
+    Rarete.LEGENDAIRE: RarityCode.LEGENDARY,
+}
 RARETE_OF = {code: rarete for rarete, code in RARITY_CODES.items()}
-RARITY_LABELS = {Rarete.COMMUN: "Commun", Rarete.PEU_COMMUN: "Peu commun", Rarete.RARE: "Rare"}
-RARITY_RANK = {Rarete.COMMUN: 1, Rarete.PEU_COMMUN: 2, Rarete.RARE: 3}
+RARITY_LABELS = {
+    Rarete.COMMUN: "Commun",
+    Rarete.PEU_COMMUN: "Peu commun",
+    Rarete.RARE: "Rare",
+    Rarete.LEGENDAIRE: "Légendaire",
+}
+RARITY_RANK = {Rarete.COMMUN: 1, Rarete.PEU_COMMUN: 2, Rarete.RARE: 3, Rarete.LEGENDAIRE: 4}
 
 
 def image_url(path: str) -> str:

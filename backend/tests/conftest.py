@@ -18,6 +18,8 @@ os.environ["ADMIN_LOGIN"] = "admin"
 os.environ["ADMIN_PASSWORD"] = "admin-password"
 # Les tests visent toujours le Postgres local, même si backend/.env vise RDS.
 os.environ["DB_IAM_AUTH"] = "false"
+os.environ["DB_IAM_HOST"] = ""
+os.environ["DB_IAM_PORT"] = ""
 os.environ["IMAGE_BASE_URL"] = "https://cdn.test"
 
 DB_INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
@@ -47,10 +49,13 @@ def _ensure_test_database() -> None:
 
 
 def init_scripts() -> list[Path]:
-    """Scripts de db/init/ dans l'ordre, sans les données de démo (comme CREATURA_DEMO=false)."""
+    """Scripts de db/init/ dans l'ordre de db/scripts/appliquer.sh, sans les données de démo
+    (comme CREATURA_DEMO=false) : schéma, évolutions, puis catalogue, qui peut en dépendre."""
     scripts = [f for f in sorted(DB_INIT_DIR.glob("*.sql")) if "demo" not in f.name]
     assert scripts, f"aucun script SQL dans {DB_INIT_DIR}"
-    return scripts
+    evolutions = [f for f in scripts if "_evolution_" in f.name]
+    others = [f for f in scripts if f not in evolutions]
+    return others[:1] + evolutions + others[1:]
 
 
 def reset_database() -> None:

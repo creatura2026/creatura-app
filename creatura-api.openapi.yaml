@@ -1145,6 +1145,7 @@ components:
       properties:
         code:
           type: string
+          description: COMMON, UNCOMMON, RARE ou LEGENDARY
           examples: [UNCOMMON]
         label:
           type: string
