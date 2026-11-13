@@ -17,6 +17,7 @@ export type IconName =
   | 'arrow-left'
   | 'arrow-right'
   | 'plus'
+  | 'download'
   | 'clock'
   | 'gem'
   | 'lock'
@@ -45,6 +46,7 @@ const PATHS: Record<IconName, string> = {
   'arrow-left': 'M20 12H5M11 6l-6 6 6 6',
   'arrow-right': 'M4 12h15M13 6l6 6-6 6',
   plus: 'M12 5v14M5 12h14',
+  download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
   clock: 'M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0M12 7v5l3 3',
   gem: 'M6 4h12l3 5-9 11L3 9zM3 9h18M12 20 9 9l3-5 3 5z',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',

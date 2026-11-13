@@ -18,6 +18,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   shortcutName: Créatura
   uninstallDisplayName: Créatura
+  # Version dans le nom ; le site trouve le fichier courant dans latest.json (scripts/build.cjs)
   artifactName: Creatura-Setup-${version}.${ext}
 portable:
   artifactName: Creatura-${version}-portable.${ext}

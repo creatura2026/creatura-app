@@ -3,6 +3,12 @@ import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import CreatureCard from '@creatura/shared/ui/CreatureCard.vue'
 import boosterUrl from '@creatura/shared/assets/booster.png'
 import { CREATURES } from '@creatura/shared/fixtures/catalog'
+import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
+
+import DesktopDownload from '@/components/DesktopDownload.vue'
+import { useDesktopDownload } from '@/composables/useDesktopDownload'
+
+const { release } = useDesktopDownload()
 
 const showcase = ['Moussou', 'Cristille', 'Flammille'].map((n) =>
   CREATURES.find((c) => c.name === n)!,
@@ -61,11 +67,33 @@ const LOOP = [
               >
             </div>
           </div>
-          <img
-            :src="boosterUrl"
-            alt="Un booster de cartes Créatura"
-            class="pixelated mx-auto hidden w-[150px] animate-float lg:block xl:w-[225px]"
-          />
+          <!--
+            Booster et, quand l'exe est en ligne, son téléchargement (sur mobile : section plus bas).
+            Le bouton est hors du flux : la colonne garde la hauteur du booster et les cartes
+            d'exemple ne descendent pas.
+          -->
+          <div class="relative hidden lg:block">
+            <img
+              :src="boosterUrl"
+              alt="Un booster de cartes Créatura"
+              class="pixelated mx-auto w-[150px] animate-float xl:w-[225px]"
+            />
+            <div
+              v-if="release"
+              class="absolute top-full right-0 mt-8 flex flex-col items-end gap-2 whitespace-nowrap xl:right-1/2 xl:translate-x-1/2 xl:items-center"
+            >
+              <a :href="release.setup.url" download class="btn btn-primary">
+                <PixelIcon name="download" :size="18" />
+                Télécharger pour Windows
+              </a>
+              <a
+                href="#application-windows"
+                class="text-sm text-cream/75 underline-offset-4 hover:text-sun hover:underline"
+              >
+                Version {{ release.version }}, {{ release.setup.size }}
+              </a>
+            </div>
+          </div>
         </div>
 
         <!-- Trois cartes au format du booster : la largeur est bornée pour qu'elles restent des cartes -->
@@ -76,6 +104,9 @@ const LOOP = [
         </ul>
       </div>
     </section>
+
+    <!-- Application Windows : seulement si l'exe est en ligne -->
+    <DesktopDownload v-if="release" :release="release" />
 
     <!-- Notre ambition -->
     <section class="mx-auto max-w-6xl px-4 py-12 sm:py-16">

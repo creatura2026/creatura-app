@@ -26,13 +26,59 @@ Compter 3 à 5 minutes. Les fichiers arrivent dans `apps/desktop/release/` :
 |---|---|
 | `Creatura-Setup-<version>.exe` | Installeur : raccourci dans le menu Démarrer, désinstallation depuis les paramètres Windows |
 | `Creatura-<version>-portable.exe` | Un seul fichier, se lance sans installation |
+| `latest.json` | Version, date, noms et tailles des deux exe : lu par le site pour proposer le téléchargement |
 
-Seuls ces deux fichiers sont à distribuer. Les exe ne sont pas signés : au premier lancement,
-Windows SmartScreen demande une confirmation (« Informations complémentaires » → « Exécuter quand
-même »).
+Le dossier est vidé à chaque build : il ne contient que la version qui vient d'être construite.
+Les exe ne sont pas signés : au premier lancement, Windows SmartScreen demande une confirmation
+(« Informations complémentaires » → « Exécuter quand même »).
 
 Pour essayer sans produire d'exe (plus rapide) : `pnpm --filter desktop start` ou `start:demo`.
 Depuis le terminal de VS Code, voir [Dépannage](#dépannage).
+
+## Version
+
+La version vient du champ `version` de [package.json](package.json) (actuellement `0.1.0`). Le
+build la reporte dans le nom des fichiers, dans les propriétés de l'exe (clic droit → Propriétés →
+Détails) et dans `latest.json`. Avant de publier une nouvelle version, l'augmenter :
+
+```sh
+cd apps/desktop
+npm version patch --no-git-tag-version   # 0.1.0 → 0.1.1 (minor : 0.2.0, major : 1.0.0)
+```
+
+## Publier sur le site
+
+La page d'accueil du site (avant connexion) propose l'exe dès qu'elle trouve
+`/telechargements/latest.json` sur son domaine : bouton « Télécharger la version 0.1.0 », taille,
+date et lien vers la version portable. Sans ce fichier, la section n'apparaît pas.
+
+Pour publier, envoyer le contenu de `release/` (les deux exe et `latest.json`, pas les sous-dossiers)
+dans le dossier `telechargements/` du bucket S3 du front :
+
+```sh
+aws s3 cp apps/desktop/release/ s3://<bucket-du-front>/telechargements/ --recursive \
+  --exclude "*" --include "Creatura-*.exe" --include "latest.json"
+```
+
+Le nom du bucket est la sortie `bucket_name` de la stack `infra/` de creatura-infra. CloudFront ne
+met pas en cache ce dossier (comportement par défaut) : la nouvelle version est visible tout de
+suite. Les anciens exe peuvent rester : leurs noms contiennent la version et `latest.json` ne
+pointe que vers le dernier. Autre dossier ou autre domaine : variable `VITE_DOWNLOADS_URL` au
+build du front.
+
+### En local, sans S3
+
+`pnpm dev:player` (et `vite preview`) sert directement `apps/desktop/release/` sous
+`/telechargements/` (plugin [apps/player/vite/localDownloads.ts](../player/vite/localDownloads.ts)) :
+
+```sh
+pnpm desktop        # produit release/ avec latest.json
+pnpm dev:player     # http://localhost:5173 : la page d'accueil propose cet exe
+```
+
+Rien à copier ni à publier : après un nouveau `pnpm desktop`, recharger la page suffit. Seuls les
+exe et `latest.json` à la racine de `release/` sont servis. Ce relais n'existe qu'en local : le site
+en ligne lit le bucket S3.
 
 ## Trouver l'adresse du backend
 
@@ -93,7 +139,7 @@ pnpm desktop --api http://localhost:8000   # backend lancé en local (backend/RE
 | `config.json` | non | Adresse du backend pour vos builds |
 | `app-config.json` | non | Généré au build, inscrit dans l'exe (`{ apiUrl, demo }`) |
 | `web/` | non | Build de la PWA copié pour l'exe |
-| `release/` | non | Exe produits |
+| `release/` | non | Exe produits et `latest.json`, à publier (voir [Publier sur le site](#publier-sur-le-site)) |
 
 ## Fonctionnement
 

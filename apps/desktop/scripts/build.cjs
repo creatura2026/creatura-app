@@ -87,6 +87,32 @@ if (start) {
   delete process.env.ELECTRON_RUN_AS_NODE
   run('pnpm exec electron .')
 } else {
+  const release = path.join(root, 'release')
+  // Dossier vidé : il ne contient que la version construite, prête à publier telle quelle.
+  fs.rmSync(release, { recursive: true, force: true })
   run('pnpm exec electron-builder --win')
-  console.log(`\nFichiers produits dans ${path.join(root, 'release')}`)
+  writeManifest(release)
+  console.log(`\nFichiers produits dans ${release}`)
+}
+
+/**
+ * latest.json : la version publiée et ses fichiers. Le site le lit pour afficher la version et
+ * la taille, et pour pointer vers le bon exe (les noms de fichiers contiennent la version).
+ */
+function writeManifest(release) {
+  const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+  const describe = (file) => {
+    const full = path.join(release, file)
+    if (!fs.existsSync(full)) fail(`Fichier attendu introuvable : ${full}`)
+    return { file, size: fs.statSync(full).size }
+  }
+  const manifest = {
+    version,
+    date: new Date().toISOString().slice(0, 10),
+    demo,
+    setup: describe(`Creatura-Setup-${version}.exe`),
+    portable: describe(`Creatura-${version}-portable.exe`),
+  }
+  fs.writeFileSync(path.join(release, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  console.log(`\nVersion ${version} : latest.json écrit`)
 }

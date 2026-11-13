@@ -28,8 +28,9 @@ pnpm desktop        # exe branché sur le backend AWS
 pnpm desktop:demo   # exe avec l'API simulée, aucun serveur nécessaire
 ```
 
-Les exe arrivent dans `apps/desktop/release/`. Adresse du backend, fonctionnement et dépannage :
-[apps/desktop/README.md](apps/desktop/README.md).
+Les exe arrivent dans `apps/desktop/release/`, avec un `latest.json` : une fois publiés dans
+`telechargements/` du bucket du front, la page d'accueil propose de télécharger cette version.
+Version, publication, adresse du backend et dépannage : [apps/desktop/README.md](apps/desktop/README.md).
 
 ## API simulée (pas encore de back)
 
