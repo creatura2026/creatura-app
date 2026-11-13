@@ -23,3 +23,8 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# CI packaging scratch
+release-site/
+release-frontend/
+frontend-meta.json

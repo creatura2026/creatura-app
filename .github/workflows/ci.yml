@@ -6,8 +6,8 @@
 #   2. Construire: une image Docker par composant
 #   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
 #
-# Les images sont ensuite déployées sur EKS par Argo CD (manifestes dans le
-# repo infra). Détails, tags et variables : docs/ci-cd.md
+# La release validée est déployée par le workflow deploy-aws.yml du dépôt infra.
+# Aucun accès AWS dans ce dépôt ; voir docs/ci-cd.md.
 # =============================================================================
 name: CI
 
@@ -52,15 +52,8 @@ jobs:
             {"name": "creatura-backend", "context": "backend", "file": "backend/Dockerfile"},
             {"name": "creatura-db",      "context": "db",      "file": "db/Dockerfile"}
           ]'
-          if [ -f pnpm-workspace.yaml ]; then
-            frontend=true
-            images=$(jq '. + [
-              {"name": "creatura-player", "context": ".", "file": "docker/frontend/Dockerfile", "app": "player"},
-              {"name": "creatura-admin",  "context": ".", "file": "docker/frontend/Dockerfile", "app": "admin"}
-            ]' <<< "$images")
-          else
-            frontend=false
-          fi
+          frontend=false
+          if [ -f pnpm-workspace.yaml ]; then frontend=true; fi
           echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
           echo "images=$(jq -c . <<< "$images")" >> "$GITHUB_OUTPUT"
           echo "Front présent : $frontend" >> "$GITHUB_STEP_SUMMARY"
@@ -146,7 +139,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: tests-backend
+          name: tests-backend-${{ github.run_id }}-${{ github.run_attempt }}
           path: reports/backend-tests.xml
 
   # ---------------------------------------------------------------------------
@@ -172,19 +165,39 @@ jobs:
       - name: Installer les dépendances
         run: pnpm install --frozen-lockfile
 
-      - name: Vérification des types et build
-        run: pnpm -r run build
+      - name: Vérification des types et build déployable
+        env:
+          VITE_API_BASE_URL: /api/v1
+          VITE_API_MOCK: 'false'
+        run: |
+          pnpm --filter player run type-check
+          pnpm --filter admin run type-check
+          pnpm --filter player exec vite build
+          pnpm --filter admin exec vite build --base=/admin/
+          mkdir -p release-site/admin
+          cp -a apps/player/dist/. release-site/
+          cp -a apps/admin/dist/. release-site/admin/
+          test -f release-site/index.html
+          test -f release-site/admin/index.html
 
       - name: Tests unitaires
-        run: pnpm -r run test:unit
+        run: pnpm -r run test:unit --run
+
+      - name: Emballer et identifier le frontend testé
+        run: python scripts/ci/package-frontend.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-meta-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend-meta.json
+          if-no-files-found: error
 
       - name: Publier les applications construites
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist
-          path: |
-            apps/player/dist
-            apps/admin/dist
+          name: frontend-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-frontend/frontend.tar.gz
+          if-no-files-found: error
 
   # ---------------------------------------------------------------------------
   # Images Docker : construites à chaque fois, publiées si tout est vert
@@ -227,10 +240,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE }}
-          # sha-xxxxxxx : immuable, c'est lui que référencent les manifestes Argo CD.
+          # sha-xxxxxxx : repère lisible ; la release référence le digest immuable.
           # develop / main : suit la branche. 1.2.3 et 1.2 : versions (tags git v1.2.3).
           tags: |
             type=sha,prefix=sha-
+            type=raw,value=run-${{ github.run_id }}-${{ github.run_attempt }}
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
@@ -269,3 +283,72 @@ jobs:
             echo "$TAGS"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enregistrer le digest construit
+        if: env.PUBLISH == 'true'
+        env:
+          IMAGE_NAME: ${{ matrix.image.name }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p release-images
+          jq -n --arg name "$IMAGE_NAME" --arg image "$IMAGE@$IMAGE_DIGEST" \
+            '{name: $name, image: $image}' > "release-images/$IMAGE_NAME.json"
+
+      - uses: actions/upload-artifact@v4
+        if: env.PUBLISH == 'true'
+        with:
+          name: release-${{ matrix.image.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-images/*.json
+          if-no-files-found: error
+
+  release:
+    name: Release et déploiement develop
+    needs: [db, backend, frontend, images]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-creatura-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-images
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-meta-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend-meta
+      - name: Assembler la release du run validé
+        env:
+          APP_SHA: ${{ github.sha }}
+          APP_RUN_ID: ${{ github.run_id }}
+          APP_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          jq -s --arg sha "$APP_SHA" --arg run_id "$APP_RUN_ID" --arg attempt "$APP_RUN_ATTEMPT" \
+            --slurpfile front frontend-meta/frontend-meta.json \
+            '{schema_version: 2, commit: $sha, run_id: $run_id, run_attempt: $attempt,
+              frontend_artifact: $front[0].frontend_artifact, frontend_sha256: $front[0].frontend_sha256,
+              images: (map({key: .name, value: .image}) | from_entries)}' \
+            release-images/*.json > release.json
+          jq -e '.images["creatura-backend"] and .images["creatura-db"] and .frontend_sha256' release.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: creatura-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release.json
+          if-no-files-found: error
+
+  notify-infra:
+    name: Déclencher le déploiement AWS
+    needs: release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Attendre la conclusion CI puis demander le déploiement
+        # Le run courant est encore in_progress. L'infra attend sa conclusion avant tout accès AWS.
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+          APP_RUN_ID: ${{ github.run_id }}
+          APP_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          test -n "$GH_TOKEN"
+          jq -n --arg run_id "$APP_RUN_ID" --arg attempt "$APP_RUN_ATTEMPT" \
+            '{ref: "develop", inputs: {app_run_id: $run_id, app_run_attempt: $attempt}}' > /tmp/dispatch.json
+          gh api --method POST repos/creatura2026/creatura-infra/actions/workflows/deploy-aws.yml/dispatches --input /tmp/dispatch.json
