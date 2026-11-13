@@ -45,7 +45,7 @@ uv sync
 uv run uvicorn app.main:app --reload
 ```
 
-`DATABASE_URL` suit le format de l'équipe (`postgres://creatura:creatura@localhost:5432/creatura`) ;
+`DATABASE_URL` suit le format de l'équipe (`postgres://creatura:creatura@127.0.0.1:5432/creatura`) ;
 le back le convertit pour SQLAlchemy. En production (RDS) : ajouter `?sslmode=require`.
 
 ### Viser RDS (tunnel SSM et authentification IAM)

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Même format que le reste de l'équipe (voir db/README.md) : postgres://user:mdp@hôte:port/base
     # En production (RDS), ajouter ?sslmode=require.
-    database_url: str = "postgres://creatura:creatura@localhost:5432/creatura"
+    database_url: str = "postgres://creatura:creatura@127.0.0.1:5432/creatura"
 
     # Authentification IAM sur RDS : à chaque nouvelle connexion, le mot de passe est un jeton
     # signé avec les identifiants AWS (valable 15 min). DATABASE_URL ne contient alors pas de

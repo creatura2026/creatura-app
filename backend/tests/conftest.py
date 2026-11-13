@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgres://creatura:creatura@localhost:5432/creatura_test"
+    "TEST_DATABASE_URL", "postgres://creatura:creatura@127.0.0.1:5432/creatura_test"
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ADMIN_LOGIN"] = "admin"
