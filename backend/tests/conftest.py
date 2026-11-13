@@ -26,14 +26,14 @@ DB_INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine, func, select, text, update  # noqa: E402
+from sqlalchemy import create_engine, func, or_, select, text, update  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
 from app.controllers import collection  # noqa: E402
 from app.database import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Creature, Reglage  # noqa: E402
+from app.models import BoosterCarte, Creature, Rarete, RareteTirage, Reglage, Utilisateur  # noqa: E402
 
 API = "/api/v1"
 PASSWORD = "password-1234"  # 12 caractères minimum (contrat)
@@ -72,13 +72,14 @@ def reset_database() -> None:
     engine.dispose()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def _test_database():
+    # Pas autouse : les tests de l'algorithme pur (test_draw.py) tournent sans base.
     _ensure_test_database()
 
 
 @pytest.fixture
-def client():
+def client(_test_database):
     reset_database()
     with TestClient(app) as c:  # le lifespan crée le compte admin
         yield c
@@ -132,13 +133,13 @@ def creature_id(name: str) -> str:
 
 
 def give(user_id: uuid.UUID, name: str, quantity: int = 1) -> None:
-    """Donne des cartes à un joueur en les sortant du stock, comme le ferait un booster."""
+    """Donne des cartes à un joueur comme le ferait un booster (légendaire : sortie du stock)."""
     cid = _pk(name)
     with SessionLocal() as db:
         taken = db.execute(
             update(Creature)
-            .where(Creature.id == cid, Creature.stock_restant >= quantity)
-            .values(stock_restant=Creature.stock_restant - quantity)
+            .where(Creature.id == cid, or_(Creature.stock_restant.is_(None), Creature.stock_restant >= quantity))
+            .values(stock_restant=Creature.stock_restant - quantity)  # NULL (illimité) reste NULL
         ).rowcount
         assert taken == 1, f"stock insuffisant pour {name}"
         collection.add_cards(db, user_id, cid, quantity)
@@ -157,16 +158,59 @@ def set_booster_size(cards: int) -> None:
 
 
 def set_stock(stocks: dict[str, int]) -> None:
-    """Vide le stock de toutes les créatures, sauf celles citées (à appeler avant tout tirage)."""
+    """Fixe le stock des légendaires citées (les autres créatures sont illimitées)."""
     with SessionLocal() as db:
-        db.execute(update(Creature).values(stock_total=0, stock_restant=0))
         for name, n in stocks.items():
-            db.execute(update(Creature).where(Creature.nom == name).values(stock_total=n, stock_restant=n))
+            done = db.execute(update(Creature).where(Creature.nom == name).values(stock_total=n, stock_restant=n))
+            assert done.rowcount == 1, name
         db.commit()
 
 
+def set_weights(**weights: int) -> None:
+    """Poids de tirage par rareté, ex. set_weights(COMMUN=1, PEU_COMMUN=0, RARE=0, LEGENDAIRE=0)."""
+    with SessionLocal() as db:
+        for rarete, poids in weights.items():
+            db.execute(update(RareteTirage).where(RareteTirage.rarete == Rarete(rarete)).values(poids=poids))
+        db.commit()
+
+
+def only_creatures(rarete: str, names: list[str]) -> None:
+    """Ne laisse que `names` dans la rareté `rarete` : les autres passent en RARE (illimitées).
+
+    Rend un tirage prévisible quand seule cette rareté a un poids. Pas pour les légendaires.
+    """
+    with SessionLocal() as db:
+        db.execute(
+            update(Creature)
+            .where(Creature.rarete == Rarete(rarete), Creature.nom.not_in(names))
+            .values(rarete=Rarete.RARE)
+        )
+        db.commit()
+
+
+def not_first_booster(*user_ids: uuid.UUID) -> None:
+    """Fait comme si ces joueurs avaient déjà ouvert un booster (hier) : pas de rare garantie."""
+    with SessionLocal() as db:
+        db.execute(
+            update(Utilisateur)
+            .where(Utilisateur.id.in_(user_ids))
+            .values(dernier_booster=func.current_date() - 1)
+        )
+        db.commit()
+
+
+def booster_history(user_id: uuid.UUID | None = None) -> list[BoosterCarte]:
+    """Lignes de booster_carte, dans l'ordre des boosters puis des positions."""
+    with SessionLocal() as db:
+        query = select(BoosterCarte).order_by(BoosterCarte.tire_le, BoosterCarte.booster_id, BoosterCarte.position)
+        if user_id is not None:
+            query = query.where(BoosterCarte.utilisateur_id == user_id)
+        return list(db.scalars(query))
+
+
 def assert_stock_invariant() -> None:
-    """Règle du schéma : stock_total = stock_restant + Σ quantités en collection, rien de négatif."""
+    """Règle du schéma pour les légendaires : stock_total = stock_restant + Σ quantités en collection.
+    Aucune quantité négative."""
     with SessionLocal() as db:
         broken = db.scalars(
             text(
@@ -174,7 +218,7 @@ def assert_stock_invariant() -> None:
                 SELECT c.nom FROM creature c
                 LEFT JOIN (SELECT creature_id, SUM(quantite) AS s FROM collection GROUP BY creature_id) x
                        ON x.creature_id = c.id
-                WHERE c.stock_total <> c.stock_restant + COALESCE(x.s, 0)
+                WHERE c.stock_total IS NOT NULL AND c.stock_total <> c.stock_restant + COALESCE(x.s, 0)
                 """
             )
         ).all()

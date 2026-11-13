@@ -57,10 +57,11 @@ FROM (VALUES ('Moussou', 'OFFERT'), ('Brumel', 'DEMANDE')) AS v(nom, sens)
 JOIN creature c ON c.nom = v.nom
 ON CONFLICT ON CONSTRAINT pk_echange_ligne DO NOTHING;
 
--- Les cartes distribuées ci-dessus sortent du stock :
+-- Les légendaires distribuées ci-dessus sortent du stock (les autres sont illimitées) :
 -- stock_restant = stock_total - cartes présentes dans les collections
 UPDATE creature c
 SET stock_restant = c.stock_total - coalesce(
-        (SELECT sum(quantite) FROM collection WHERE creature_id = c.id), 0);
+        (SELECT sum(quantite) FROM collection WHERE creature_id = c.id), 0)
+WHERE c.stock_total IS NOT NULL;
 
 COMMIT;

@@ -85,7 +85,7 @@ describe('Réglage des boosters (simulé)', () => {
   it('refuse une valeur hors limites', async () => {
     const { api, loginAs } = setup()
     await loginAs('admin')
-    for (const n of [0, 11, 2.5]) {
+    for (const n of [0, 2, 11, 2.5]) {
       await expect(api.updateBoosterSettings({ cardsPerBooster: n })).rejects.toSatisfy((e) =>
         isApiError(e, 'VALIDATION_ERROR'),
       )

@@ -3,10 +3,8 @@ dépendent pas de sa taille, seulement de quelques créatures connues (Moussou, 
 
 from math import ceil
 
-from conftest import API, SessionLocal, catalogue_size, creature_id, give, problem, register_and_login, set_stock
-from sqlalchemy import select
+from conftest import API, catalogue_size, creature_id, give, problem, register_and_login, set_stock
 
-from app.models import Creature
 
 FAMILIES = ["NATURE", "CRISTAL", "BRUME", "LUEUR"]
 RARITIES = ["COMMON", "UNCOMMON", "RARE", "LEGENDARY"]
@@ -92,19 +90,17 @@ def test_families_and_rarities(client):
     assert abs(sum(r["dropRate"] for r in rarities) - 1) < 0.001
 
 
-def test_draw_probabilities_follow_weights_and_stock(client):
+def test_drop_rates_follow_rarity_weights_and_legendary_stock(client):
+    """Taux par carte, règle d'exclusion comprise : 70/20/8/2 et 5 cartes donnent ~6,6 % de rares et
+    ~1,6 % de légendaires. Les légendaires épuisées sortent du tirage, leur poids est réparti."""
     h = register_and_login(client, "Lina")["headers"]
-    with SessionLocal() as db:
-        poids = dict(db.execute(select(Creature.nom, Creature.poids)).all())
-    set_stock({"Moussou": 10, "Brumel": 10})  # toutes les autres créatures sont épuisées
     rates = {r["code"]: r["dropRate"] for r in client.get(f"{API}/rarities", headers=h).json()}
-    total = poids["Moussou"] + poids["Brumel"]
-    assert rates == {
-        "COMMON": round(poids["Moussou"] / total, 4),
-        "UNCOMMON": 0.0,
-        "RARE": round(poids["Brumel"] / total, 4),
-        "LEGENDARY": 0.0,
-    }
+    assert rates == {"COMMON": 0.7141, "UNCOMMON": 0.204, "RARE": 0.0655, "LEGENDARY": 0.0164}
+
+    set_stock({"Serazou": 0, "DioDaLionseau": 0})
+    rates = {r["code"]: r["dropRate"] for r in client.get(f"{API}/rarities", headers=h).json()}
+    assert rates["LEGENDARY"] == 0.0 and abs(sum(rates.values()) - 1) < 0.001
+    assert rates["RARE"] > 0.0655
 
 
 def test_collection_filters_and_progress(client):

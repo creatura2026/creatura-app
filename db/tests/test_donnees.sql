@@ -37,10 +37,16 @@ BEGIN
     -- Règle de conservation du stock -------------------------------------------
     SELECT count(*) INTO n
     FROM creature c
-    WHERE c.stock_total <> c.stock_restant
+    WHERE c.stock_total IS NOT NULL AND c.stock_total <> c.stock_restant
           + coalesce((SELECT sum(quantite) FROM collection WHERE creature_id = c.id), 0);
     ASSERT n = 0, format('KO  stock incohérent pour %s créature(s)', n);
-    RAISE NOTICE 'OK  stock_total = stock_restant + cartes en collection';
+    RAISE NOTICE 'OK  légendaires : stock_total = stock_restant + cartes en collection';
+
+    SELECT count(*) INTO n FROM creature WHERE (rarete = 'LEGENDAIRE') <> (stock_total IS NOT NULL);
+    ASSERT n = 0, 'KO  seules les légendaires ont un stock';
+    ASSERT (SELECT string_agg(rarete || '=' || poids, ' ' ORDER BY rarete) FROM rarete_tirage)
+           IS NOT NULL, 'KO  poids de tirage absents';
+    RAISE NOTICE 'OK  stock réservé aux légendaires, poids de tirage présents';
 
     -- Comptes de démo -------------------------------------------------------------
     ASSERT (SELECT role FROM utilisateur WHERE identifiant = 'admin') = 'ADMIN',

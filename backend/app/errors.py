@@ -106,7 +106,10 @@ _CONSTRAINTS: dict[str, DomainError] = {
     "ck_utilisateur_identifiant": field_error("VALIDATION_ERROR", "login", "L'identifiant ne peut pas être vide."),
     "pk_echange_ligne": BadRequest("Une même créature apparaît deux fois du même côté de l'échange."),
     "ck_reglage_cartes_par_booster": field_error(
-        "VALIDATION_ERROR", "cardsPerBooster", "Un booster contient de 1 à 10 cartes."
+        "VALIDATION_ERROR", "cardsPerBooster", "Un booster contient de 3 à 10 cartes."
+    ),
+    "ck_rarete_tirage_poids": field_error(
+        "VALIDATION_ERROR", "rarityWeights", "Le poids d'une rareté va de 0 à 1000."
     ),
 }
 

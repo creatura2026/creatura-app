@@ -1,13 +1,16 @@
 """UC-03 / UC-04 : booster quotidien.
 
-- Un booster par compte et par jour : UPDATE conditionnel sur `utilisateur.dernier_booster`,
-  le jour étant calculé par Postgres à l'heure de Paris (RDS est en UTC).
-- Stock global : chaque carte tirée décrémente `creature.stock_restant` ; une créature épuisée
-  sort du tirage. Si tout est épuisé, le booster est annulé et le joueur ne le perd pas.
-- Tout se fait dans une transaction : `stock_total = stock_restant + Σ collections` reste vrai.
-- Le nombre de cartes vient de la table `reglage` (modifiable par l'admin).
-- Les boosters ne sont pas enregistrés (pas de table booster) : une fois ouvert, le booster du
-  jour ne peut pas être réaffiché ; ses cartes sont dans la collection.
+- Un booster par compte et par jour : `utilisateur.dernier_booster`, verrouillé puis mis à jour
+  dans la transaction du booster, le jour étant calculé par Postgres à l'heure de Paris.
+- Tirage : `app.draw.draw_booster` (fonction pure) avec les poids de `rarete_tirage` et le stock
+  des légendaires. Règles : rareté selon les poids puis créature au hasard, au plus une rare ou
+  une légendaire par booster, rare garantie au premier booster, plus rare révélée en dernier.
+- Seules les légendaires ont un stock : chaque exemplaire tiré décrémente
+  `creature.stock_restant`. Si un autre booster a pris le dernier exemplaire entre le tirage et
+  l'écriture, tout est annulé et retiré (au plus MAX_ATTEMPTS fois).
+- Chaque carte est enregistrée dans `booster_carte` (historique : statistiques, taux observé).
+- Tout se fait dans une transaction : `stock_total = stock_restant + Σ collections` reste vrai
+  pour les légendaires.
 """
 
 import random
@@ -16,14 +19,16 @@ from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Date, cast, func, or_, select, update
+from sqlalchemy import Date, cast, func, insert, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app import draw
 from app.config import get_settings
 from app.controllers import collection
+from app.controllers.catalog import rarity_weights
 from app.errors import Conflict
-from app.models import Collection, Creature, Reglage, Utilisateur
+from app.models import BoosterCarte, Collection, Creature, MotifTirage, Reglage, Utilisateur
 from app.schemas.booster import BoosterCardOut, BoosterOut, BoosterTodayOut
 from app.schemas.catalog import CreatureSummaryOut
 
@@ -68,53 +73,48 @@ def get_today(db: Session, user: Utilisateur) -> BoosterTodayOut:
         available=available_today(user, day),
         next_available_at=_next_midnight(day),
         cards_per_booster=settings(db).cartes_par_booster,
-        booster=None,  # pas de table booster : le contenu d'un booster ouvert n'est pas conservé
+        booster=None,  # le booster du jour n'est pas réaffiché (son contenu est dans booster_carte)
     )
 
 
-def _draw(db: Session, count: int) -> list[Creature]:
-    """Tire jusqu'à `count` cartes, selon le poids, parmi les créatures encore en stock."""
-    pool = {c.id: c for c in db.scalars(select(Creature).where(Creature.stock_restant > 0))}
-    left = {cid: c.stock_restant for cid, c in pool.items()}
-    drawn: list[Creature] = []
-    for _ in range(count):
-        ids = [cid for cid, n in left.items() if n > 0]
-        if not ids:
-            break  # stock épuisé : booster partiel
-        cid = _rng.choices(ids, weights=[pool[i].poids for i in ids])[0]
-        left[cid] -= 1
-        drawn.append(pool[cid])
-    return drawn
+def _draw(db: Session, count: int, first_booster: bool) -> tuple[list[draw.DrawnCard], dict[int, Creature]]:
+    """Tire les cartes d'un booster ; renvoie aussi les créatures du catalogue, par id."""
+    creatures = {c.id: c for c in db.scalars(select(Creature))}
+    candidates = [draw.Candidate(c.id, c.rarete.value, c.stock_restant) for c in creatures.values()]
+    weights = {r.value: w for r, w in rarity_weights(db).items()}
+    cards = draw.draw_booster(candidates, weights, count, first_booster=first_booster, rng=_rng)
+    return cards, creatures
 
 
 def _open_once(db: Session, user: Utilisateur) -> BoosterOut:
     # 1. Réserver le booster du jour. La ligne utilisateur reste verrouillée jusqu'au commit :
-    #    une requête simultanée du même joueur attend, puis ne trouve plus de ligne à modifier.
-    day = db.execute(
-        update(Utilisateur)
-        .where(
-            Utilisateur.id == user.id,
-            or_(Utilisateur.dernier_booster.is_(None), Utilisateur.dernier_booster < today_sql()),
-        )
-        .values(dernier_booster=today_sql())
-        .returning(Utilisateur.dernier_booster)
-        .execution_options(synchronize_session=False)
-    ).scalar_one_or_none()
-    if day is None:
+    #    une requête simultanée du même joueur attend, puis voit le booster déjà pris.
+    day = today(db)
+    last = db.execute(
+        select(Utilisateur.dernier_booster).where(Utilisateur.id == user.id).with_for_update()
+    ).scalar_one()
+    if last is not None and last >= day:
         db.rollback()
         raise Conflict(
             "Le booster du jour a déjà été ouvert. Prochain booster à partir de minuit (heure de Paris).",
             "BOOSTER_ALREADY_CLAIMED",
         )
+    first_booster = last is None  # jamais de booster : une rare garantie
+    db.execute(
+        update(Utilisateur)
+        .where(Utilisateur.id == user.id)
+        .values(dernier_booster=day)
+        .execution_options(synchronize_session=False)
+    )
 
     # 2. Tirer les cartes, au nombre réglé par l'administrateur.
-    cards = _draw(db, settings(db).cartes_par_booster)
+    cards, creatures = _draw(db, settings(db).cartes_par_booster, first_booster)
     if not cards:
         db.rollback()  # annule aussi la réservation : le joueur ne perd pas son booster
-        raise Conflict("Toutes les créatures sont épuisées : booster annulé, réessayez plus tard.")
+        raise Conflict("Toutes les créatures tirables sont épuisées : booster annulé, réessayez plus tard.")
 
     # Créatures déjà possédées avant ce booster (pour signaler les nouvelles).
-    counts = Counter(c.id for c in cards)
+    counts = Counter(c.creature_id for c in cards)
     owned = set(
         db.scalars(
             select(Collection.creature_id).where(
@@ -125,30 +125,50 @@ def _open_once(db: Session, user: Utilisateur) -> BoosterOut:
         )
     )
 
-    # 3. Sortir les cartes du stock et les ajouter à la collection.
+    # 3. Sortir les légendaires du stock et ajouter les cartes à la collection.
     #    Ordre fixe (id croissant) pour éviter les interblocages entre boosters simultanés.
     for creature_id in sorted(counts):
         qty = counts[creature_id]
-        taken = db.execute(
-            update(Creature)
-            .where(Creature.id == creature_id, Creature.stock_restant >= qty)
-            .values(stock_restant=Creature.stock_restant - qty)
-            .execution_options(synchronize_session=False)
-        ).rowcount
-        if taken != 1:
-            raise _StockChanged
+        if creatures[creature_id].stock_restant is not None:
+            taken = db.execute(
+                update(Creature)
+                .where(Creature.id == creature_id, Creature.stock_restant >= qty)
+                .values(stock_restant=Creature.stock_restant - qty)
+                .execution_options(synchronize_session=False)
+            ).rowcount
+            if taken != 1:
+                raise _StockChanged
         collection.add_cards(db, user.id, creature_id, qty)
+
+    # 4. Historique du tirage.
+    booster_id = uuid.uuid4()
+    db.execute(
+        insert(BoosterCarte),
+        [
+            {
+                "booster_id": booster_id,
+                "position": position,
+                "utilisateur_id": user.id,
+                "jour": day,
+                "creature_id": card.creature_id,
+                "rarete": card.rarity,
+                "motif": MotifTirage(card.reason),
+            }
+            for position, card in enumerate(cards, start=1)
+        ],
+    )
     db.commit()
 
     set_committed_value(user, "dernier_booster", day)  # met à jour l'objet sans le marquer modifié
 
     booster_cards = []
-    for creature in cards:
+    for card in cards:
+        creature = creatures[card.creature_id]
         booster_cards.append(
             BoosterCardOut(creature=CreatureSummaryOut.of(creature), is_new=creature.id not in owned)
         )
         owned.add(creature.id)  # un deuxième exemplaire du même booster n'est plus « nouveau »
-    return BoosterOut(id=uuid.uuid4(), claim_date=day, opened_at=datetime.now(timezone.utc), cards=booster_cards)
+    return BoosterOut(id=booster_id, claim_date=day, opened_at=datetime.now(timezone.utc), cards=booster_cards)
 
 
 def open_booster(db: Session, user: Utilisateur) -> BoosterOut:

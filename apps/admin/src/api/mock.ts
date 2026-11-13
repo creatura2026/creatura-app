@@ -382,6 +382,7 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
       }
       const settings = {
         cardsPerBooster: n,
+        rarityWeights: body.rarityWeights ?? readMockBoosterSettings().rarityWeights,
         updatedAt: new Date().toISOString(),
         updatedBy: { id: account.id, pseudo: account.pseudo },
       }

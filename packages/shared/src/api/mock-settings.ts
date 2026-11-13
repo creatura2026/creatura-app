@@ -9,13 +9,16 @@
 import type { BoosterSettings } from './types'
 
 export const DEFAULT_CARDS_PER_BOOSTER = 5
-export const MIN_CARDS_PER_BOOSTER = 1
+export const MIN_CARDS_PER_BOOSTER = 3
 export const MAX_CARDS_PER_BOOSTER = 10
 
 const COOKIE = 'creatura_mock_booster'
 
+export const DEFAULT_RARITY_WEIGHTS = { COMMON: 70, UNCOMMON: 20, RARE: 8, LEGENDARY: 2 }
+
 const DEFAULTS: BoosterSettings = {
   cardsPerBooster: DEFAULT_CARDS_PER_BOOSTER,
+  rarityWeights: { ...DEFAULT_RARITY_WEIGHTS },
   updatedAt: null,
   updatedBy: null,
 }
@@ -32,7 +35,7 @@ export function readMockBoosterSettings(): BoosterSettings {
     if (!Number.isInteger(n) || n < MIN_CARDS_PER_BOOSTER || n > MAX_CARDS_PER_BOOSTER) {
       return { ...DEFAULTS }
     }
-    return parsed
+    return { ...parsed, rarityWeights: parsed.rarityWeights ?? { ...DEFAULT_RARITY_WEIGHTS } }
   } catch {
     return { ...DEFAULTS }
   }
