@@ -44,9 +44,12 @@ info:
     Le schéma de la base n'a pas (encore) de table des boosters ni de table des sessions :
     - `GET /me/boosters/today` renvoie toujours `booster: null` (le contenu d'un booster ouvert n'est pas conservé) ;
       l'identifiant d'un booster n'est pas réutilisable et `BOOSTER_ALREADY_CLAIMED` ne porte pas de `boosterId`.
-    - `boostersOpenedPerDay` (`/admin/stats`) ne compte que le dernier booster de chaque joueur : c'est un minimum,
-      exact pour le jour courant.
-    - `/admin/rarity-distribution` compte les cartes sorties du stock depuis le lancement, quelle que soit la période.
+    - `boostersOpenedPerDay` (`/admin/stats`) et `/admin/rarity-distribution` viennent de l'historique des tirages
+      (table `booster_carte`), sur la période demandée. La répartition observée ne compte que les cartes tirées selon
+      les poids : la rare garantie du premier booster est exclue.
+    - Tirage : rareté selon les poids (`rarityWeights`, réglables), puis créature au hasard ; au plus une rare ou une
+      légendaire par booster ; rare garantie au premier booster ; la carte la plus rare est la dernière de `cards`.
+      `dropRate` est la probabilité exacte qu'une carte soit de cette rareté, règle d'exclusion comprise.
     - Pas de rotation ni de révocation des refresh tokens : ils restent valides jusqu'à leur expiration.
     - Pas encore de limitation des tentatives (`RATE_LIMITED`).
     - La salle d'échange (WebSocket) est tenue en mémoire par le processus de l'API : il faut une seule réplique
@@ -1145,6 +1148,7 @@ components:
       properties:
         code:
           type: string
+          description: COMMON, UNCOMMON, RARE ou LEGENDARY
           examples: [UNCOMMON]
         label:
           type: string
@@ -1255,7 +1259,7 @@ components:
           description: Prochain minuit, heure de Paris, exprimé en UTC
         cardsPerBooster:
           type: integer
-          minimum: 1
+          minimum: 3
           maximum: 10
           description: Nombre de cartes du prochain booster (réglé par l'administrateur, voir `/admin/settings/booster`)
           examples: [5]
@@ -1657,14 +1661,16 @@ components:
 
     BoosterSettings:
       type: object
-      required: [cardsPerBooster, updatedAt, updatedBy]
+      required: [cardsPerBooster, rarityWeights, updatedAt, updatedBy]
       properties:
         cardsPerBooster:
           type: integer
-          minimum: 1
+          minimum: 3
           maximum: 10
           description: Nombre de cartes tirées à chaque ouverture de booster
           examples: [5]
+        rarityWeights:
+          $ref: '#/components/schemas/RarityWeights'
         updatedAt:
           type: [string, 'null']
           format: date-time
@@ -1682,8 +1688,23 @@ components:
       properties:
         cardsPerBooster:
           type: integer
-          minimum: 1
+          minimum: 3
           maximum: 10
+        rarityWeights:
+          $ref: '#/components/schemas/RarityWeights'
+
+    RarityWeights:
+      type: object
+      description: >-
+        Poids de tirage de chaque rareté (de 0 à 1000, 0 retire la rareté du tirage). Les quatre sont obligatoires ;
+        commune et peu commune ne peuvent pas être toutes deux à 0.
+      required: [COMMON, UNCOMMON, RARE, LEGENDARY]
+      additionalProperties: false
+      properties:
+        COMMON: {type: integer, minimum: 0, maximum: 1000, examples: [70]}
+        UNCOMMON: {type: integer, minimum: 0, maximum: 1000, examples: [20]}
+        RARE: {type: integer, minimum: 0, maximum: 1000, examples: [8]}
+        LEGENDARY: {type: integer, minimum: 0, maximum: 1000, examples: [2]}
 
     RarityDistribution:
       type: object

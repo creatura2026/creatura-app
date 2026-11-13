@@ -880,6 +880,7 @@ export interface components {
              * @example 5
              */
             cardsPerBooster: number;
+            rarityWeights: components["schemas"]["RarityWeights"];
             /**
              * Format: date-time
              * @description Dernière modification ; null tant que la valeur par défaut n'a jamais été changée
@@ -890,6 +891,18 @@ export interface components {
         };
         UpdateBoosterSettingsRequest: {
             cardsPerBooster: number;
+            rarityWeights?: components["schemas"]["RarityWeights"];
+        };
+        /** @description Poids de tirage de chaque rareté (de 0 à 1000, 0 retire la rareté du tirage). Les quatre sont obligatoires ; commune et peu commune ne peuvent pas être toutes deux à 0. */
+        RarityWeights: {
+            /** @example 70 */
+            COMMON: number;
+            /** @example 20 */
+            UNCOMMON: number;
+            /** @example 8 */
+            RARE: number;
+            /** @example 2 */
+            LEGENDARY: number;
         };
         RarityDistribution: {
             period: components["schemas"]["Period"];

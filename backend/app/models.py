@@ -1,4 +1,4 @@
-"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_…, 05_…).
+"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_ à 07_).
 
 Le schéma est la source de vérité : le back ne crée ni ne modifie aucune table
 (pas de `create_all`). Les noms suivent la base : français, snake_case, sans accents.
@@ -9,7 +9,7 @@ import enum
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, SmallInteger, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -35,6 +35,7 @@ class Rarete(str, enum.Enum):
     COMMUN = "COMMUN"
     PEU_COMMUN = "PEU_COMMUN"
     RARE = "RARE"
+    LEGENDAIRE = "LEGENDAIRE"
 
 
 class Statut(str, enum.Enum):
@@ -75,10 +76,10 @@ class Creature(Base):
     description: Mapped[str | None] = mapped_column(Text)
     famille: Mapped[Famille] = mapped_column(_varchar_enum(Famille, 20))
     rarete: Mapped[Rarete] = mapped_column(_varchar_enum(Rarete, 20))
-    poids: Mapped[int] = mapped_column(Integer)
     image: Mapped[str] = mapped_column(String(255))
-    stock_total: Mapped[int] = mapped_column(Integer)
-    stock_restant: Mapped[int] = mapped_column(Integer)
+    # Édition limitée : seules les légendaires ont un stock ; None = illimité (07_evolution_…).
+    stock_total: Mapped[int | None] = mapped_column(Integer)
+    stock_restant: Mapped[int | None] = mapped_column(Integer)
 
 
 class Collection(Base):
@@ -155,3 +156,32 @@ class Reglage(Base):
     modifie_par_id: Mapped[uuid.UUID | None] = mapped_column("modifie_par", ForeignKey("utilisateur.id"))
 
     modifie_par: Mapped[Utilisateur | None] = relationship(lazy="joined")
+
+
+class RareteTirage(Base):
+    """Poids de tirage d'une rareté, réglable par un administrateur (07_evolution_tirage_par_rarete.sql)."""
+
+    __tablename__ = "rarete_tirage"
+
+    rarete: Mapped[Rarete] = mapped_column(_varchar_enum(Rarete, 20), primary_key=True)
+    poids: Mapped[int] = mapped_column(Integer)
+
+
+class MotifTirage(str, enum.Enum):
+    TIRAGE = "TIRAGE"
+    GARANTIE_PREMIER_BOOSTER = "GARANTIE_PREMIER_BOOSTER"
+
+
+class BoosterCarte(Base):
+    """Historique des tirages : une ligne par carte de chaque booster ouvert."""
+
+    __tablename__ = "booster_carte"
+
+    booster_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    position: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    utilisateur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    jour: Mapped[date] = mapped_column(Date)
+    tire_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    creature_id: Mapped[int] = mapped_column(ForeignKey("creature.id"))
+    rarete: Mapped[Rarete] = mapped_column(_varchar_enum(Rarete, 20))
+    motif: Mapped[MotifTirage] = mapped_column(_varchar_enum(MotifTirage, 30))

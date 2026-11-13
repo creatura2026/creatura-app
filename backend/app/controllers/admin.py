@@ -1,24 +1,22 @@
 """UC-12 à UC-14 : tableau de bord administrateur, et réglage des boosters.
 
-Sans table booster, l'historique des boosters n'existe pas :
-- boosters ouverts par jour : seul le dernier booster de chaque joueur est connu
-  (`dernier_booster`), c'est donc un minimum (exact pour aujourd'hui) ;
-- répartition des raretés : calculée à partir des stocks (cartes sorties = stock_total -
-  stock_restant), depuis le lancement, quelle que soit la période demandée.
+Boosters ouverts par jour et répartition observée des raretés viennent de l'historique des
+tirages (`booster_carte`, une ligne par carte), sur la période demandée. Le taux attendu est le
+calcul exact de `app.draw.expected_card_rates` (règle d'exclusion rare / légendaire comprise).
 """
 
 import uuid
 from datetime import date, timedelta
 
-from sqlalchemy import Date, cast, func, or_, select
+from sqlalchemy import Date, cast, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.controllers.booster import settings as booster_settings
 from app.controllers.booster import today
-from app.controllers.catalog import paginate, rarity_drop_rates
-from app.errors import BadRequest
-from app.models import Creature, Echange, Rarete, Reglage, Role, Statut, Utilisateur
+from app.controllers.catalog import paginate, rarity_drop_rates, rarity_weights
+from app.errors import BadRequest, field_error
+from app.models import BoosterCarte, Echange, MotifTirage, Rarete, RareteTirage, Reglage, Role, Statut, Utilisateur
 from app.schemas.admin import (
     AdminStatsOut,
     CompletedTrades,
@@ -29,7 +27,7 @@ from app.schemas.admin import (
     Registrations,
 )
 from app.schemas.base import PageParams, PageResult
-from app.schemas.catalog import RaritySummaryOut
+from app.schemas.catalog import RARETE_OF, RarityCode, RaritySummaryOut
 
 DEFAULT_PERIOD_DAYS = 30
 MAX_PERIOD_DAYS = 366
@@ -68,11 +66,12 @@ def stats(db: Session, period: Period) -> AdminStatsOut:
         in_period=db.scalar(players.where(created.between(period.date_from, period.date_to))),
     )
 
+    # Chaque booster compte, même si le joueur en ouvre un tous les jours.
     boosters = dict(
         db.execute(
-            select(Utilisateur.dernier_booster, func.count())
-            .where(Utilisateur.dernier_booster.between(period.date_from, period.date_to))
-            .group_by(Utilisateur.dernier_booster)
+            select(BoosterCarte.jour, func.count(BoosterCarte.booster_id.distinct()))
+            .where(BoosterCarte.jour.between(period.date_from, period.date_to))
+            .group_by(BoosterCarte.jour)
         ).all()
     )
 
@@ -109,12 +108,19 @@ def list_trades(
 
 
 def rarity_distribution(db: Session, period: Period) -> RarityDistributionOut:
-    """Compare la probabilité de chaque rareté aux cartes réellement sorties des boosters."""
+    """Compare la probabilité de chaque rareté aux cartes réellement tirées sur la période.
+
+    Seules les cartes tirées selon les poids comptent : la rare garantie du premier booster
+    fausserait le taux observé des rares.
+    """
     drawn = dict(
         db.execute(
-            select(Creature.rarete, func.sum(Creature.stock_total - Creature.stock_restant)).group_by(
-                Creature.rarete
+            select(BoosterCarte.rarete, func.count())
+            .where(
+                BoosterCarte.jour.between(period.date_from, period.date_to),
+                BoosterCarte.motif == MotifTirage.TIRAGE,
             )
+            .group_by(BoosterCarte.rarete)
         ).all()
     )
     expected = rarity_drop_rates(db)
@@ -134,16 +140,35 @@ def rarity_distribution(db: Session, period: Period) -> RarityDistributionOut:
     )
 
 
-def get_booster_settings(db: Session) -> Reglage:
-    return booster_settings(db)
+def get_booster_settings(db: Session) -> tuple[Reglage, dict[Rarete, int]]:
+    return booster_settings(db), rarity_weights(db)
 
 
-def update_booster_settings(db: Session, admin: Utilisateur, cards_per_booster: int) -> Reglage:
+def _check_weights(weights: dict[RarityCode, int]) -> dict[Rarete, int]:
+    if set(weights) != set(RarityCode):
+        raise field_error("VALIDATION_ERROR", "rarityWeights", "Donnez le poids des quatre raretés.")
+    if any(not 0 <= w <= 1000 for w in weights.values()):
+        raise field_error("VALIDATION_ERROR", "rarityWeights", "Le poids d'une rareté va de 0 à 1000.")
+    by_rarete = {RARETE_OF[code]: w for code, w in weights.items()}
+    # Après une rare ou une légendaire, le booster se complète en communes et peu communes.
+    if by_rarete[Rarete.COMMUN] + by_rarete[Rarete.PEU_COMMUN] == 0:
+        raise field_error(
+            "VALIDATION_ERROR", "rarityWeights", "Les communes et peu communes ne peuvent pas être toutes deux à 0."
+        )
+    return by_rarete
+
+
+def update_booster_settings(
+    db: Session, admin: Utilisateur, cards_per_booster: int, weights: dict[RarityCode, int] | None = None
+) -> tuple[Reglage, dict[Rarete, int]]:
     """S'applique aux boosters ouverts après la modification."""
+    by_rarete = _check_weights(weights) if weights is not None else None
     reglage = booster_settings(db)
     reglage.cartes_par_booster = cards_per_booster
     reglage.modifie_le = func.now()
     reglage.modifie_par_id = admin.id
+    for rarete, poids in (by_rarete or {}).items():
+        db.execute(update(RareteTirage).where(RareteTirage.rarete == rarete).values(poids=poids))
     db.commit()
     db.refresh(reglage)
-    return reglage
+    return reglage, rarity_weights(db)

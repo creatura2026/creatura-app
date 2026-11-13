@@ -42,9 +42,9 @@ VALUES ('00000000-0000-0000-0000-00000000000a', 'TestA', 'test_a', 'hash'),
 INSERT INTO utilisateur (pseudo, identifiant, mot_de_passe_hash, role)
 VALUES ('TestAdmin', 'test_admin', 'hash', 'ADMIN');
 
-INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-VALUES ('TestMoussou', 'NATURE', 'COMMUN', 60, 'images/moussou.png', 100, 100),
-       ('TestBrumel',  'BRUME',  'RARE',   10, 'images/brumel.png',   10,  10);
+INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+VALUES ('TestMoussou', 'NATURE', 'COMMUN',     'images/moussou.png', NULL, NULL),
+       ('TestBrumel',  'BRUME',  'LEGENDAIRE', 'images/brumel.png',    10,   10);
 
 INSERT INTO collection (utilisateur_id, creature_id, quantite)
 SELECT '00000000-0000-0000-0000-00000000000a', id, 2 FROM creature WHERE nom = 'TestMoussou';
@@ -89,21 +89,39 @@ SELECT pg_temp.doit_echouer('pseudo vide refusé',
 -- creature
 -- ---------------------------------------------------------------------------
 SELECT pg_temp.doit_echouer('nom de créature unique',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('TestMoussou', 'NATURE', 'COMMUN', 1, 'x.png', 1, 1)$q$,
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('TestMoussou', 'NATURE', 'COMMUN', 'x.png', NULL, NULL)$q$,
     'uq_creature_nom');
 SELECT pg_temp.doit_echouer('famille inconnue refusée',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('X', 'FEU', 'COMMUN', 1, 'x.png', 1, 1)$q$,
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'FEU', 'COMMUN', 'x.png', NULL, NULL)$q$,
     'ck_creature_famille');
 SELECT pg_temp.doit_echouer('rareté inconnue refusée',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('X', 'NATURE', 'LEGENDAIRE', 1, 'x.png', 1, 1)$q$,
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'NATURE', 'MYTHIQUE', 'x.png', NULL, NULL)$q$,
     'ck_creature_rarete');
-SELECT pg_temp.doit_echouer('poids nul refusé',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('X', 'NATURE', 'COMMUN', 0, 'x.png', 1, 1)$q$,
-    'ck_creature_poids');
+SELECT pg_temp.doit_echouer('stock refusé hors légendaire (illimité)',
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'NATURE', 'RARE', 'x.png', 5, 5)$q$,
+    'ck_creature_stock_legendaire');
+SELECT pg_temp.doit_echouer('légendaire sans stock refusée',
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'NATURE', 'LEGENDAIRE', 'x.png', NULL, NULL)$q$,
+    'ck_creature_stock_legendaire');
+SELECT pg_temp.doit_echouer('stock total sans stock restant refusé',
+    $q$UPDATE creature SET stock_restant = NULL WHERE nom = 'TestBrumel'$q$,
+    'ck_creature_stock_restant');
+SELECT pg_temp.doit_echouer('poids de rareté négatif refusé',
+    $q$UPDATE rarete_tirage SET poids = -1 WHERE rarete = 'RARE'$q$,
+    'ck_rarete_tirage_poids');
+SELECT pg_temp.doit_echouer('booster de 2 cartes refusé',
+    $q$UPDATE reglage SET cartes_par_booster = 2$q$,
+    'ck_reglage_cartes_par_booster');
+SELECT pg_temp.doit_echouer('motif de tirage inconnu refusé',
+    $q$INSERT INTO booster_carte (booster_id, position, utilisateur_id, jour, creature_id, rarete, motif)
+       SELECT gen_random_uuid(), 1, '00000000-0000-0000-0000-00000000000a', current_date, id, 'COMMUN', 'CADEAU'
+       FROM creature WHERE nom = 'TestMoussou'$q$,
+    'ck_booster_carte_motif');
 SELECT pg_temp.doit_echouer('stock restant négatif refusé',
     $q$UPDATE creature SET stock_restant = stock_restant - 1000 WHERE nom = 'TestBrumel'$q$,
     'ck_creature_stock_restant');

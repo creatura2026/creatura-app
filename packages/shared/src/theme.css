@@ -48,6 +48,7 @@
   --color-rarity-common: #9aa7b1;
   --color-rarity-uncommon: #4776bc;
   --color-rarity-rare: #f6cb67;
+  --color-rarity-legendary: #a259d9;
 
   /* Typographies : titres pixel (chiffres à part, voir « Creatura Digits »), texte Inter */
   --font-pixel: 'Creatura Digits', 'Pixelify Sans', ui-monospace, monospace;
@@ -207,10 +208,10 @@
 }
 
 /*
- * Aura de rareté : les cartes peu communes et rares scintillent légèrement, sans survol.
+ * Aura de rareté : les cartes peu communes, rares et légendaires scintillent, sans survol.
  * Un halo de la couleur de la rareté respire autour de la carte et quelques éclats pixel clignotent
  * à tour de rôle sur son pourtour. Les cartes communes restent sobres.
- * Placer `rarity-frame` + `data-rarity="COMMON|UNCOMMON|RARE"` sur la carte (élément positionné).
+ * Placer `rarity-frame` + `data-rarity="COMMON|UNCOMMON|RARE|LEGENDARY"` sur la carte (élément positionné).
  */
 .rarity-frame {
   --rarity: var(--color-line);
@@ -234,9 +235,18 @@
   --spark: #ffffff;
   --spark-alt: #e09a10;
 }
+/* Légendaire : halo violet plus large, éclats dorés */
+.rarity-frame[data-rarity='LEGENDARY'] {
+  --rarity: var(--color-rarity-legendary);
+  --aura: rgb(162 89 217 / 0.9);
+  --aura-blur: 22px;
+  --aura-spread: 5px;
+  --spark: #ffffff;
+  --spark-alt: #f6cb67;
+}
 
 /* Halo : une ombre extérieure seule, elle ne déborde jamais sur le contenu de la carte */
-.rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::before {
+.rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'], [data-rarity='LEGENDARY'])::before {
   content: '';
   position: absolute;
   inset: -2px;
@@ -246,7 +256,7 @@
 }
 
 /* Éclats : petits carrés posés dans la marge autour de la carte */
-.rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::after {
+.rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'], [data-rarity='LEGENDARY'])::after {
   --s1: var(--spark);
   --s2: transparent;
   --s3: var(--spark-alt);
@@ -261,7 +271,7 @@
     linear-gradient(var(--s1) 0 0) 82% 100% / 4px 4px;
   background-repeat: no-repeat;
 }
-.rarity-frame[data-rarity='RARE']::after {
+.rarity-frame:is([data-rarity='RARE'], [data-rarity='LEGENDARY'])::after {
   background:
     linear-gradient(var(--s1) 0 0) 18% 0 / 6px 6px,
     linear-gradient(var(--s3) 0 0) 74% 2px / 4px 4px,
@@ -275,15 +285,18 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::before {
+  .rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'], [data-rarity='LEGENDARY'])::before {
     animation: rarity-breathe 2.6s ease-in-out infinite alternate;
   }
   /* Les éclats s'allument à tour de rôle, par paliers pour rester « pixel » */
-  .rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::after {
+  .rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'], [data-rarity='LEGENDARY'])::after {
     animation: rarity-twinkle 2.4s steps(1, end) infinite;
   }
   .rarity-frame[data-rarity='RARE']::after {
     animation-duration: 1.6s;
+  }
+  .rarity-frame[data-rarity='LEGENDARY']::after {
+    animation-duration: 1.1s;
   }
 }
 @keyframes rarity-breathe {

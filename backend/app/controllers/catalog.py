@@ -2,11 +2,12 @@
 
 import unicodedata
 
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, func, or_, select
 from sqlalchemy.orm import Session
 
+from app import draw
 from app.errors import NotFound
-from app.models import Creature, Famille, Rarete
+from app.models import Creature, Famille, Rarete, RareteTirage, Reglage
 from app.schemas.base import PageParams, PageResult
 from app.schemas.catalog import RARITY_CODES, RARITY_LABELS, RARITY_RANK, FamilyOut, RarityOut
 
@@ -81,20 +82,36 @@ def list_families() -> list[FamilyOut]:
     return [FamilyOut.of(f) for f in Famille]
 
 
-def rarity_drop_rates(db: Session) -> dict[Rarete, float]:
-    """Probabilité actuelle (0 à 1) de tirer chaque rareté.
+def rarity_weights(db: Session) -> dict[Rarete, int]:
+    """Poids de tirage par rareté (table rarete_tirage, réglable par l'administrateur)."""
+    weights = {r.rarete: r.poids for r in db.scalars(select(RareteTirage))}
+    if len(weights) != len(Rarete):  # lignes créées par db/init/07_evolution_tirage_par_rarete.sql
+        raise RuntimeError("Poids de tirage absents : appliquer les scripts de db/ (appliquer.sh)")
+    return weights
 
-    Elle découle du poids des créatures encore en stock : une créature épuisée sort du tirage.
-    """
-    weights = dict(
-        db.execute(
-            select(Creature.rarete, func.sum(Creature.poids))
-            .where(Creature.stock_restant > 0)
-            .group_by(Creature.rarete)
-        ).all()
+
+def drawable_rarities(db: Session) -> set[Rarete]:
+    """Raretés qui ont au moins une créature tirable (légendaire : stock restant > 0)."""
+    return set(
+        db.scalars(
+            select(Creature.rarete)
+            .where(or_(Creature.stock_restant.is_(None), Creature.stock_restant > 0))
+            .distinct()
+        )
     )
-    total = sum(weights.values())
-    return {r: round(weights.get(r, 0) / total, 4) if total else 0.0 for r in Rarete}
+
+
+def rarity_drop_rates(db: Session) -> dict[Rarete, float]:
+    """Probabilité actuelle (0 à 1) qu'une carte d'un booster soit de chaque rareté.
+
+    Calcul exact de `app.draw.expected_card_rates` : poids actuels, règle d'exclusion rare /
+    légendaire, nombre de cartes par booster, raretés encore tirables. Sans la garantie du
+    premier booster.
+    """
+    cards = db.scalar(select(Reglage.cartes_par_booster).where(Reglage.id == Reglage.ID)) or 0
+    weights = {r.value: w for r, w in rarity_weights(db).items()}
+    rates = draw.expected_card_rates(weights, {r.value for r in drawable_rarities(db)}, cards)
+    return {r: round(rates[r.value], 4) for r in Rarete}
 
 
 def list_rarities(db: Session) -> list[RarityOut]:

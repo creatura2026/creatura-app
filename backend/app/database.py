@@ -22,6 +22,9 @@ def rds_iam_token_provider(settings: Settings) -> Callable[[], str]:
     if not settings.aws_region:
         raise RuntimeError("DB_IAM_AUTH=true exige AWS_REGION")
     url = make_url(settings.database_url)
+    # Signé pour la vraie RDS, même si la connexion passe par un tunnel (localhost:15432).
+    host = settings.db_iam_host or url.host
+    port = settings.db_iam_port or url.port or 5432
     client = boto3.session.Session(
         aws_access_key_id=settings.aws_access_key_id,
         aws_secret_access_key=settings.aws_secret_access_key,
@@ -31,7 +34,7 @@ def rds_iam_token_provider(settings: Settings) -> Callable[[], str]:
 
     def token() -> str:
         return client.generate_db_auth_token(
-            DBHostname=url.host, Port=url.port or 5432, DBUsername=url.username, Region=settings.aws_region
+            DBHostname=host, Port=port, DBUsername=url.username, Region=settings.aws_region
         )
 
     return token

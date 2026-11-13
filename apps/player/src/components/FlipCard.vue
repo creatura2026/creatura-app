@@ -93,7 +93,11 @@ defineEmits<{ reveal: [] }>()
  * (`rarity-breathe`, theme.css) exactement là où l'allumage s'arrête.
  */
 @media (prefers-reduced-motion: no-preference) {
-  .card-back.rarity-frame:is([data-rarity='UNCOMMON'], [data-rarity='RARE'])::before {
+  .card-back.rarity-frame:is(
+      [data-rarity='UNCOMMON'],
+      [data-rarity='RARE'],
+      [data-rarity='LEGENDARY']
+    )::before {
     animation:
       aura-ignite 480ms cubic-bezier(0.2, 0.8, 0.3, 1) backwards,
       rarity-breathe 2.6s ease-in-out 480ms infinite alternate;

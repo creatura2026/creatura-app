@@ -9,20 +9,26 @@ from conftest import (
     PASSWORD,
     assert_stock_invariant,
     auth_headers,
+    booster_history,
     give,
     login,
+    not_first_booster,
+    only_creatures,
     problem,
     register_and_login,
     set_booster_size,
     set_stock,
+    set_weights,
 )
 
 from app.controllers import booster
 from app.database import SessionLocal
 from app.errors import Conflict
-from app.models import Utilisateur
+from app.models import MotifTirage, Rarete, Utilisateur
 
 PARIS = ZoneInfo("Europe/Paris")
+RANK = {"COMMON": 1, "UNCOMMON": 2, "RARE": 3, "LEGENDARY": 4}
+ONLY_LEGENDARIES = {"COMMUN": 0, "PEU_COMMUN": 0, "RARE": 0, "LEGENDAIRE": 1}
 
 
 def _open_concurrently(user_ids: list) -> list:
@@ -43,7 +49,8 @@ def _open_concurrently(user_ids: list) -> list:
 
 
 def test_daily_booster(client):
-    h = register_and_login(client, "Lina")["headers"]
+    p = register_and_login(client, "Lina")
+    h = p["headers"]
 
     today = client.get(f"{API}/me/boosters/today", headers=h).json()
     assert today["available"] is True and today["cardsPerBooster"] == 5 and today["booster"] is None
@@ -64,23 +71,76 @@ def test_daily_booster(client):
     problem(client.post(f"{API}/me/boosters", headers=h), 409, "BOOSTER_ALREADY_CLAIMED")
 
     today = client.get(f"{API}/me/boosters/today", headers=h).json()
-    assert today["available"] is False and today["booster"] is None  # pas de table booster
+    assert today["available"] is False and today["booster"] is None
 
     me = client.get(f"{API}/me", headers=h).json()
     assert me["progress"]["totalCards"] == 5 and me["boosterAvailableToday"] is False
     assert_stock_invariant()
 
 
-def test_new_cards_are_flagged(client):
-    set_stock({"Moussou": 3, "Brumel": 2})
+def test_first_booster_has_a_guaranteed_rare_revealed_last(client):
     p = register_and_login(client, "Lina")
-    give(p["id"], "Moussou", 1)  # il ne reste que 2 Moussou et 2 Brumel à tirer
-
     cards = client.post(f"{API}/me/boosters", headers=p["headers"]).json()["cards"]
-    assert sorted(c["creature"]["name"] for c in cards) == ["Brumel", "Brumel", "Moussou", "Moussou"]
-    assert all(not c["isNew"] for c in cards if c["creature"]["name"] == "Moussou")  # déjà possédée
-    # Seul le premier Brumel est nouveau : le second est un doublon du même booster.
-    assert [c["isNew"] for c in cards if c["creature"]["name"] == "Brumel"] == [True, False]
+    codes = [c["creature"]["rarity"]["code"] for c in cards]
+    assert codes[-1] == "RARE" and codes.count("RARE") == 1 and "LEGENDARY" not in codes
+
+    motifs = [row.motif for row in booster_history(p["id"])]
+    assert motifs.count(MotifTirage.GARANTIE_PREMIER_BOOSTER) == 1
+    assert booster_history(p["id"])[-1].motif == MotifTirage.GARANTIE_PREMIER_BOOSTER
+
+
+def test_only_the_first_booster_is_guaranteed(client):
+    p = register_and_login(client, "Lina")
+    not_first_booster(p["id"])
+    set_weights(COMMUN=1, PEU_COMMUN=0, RARE=0, LEGENDAIRE=0)
+    cards = client.post(f"{API}/me/boosters", headers=p["headers"]).json()["cards"]
+    assert {c["creature"]["rarity"]["code"] for c in cards} == {"COMMON"}
+    assert {row.motif for row in booster_history(p["id"])} == {MotifTirage.TIRAGE}
+
+
+def test_history_records_every_card(client):
+    p = register_and_login(client, "Lina")
+    opened = client.post(f"{API}/me/boosters", headers=p["headers"]).json()
+    rows = booster_history(p["id"])
+    assert [r.position for r in rows] == [1, 2, 3, 4, 5]
+    assert {str(r.booster_id) for r in rows} == {opened["id"]}
+    assert {r.jour.isoformat() for r in rows} == {opened["claimDate"]}
+    assert [str(r.creature_id) for r in rows] == [c["creature"]["id"] for c in opened["cards"]]
+    assert [Rarete(r.rarete).value for r in rows] == [
+        {"COMMON": "COMMUN", "UNCOMMON": "PEU_COMMUN", "RARE": "RARE", "LEGENDARY": "LEGENDAIRE"}[
+            c["creature"]["rarity"]["code"]
+        ]
+        for c in opened["cards"]
+    ]
+
+
+def test_one_rare_or_legendary_at_most_and_it_comes_last(client):
+    set_weights(COMMUN=1, PEU_COMMUN=1, RARE=1000, LEGENDAIRE=1000)
+    set_booster_size(10)
+    players = [register_and_login(client, f"Joueur{i}") for i in range(5)]
+    not_first_booster(*(p["id"] for p in players))
+    for p in players:
+        codes = [c["creature"]["rarity"]["code"] for c in client.post(f"{API}/me/boosters", headers=p["headers"]).json()["cards"]]
+        assert len(codes) == 10
+        assert sum(code in ("RARE", "LEGENDARY") for code in codes) == 1
+        assert RANK[codes[-1]] == max(RANK[c] for c in codes)
+    assert_stock_invariant()
+
+
+def test_new_cards_are_flagged(client):
+    set_weights(COMMUN=1, PEU_COMMUN=0, RARE=0, LEGENDAIRE=0)
+    only_creatures("COMMUN", ["Moussou"])  # toutes les cartes seront des Moussou
+    a, b = register_and_login(client, "Alice"), register_and_login(client, "Bob")
+    not_first_booster(a["id"], b["id"])
+    give(a["id"], "Moussou", 1)
+
+    cards = client.post(f"{API}/me/boosters", headers=a["headers"]).json()["cards"]
+    assert [c["creature"]["name"] for c in cards] == ["Moussou"] * 5  # doublons autorisés
+    assert not any(c["isNew"] for c in cards)  # déjà possédée
+
+    # Seul le premier exemplaire est nouveau : les suivants sont des doublons du même booster.
+    cards = client.post(f"{API}/me/boosters", headers=b["headers"]).json()["cards"]
+    assert [c["isNew"] for c in cards] == [True, False, False, False, False]
 
 
 def test_booster_size_follows_admin_setting(client, admin_headers):
@@ -111,31 +171,49 @@ def test_concurrent_requests_open_one_booster(client):
     results = _open_concurrently([p["id"]] * 4)
     assert sorted(results, key=str) == [5, "conflict", "conflict", "conflict"]
     assert client.get(f"{API}/me", headers=p["headers"]).json()["progress"]["totalCards"] == 5
+    assert len(booster_history(p["id"])) == 5
     assert_stock_invariant()
 
 
-def test_stock_exhausted_booster_is_cancelled_not_lost(client):
-    set_stock({"Brumel": 2})
-    set_booster_size(5)
+def test_exhausted_legendaries_cancel_the_booster_without_losing_it(client):
+    set_weights(**ONLY_LEGENDARIES)  # seules les légendaires sont tirables
+    set_stock({"Serazou": 1, "DioDaLionseau": 0})
     a, b = register_and_login(client, "Alice"), register_and_login(client, "Bob")
+    not_first_booster(a["id"], b["id"])
 
-    # Plus que 2 exemplaires dans tout le jeu : booster partiel.
+    # Une légendaire, puis plus rien de tirable (exclusion) : booster partiel d'une carte.
     cards = client.post(f"{API}/me/boosters", headers=a["headers"]).json()["cards"]
-    assert [c["creature"]["name"] for c in cards] == ["Brumel", "Brumel"]
+    assert [c["creature"]["name"] for c in cards] == ["Serazou"]
 
-    # Tout est épuisé : booster annulé, et Bob ne le perd pas.
+    # Plus aucune légendaire : booster annulé, et Bob ne le perd pas.
     body = problem(client.post(f"{API}/me/boosters", headers=b["headers"]), 409, "CARDS_UNAVAILABLE")
     assert "épuisées" in body["detail"]
     assert client.get(f"{API}/me/boosters/today", headers=b["headers"]).json()["available"] is True
+    assert booster_history(b["id"]) == []
     assert_stock_invariant()
 
 
-def test_concurrent_boosters_never_exceed_stock(client):
-    """Plusieurs joueurs se disputent les 7 derniers exemplaires du jeu."""
-    set_stock({"Moussou": 4, "Cristille": 3})
+def test_concurrent_boosters_never_exceed_legendary_stock(client):
+    """Quatre joueurs se disputent les 3 derniers exemplaires légendaires."""
+    set_weights(**ONLY_LEGENDARIES)
+    set_stock({"Serazou": 2, "DioDaLionseau": 1})
     players = [register_and_login(client, f"Joueur{i}") for i in range(4)]
+    not_first_booster(*(p["id"] for p in players))
 
     results = _open_concurrently([p["id"] for p in players])
 
-    assert sum(r for r in results if r != "conflict") == 7
+    assert sorted(results, key=str) == [1, 1, 1, "conflict"]
     assert_stock_invariant()
+
+
+def test_unlimited_creatures_never_run_out(client):
+    """Commune, peu commune et rare n'ont pas de stock : leur stock reste NULL."""
+    p = register_and_login(client, "Lina")
+    client.post(f"{API}/me/boosters", headers=p["headers"])
+    with SessionLocal() as db:
+        from sqlalchemy import select
+
+        from app.models import Creature
+
+        stocks = set(db.execute(select(Creature.stock_total, Creature.stock_restant).where(Creature.rarete != Rarete.LEGENDAIRE)))
+    assert stocks == {(None, None)}

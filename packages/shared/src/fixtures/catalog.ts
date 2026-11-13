@@ -20,9 +20,10 @@ export const FAMILIES: Family[] = [
 
 /** Probabilités de tirage proposées — à valider au point client. */
 export const RARITIES: Rarity[] = [
-  { code: 'COMMON', label: 'Commun', rank: 1, dropRate: 0.65 },
+  { code: 'COMMON', label: 'Commun', rank: 1, dropRate: 0.64 },
   { code: 'UNCOMMON', label: 'Peu commun', rank: 2, dropRate: 0.27 },
   { code: 'RARE', label: 'Rare', rank: 3, dropRate: 0.08 },
+  { code: 'LEGENDARY', label: 'Légendaire', rank: 4, dropRate: 0.01 },
 ]
 
 /** Couleur d'accent de chaque famille (fond de carte, œufs). */

@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_session_token: str | None = None
+    # Derrière le tunnel SSM (DATABASE_URL sur localhost:15432), le jeton doit être signé pour la
+    # vraie adresse de la RDS : la donner ici. Vide = hôte et port de DATABASE_URL (EKS, accès direct).
+    db_iam_host: str | None = None
+    db_iam_port: int | None = None
 
     jwt_secret: str = "dev-only-secret-change-me-in-production-please-0123456789"
     jwt_algorithm: str = "HS256"
@@ -44,10 +48,14 @@ class Settings(BaseSettings):
     admin_password: str | None = None
     admin_pseudo: str = "Admin"
 
-    @field_validator("aws_region", "aws_access_key_id", "aws_secret_access_key", "aws_session_token")
+    @field_validator(
+        "aws_region", "aws_access_key_id", "aws_secret_access_key", "aws_session_token", "db_iam_host", "db_iam_port",
+        mode="before",
+    )
     @classmethod
-    def _empty_is_none(cls, value: str | None) -> str | None:
-        return value or None
+    def _empty_is_none(cls, value):
+        """Variable vide dans le .env (`DB_IAM_PORT=`) = non renseignée."""
+        return None if value == "" else value
 
     @field_validator("database_url")
     @classmethod

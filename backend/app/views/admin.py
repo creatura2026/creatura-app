@@ -40,19 +40,17 @@ def trades(
 
 @router.get("/rarity-distribution", response_model=RarityDistributionOut)
 def rarity_distribution(db: DbSession, date_from: date | None = DateFrom, date_to: date | None = DateTo):
-    """Cartes sorties des boosters par rareté, comparées aux probabilités de tirage.
-
-    Sans table booster, le décompte vient des stocks : il couvre toute la vie du jeu.
-    """
+    """Cartes tirées sur la période par rareté (historique des boosters), comparées aux
+    probabilités de tirage. La rare garantie du premier booster n'est pas comptée."""
     return admin.rarity_distribution(db, admin.resolve_period(db, date_from, date_to))
 
 
 @router.get("/settings/booster", response_model=BoosterSettingsOut)
 def get_booster_settings(db: DbSession):
-    return BoosterSettingsOut.of(admin.get_booster_settings(db))
+    return BoosterSettingsOut.of(*admin.get_booster_settings(db))
 
 
 @router.put("/settings/booster", response_model=BoosterSettingsOut)
 def update_booster_settings(data: BoosterSettingsIn, user: AdminUser, db: DbSession):
-    """Nombre de cartes par booster : s'applique aux boosters ouverts après la modification."""
-    return BoosterSettingsOut.of(admin.update_booster_settings(db, user, data.cards_per_booster))
+    """Nombre de cartes par booster et poids des raretés : s'applique aux boosters ouverts après."""
+    return BoosterSettingsOut.of(*admin.update_booster_settings(db, user, data.cards_per_booster, data.rarity_weights))

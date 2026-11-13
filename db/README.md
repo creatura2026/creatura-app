@@ -75,7 +75,7 @@ Moussou ×1, et un échange `EN_ATTENTE` (Alice offre 1 Moussou contre le Brumel
 |---|---|
 | `utilisateur.role` | `JOUEUR`, `ADMIN` |
 | `creature.famille` | `NATURE`, `CRISTAL`, `BRUME`, `LUEUR` |
-| `creature.rarete` | `COMMUN`, `PEU_COMMUN`, `RARE` |
+| `creature.rarete` | `COMMUN`, `PEU_COMMUN`, `RARE`, `LEGENDAIRE` |
 | `echange.statut` | `EN_ATTENTE`, `ACCEPTE`, `REFUSE`, `ANNULE`, `ECHOUE` (avec `motif_echec`) |
 | `reglage.cartes_par_booster` | de 1 à 10 (5 par défaut) |
 | `echange_ligne.sens` | `OFFERT` (donné par le proposeur), `DEMANDE` (donné par le destinataire) |

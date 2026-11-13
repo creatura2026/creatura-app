@@ -138,7 +138,12 @@ describe('API simulée — booster quotidien (UC-03, UC-04)', () => {
   })
 
   it('tire le nombre de cartes réglé par l’administrateur', async () => {
-    writeMockBoosterSettings({ cardsPerBooster: 8, updatedAt: null, updatedBy: null })
+    writeMockBoosterSettings({
+      cardsPerBooster: 8,
+      rarityWeights: { COMMON: 70, UNCOMMON: 20, RARE: 8, LEGENDARY: 2 },
+      updatedAt: null,
+      updatedBy: null,
+    })
     const { api, loginAs } = setup()
     await loginAs('demo')
     expect((await api.getTodayBooster()).cardsPerBooster).toBe(8)
