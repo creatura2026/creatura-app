@@ -6,6 +6,7 @@ Monorepo pnpm contenant :
 |---|---|
 | `apps/player` | PWA joueur, mobile d'abord (UC-01 à UC-11) |
 | `apps/admin` | Dashboard administrateur Web / Desktop (UC-12 à UC-14) |
+| `apps/desktop` | Application Windows (.exe) : la PWA joueur dans Electron |
 | `packages/shared` | Thème (couleurs et typographies du document de vision), composants, types générés depuis `creatura-api.openapi.yaml`, catalogue fictif |
 
 ## Démarrer
@@ -18,6 +19,17 @@ pnpm build        # vérification des types + build des deux apps
 ```
 
 Tests unitaires : `pnpm --filter player test:unit` et `pnpm --filter admin test:unit`.
+
+## Application Windows (.exe)
+
+```sh
+cp apps/desktop/config.example.json apps/desktop/config.json   # y mettre le domaine CloudFront
+pnpm desktop        # exe branché sur le backend AWS
+pnpm desktop:demo   # exe avec l'API simulée, aucun serveur nécessaire
+```
+
+Les exe arrivent dans `apps/desktop/release/`. Adresse du backend, fonctionnement et dépannage :
+[apps/desktop/README.md](apps/desktop/README.md).
 
 ## API simulée (pas encore de back)
 

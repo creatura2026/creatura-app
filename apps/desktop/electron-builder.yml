@@ -1,0 +1,23 @@
+# Paquets Windows de Créatura : `pnpm --filter desktop dist` (ou `dist:demo`, sans serveur).
+appId: fr.esigelec.creatura
+productName: Creatura
+directories:
+  output: release
+files:
+  - main.cjs
+  - package.json
+  - app-config.json
+  - web/**/*
+win:
+  icon: ../player/public/pwa-512x512.png
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Créatura
+  uninstallDisplayName: Créatura
+  artifactName: Creatura-Setup-${version}.${ext}
+portable:
+  artifactName: Creatura-${version}-portable.${ext}

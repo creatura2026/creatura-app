@@ -3,6 +3,10 @@ packages:
   - "packages/*"
 allowBuilds:
   vue-demi: true
+  # Télécharge le binaire Electron (application de bureau, apps/desktop)
+  electron: true
+  # Installeur Squirrel, inutile ici (electron-builder produit un installeur NSIS)
+  electron-winstaller: false
 
 peerDependencyRules:
   allowedVersions:
