@@ -31,6 +31,17 @@ function fail(message) {
   process.exit(1)
 }
 
+// L'installeur Windows (NSIS) se construit sous Windows, ou ailleurs avec Wine. On s'arrête avant
+// le build du front plutôt qu'après plusieurs minutes dans electron-builder. --start (lancer l'app
+// sans produire d'exe) fonctionne sur tous les systèmes.
+const hasWine = () => spawnSync('wine', ['--version'], { stdio: 'ignore' }).status === 0
+if (!start && process.platform !== 'win32' && !hasWine()) {
+  fail(
+    `L'exe se construit sous Windows (système actuel : ${process.platform}).\n` +
+      'Sous macOS ou Linux, installer Wine, ou essayer l’app sans exe : pnpm --filter desktop start',
+  )
+}
+
 /** Adresse enregistrée dans config.json, s'il existe. */
 function savedApiUrl() {
   const file = path.join(root, 'config.json')
@@ -49,7 +60,7 @@ if (!demo) {
     fail(
       'Adresse du backend manquante. Au choix :\n' +
         '  - copier config.example.json en config.json et y mettre le domaine CloudFront ;\n' +
-        '  - ou la donner au build : pnpm desktop --api https://dxxxxxxxxxxxxx.cloudfront.net\n' +
+        '  - ou la donner au build : pnpm desktop --api https://creatura.creasmaloud.dev\n' +
         'Version sans serveur : pnpm desktop:demo',
     )
   }
