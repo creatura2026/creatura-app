@@ -45,7 +45,7 @@ uv sync
 uv run uvicorn app.main:app --reload
 ```
 
-`DATABASE_URL` suit le format de l'équipe (`postgres://creatura:creatura@localhost:5432/creatura`) ;
+`DATABASE_URL` suit le format de l'équipe (`postgres://creatura:creatura@127.0.0.1:5432/creatura`) ;
 le back le convertit pour SQLAlchemy. En production (RDS) : ajouter `?sslmode=require`.
 
 ### Viser RDS (tunnel SSM et authentification IAM)
@@ -113,6 +113,7 @@ Ils vérifient les règles du schéma et les preuves qualité :
 - un seul booster par jour, même avec des requêtes simultanées ;
 - échanges conclus en même temps qui ne consomment jamais le même exemplaire (vraies transactions parallèles) ;
 - salle d'échange en WebSocket : tapis, validations croisées, discussion, présence, refus d'accès ;
+- salle d'échange servie par deux instances de l'API sur la même base (`test_trades_multi.py`) ;
 - `stock_total = stock_restant + Σ quantités en collection`, aucune quantité négative ;
 - un échange conclu modifie les deux collections, ou aucune ; une carte disparue est retirée du tapis ;
 - format du contrat : champs en camelCase, codes d'erreur, pagination, validation en 400 ;
@@ -278,9 +279,22 @@ de `creatura-api.openapi.yaml`) :
   mais ils restent valides jusqu'à expiration (15 min pour l'accès, 7 jours pour le
   rafraîchissement) ; `POST /auth/refresh` ne fait pas de rotation.
 - **Pas de limitation des tentatives** (`RATE_LIMITED`, 429) sur la connexion.
-- **Salle d'échange en mémoire** : les connexions WebSocket sont tenues par le processus de
-  l'API. Il faut **une seule réplique** (ou des sessions collantes par échange sur l'ALB) tant
-  qu'aucun bus de messages (ex. Redis pub/sub) ne relie les répliques. Les données (tapis,
-  validations, discussion) sont en base : rien n'est perdu au redémarrage, les clients se
-  reconnectent. L'ALB doit laisser passer les WebSocket (`Upgrade`) sur `/api/*`.
+- **Salle d'échange sur plusieurs répliques** : chaque processus tient ses connexions WebSocket
+  en mémoire, et les processus se préviennent par PostgreSQL LISTEN/NOTIFY (`app/bus.py`, canal
+  `creatura_trades`) : aucune brique en plus.
+  - Chaque changement (`chat`, `trade`, carte indisponible) est annoncé dans la transaction qui
+    l'écrit (`pg_notify` au COMMIT, rien si elle échoue). Charge minimale : échange, événement,
+    processus émetteur (+ id du message). Les autres processus relisent la base et préviennent
+    leurs joueurs ; chacun ignore ses propres annonces.
+  - Présence : chaque processus annonce l'arrivée (`join`) et le départ (`leave`) de ses joueurs,
+    les autres répondent `here`. Un processus disparu sans prévenir est repéré en 30 s au plus
+    (sa connexion d'écoute n'est plus dans `pg_stat_activity`).
+  - Écoute coupée : reconnexion avec attente croissante (1 à 30 s), puis chaque salle reçoit son
+    état complet (`init`). Avec `DB_IAM_AUTH`, un nouveau jeton IAM à chaque reconnexion.
+  - Ordre : dans un processus, le verrou de la salle garde l'ordre ; entre processus, les états
+    `trade` reçus ne reculent jamais et le dernier est celui de la base. Deux actions
+    simultanées des deux joueurs, sur deux processus, peuvent apparaître dans un ordre différent.
+  - Les données sont en base : rien n'est perdu au redémarrage, les clients se reconnectent.
+    L'ALB doit laisser passer les WebSocket (`Upgrade`) sur `/api/*`. Pas de PgBouncer en mode
+    transaction devant la base (il casserait LISTEN).
 - À valider au point client : rareté garantie (non implémentée).

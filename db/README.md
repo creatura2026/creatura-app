@@ -48,7 +48,7 @@ docker exec -i creatura-db psql -U creatura -d creatura < init/05_evolution_sall
 ## Connexion depuis le back
 
 ```
-DATABASE_URL=postgres://creatura:creatura@localhost:5432/creatura
+DATABASE_URL=postgres://creatura:creatura@127.0.0.1:5432/creatura
 ```
 
 - **Les fichiers SQL de `db/init/` sont la seule source du schéma.** L'ORM lit la

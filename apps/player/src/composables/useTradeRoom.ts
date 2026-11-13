@@ -64,6 +64,8 @@ export function useTradeRoom(tradeId: MaybeRefOrGetter<string>, hooks: TradeRoom
         setTrade(message.trade)
         break
       case 'chat':
+        // Garde-fou : un message déjà affiché (même identifiant) n'est pas ajouté une seconde fois.
+        if (messages.value.some((m) => m.id === message.message.id)) break
         messages.value = [...messages.value, message.message]
         hooks.onMessage?.(message.message)
         break

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import bus
 from app.config import get_settings
 from app.errors import DomainError, from_integrity_error, problem_body
 from app.seed import ensure_admin
@@ -17,7 +18,13 @@ from app.views import api_router
 async def lifespan(_: FastAPI):
     # Le schéma est créé par les fichiers SQL de db/ : le back ne crée aucune table.
     ensure_admin()
-    yield
+    # Annonces des autres répliques (salle d'échange). Ne bloque pas le démarrage : si la base
+    # est injoignable, l'écoute réessaie en tâche de fond.
+    await bus.listener.start()
+    try:
+        yield
+    finally:
+        await bus.listener.stop()
 
 
 def problem_response(error: DomainError) -> JSONResponse:

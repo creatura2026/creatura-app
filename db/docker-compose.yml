@@ -6,7 +6,7 @@
 #   docker compose ps           doit afficher "healthy"
 #   docker compose down -v      supprime tout (pour repartir de zéro)
 #
-# Le back se connecte avec : postgres://creatura:creatura@localhost:5432/creatura
+# Le back se connecte avec : postgres://creatura:creatura@127.0.0.1:5432/creatura
 # =============================================================================
 name: creatura-db
 

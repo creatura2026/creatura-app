@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgres://creatura:creatura@localhost:5432/creatura_test"
+    "TEST_DATABASE_URL", "postgres://creatura:creatura@127.0.0.1:5432/creatura_test"
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ADMIN_LOGIN"] = "admin"
@@ -66,7 +66,7 @@ def reset_database() -> None:
         cur = raw.cursor()
         cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
         for sql_file in init_scripts():
-            cur.execute(sql_file.read_text())
+            cur.execute(sql_file.read_text(encoding="utf-8"))  # Windows lirait en cp1252
     finally:
         raw.close()
     engine.dispose()

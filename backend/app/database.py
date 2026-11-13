@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app import bus
 from app.config import Settings, get_settings
 
 
@@ -56,6 +57,8 @@ def _create_engine():
 
 engine = _create_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+# Les événements de salle annoncés pendant une transaction partent à son COMMIT (voir bus.py).
+bus.install(SessionLocal)
 
 
 def get_db() -> Iterator[Session]:

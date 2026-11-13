@@ -52,8 +52,9 @@ info:
       `dropRate` est la probabilité exacte qu'une carte soit de cette rareté, règle d'exclusion comprise.
     - Pas de rotation ni de révocation des refresh tokens : ils restent valides jusqu'à leur expiration.
     - Pas encore de limitation des tentatives (`RATE_LIMITED`).
-    - La salle d'échange (WebSocket) est tenue en mémoire par le processus de l'API : il faut une seule réplique
-      (ou des sessions collantes par échange) tant qu'aucun bus de messages (ex. Redis) ne relie les répliques.
+    - La salle d'échange (WebSocket) fonctionne avec plusieurs répliques de l'API : les répliques se préviennent
+      par PostgreSQL LISTEN/NOTIFY. Deux actions simultanées des deux joueurs, traitées par deux répliques,
+      peuvent apparaître dans un ordre différent sur les deux écrans ; l'état final est le même.
 
     ## Salle d'échange (temps réel)
     Un échange est une **salle** partagée par deux joueurs. Chacun pose sur son tapis les cartes qu'il donne

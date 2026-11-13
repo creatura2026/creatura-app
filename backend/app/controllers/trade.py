@@ -14,7 +14,8 @@ Un échange est une salle partagée par deux joueurs (contrat, « Salle d'échan
 - les échanges ne touchent pas au stock des créatures.
 
 Chaque action sur la salle verrouille la ligne de l'échange (SELECT … FOR UPDATE) : les
-actions des deux joueurs s'appliquent l'une après l'autre.
+actions des deux joueurs s'appliquent l'une après l'autre. Chaque changement est annoncé aux
+autres processus de l'API dans la même transaction (`bus.announce`, envoyé au COMMIT).
 """
 
 import enum
@@ -24,6 +25,7 @@ from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import bus
 from app.controllers import collection
 from app.controllers.catalog import paginate, parse_creature_id
 from app.controllers.player import get_player
@@ -155,6 +157,7 @@ def create_trade(db: Session, me: Utilisateur, data: TradeCreateIn) -> tuple[Ech
         changed = wanted_id is not None and existing.proposeur_id == me.id and existing.creature_cherchee_id != wanted_id
         if changed:
             existing.creature_cherchee_id = wanted_id
+            bus.announce(db, existing.id, bus.TRADE)
         db.commit()
         return _reload(db, existing.id), False, changed
 
@@ -241,6 +244,7 @@ def set_offer(db: Session, me: Utilisateur, trade_id: uuid.UUID, items: list[Tra
         else:
             trade.lignes.append(EchangeLigne(creature_id=creature_id, sens=sens, quantite=quantity))
     _clear_validations(trade)
+    bus.announce(db, trade.id, bus.TRADE)
     db.commit()
     return _reload(db, trade.id)
 
@@ -288,6 +292,7 @@ def set_ready(db: Session, me: Utilisateur, trade_id: uuid.UUID, ready: bool) ->
     _require_pending(trade)
     if not ready:
         _set_ready(trade, side, False)
+        bus.announce(db, trade.id, bus.TRADE)
         db.commit()
         return _reload(db, trade.id), False
 
@@ -296,6 +301,7 @@ def set_ready(db: Session, me: Utilisateur, trade_id: uuid.UUID, ready: bool) ->
     # Les deux tapis sont revérifiés à chaque validation.
     if _trim_mats(db, trade):
         _clear_validations(trade)
+        bus.announce(db, trade.id, bus.UNAVAILABLE)
         db.commit()
         return _reload(db, trade.id), True
 
@@ -305,6 +311,7 @@ def set_ready(db: Session, me: Utilisateur, trade_id: uuid.UUID, ready: bool) ->
             _transfer(db, trade)
             trade.statut = Statut.ACCEPTE
             trade.decide_le = func.now()
+            bus.announce(db, trade.id, bus.TRADE)
             db.commit()
         except _CardMissing:
             # Une carte a disparu entre la vérification et le transfert : rien n'est transféré.
@@ -312,12 +319,14 @@ def set_ready(db: Session, me: Utilisateur, trade_id: uuid.UUID, ready: bool) ->
             trade = _locked(db, me, trade_id)
             _trim_mats(db, trade)
             _clear_validations(trade)
+            bus.announce(db, trade.id, bus.UNAVAILABLE)
             db.commit()
             return _reload(db, trade.id), True
         except IntegrityError as exc:
             db.rollback()
             raise from_integrity_error(exc)
     else:
+        bus.announce(db, trade.id, bus.TRADE)
         db.commit()
     return _reload(db, trade.id), False
 
@@ -326,8 +335,10 @@ def say(db: Session, me: Utilisateur, trade_id: uuid.UUID, text_: str) -> Echang
     trade = get_trade(db, me, trade_id)
     if trade.statut != Statut.EN_ATTENTE:
         raise Conflict("L'échange est terminé : la discussion est fermée.", "TRADE_NOT_PENDING")
-    message = EchangeMessage(echange_id=trade.id, auteur_id=me.id, texte=text_)
+    # Identifiant fixé ici (et non au flush) : il part dans l'annonce aux autres processus.
+    message = EchangeMessage(id=uuid.uuid4(), echange_id=trade.id, auteur_id=me.id, texte=text_)
     db.add(message)
+    bus.announce(db, trade.id, bus.CHAT, message.id)
     db.commit()
     return db.scalars(
         select(EchangeMessage).where(EchangeMessage.id == message.id).execution_options(populate_existing=True)
@@ -352,6 +363,7 @@ def _finish(db: Session, trade: Echange, new_status: Statut) -> Echange:
     if trade.statut != Statut.EN_ATTENTE or not _close_pending(db, trade, new_status):
         db.rollback()
         raise _not_pending()
+    bus.announce(db, trade.id, bus.TRADE)
     db.commit()
     return _reload(db, trade.id)
 
