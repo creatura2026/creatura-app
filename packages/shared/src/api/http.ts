@@ -133,6 +133,29 @@ export function createHttpClient(session: SessionStore, baseUrl: string = API_BA
       request<T>('POST', path, { body, auth }),
     put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
     del: <T>(path: string) => request<T>('DELETE', path, {}),
+    /** Envoie un FormData (multipart) sans Content-Type, laissé au navigateur. */
+    async putForm<T>(path: string, form: FormData): Promise<T> {
+      const headers: Record<string, string> = { Accept: 'application/json' }
+      const token = session.read()?.accessToken
+      if (token) headers.Authorization = `Bearer ${token}`
+      let response: Response
+      try {
+        response = await fetch(`${baseUrl}${path}`, { method: 'PUT', headers, body: form })
+      } catch {
+        throw new Error('Serveur injoignable. Vérifiez votre connexion.')
+      }
+      if (response.status === 401 && (await refreshTokens())) {
+        const token2 = session.read()?.accessToken
+        if (token2) headers.Authorization = `Bearer ${token2}`
+        try {
+          response = await fetch(`${baseUrl}${path}`, { method: 'PUT', headers, body: form })
+        } catch {
+          throw new Error('Serveur injoignable. Vérifiez votre connexion.')
+        }
+      }
+      if (!response.ok) throw await toApiError(response)
+      return (await response.json()) as T
+    },
     refresh: refreshTokens,
     session,
   }
@@ -321,5 +344,10 @@ export function createHttpAdminApi(session: SessionStore): AdminApi {
     createAdminCreature: (body) => http.post('/admin/creatures', body),
     scheduleRarityChange: (creatureId, body) => http.put(`/admin/creatures/${id(creatureId)}/rarity`, body),
     cancelRarityChange: (creatureId) => http.del(`/admin/creatures/${id(creatureId)}/rarity`),
+    uploadSprite: (creatureId, file) => {
+      const form = new FormData()
+      form.append('file', file, file.name)
+      return http.putForm(`/admin/creatures/${id(creatureId)}/sprite`, form)
+    },
   }
 }

@@ -98,4 +98,6 @@ export interface AdminApi extends AuthApi {
   /** Nouvelle rareté d'une carte, appliquée au prochain minuit. */
   scheduleRarityChange(creatureId: string, body: RarityChangeInput): Promise<AdminCreature>
   cancelRarityChange(creatureId: string): Promise<AdminCreature>
+  /** Upload un sprite PNG pour une carte et met à jour creature.image. */
+  uploadSprite(creatureId: string, file: File): Promise<AdminCreature>
 }

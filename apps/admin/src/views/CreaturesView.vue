@@ -17,6 +17,7 @@ import {
   useCancelRarityChange,
   useCreateCreature,
   useScheduleRarityChange,
+  useUploadSprite,
 } from '@/api/queries'
 
 const FAMILIES = [
@@ -36,6 +37,7 @@ const { data: creatures, isPending, error, refetch } = useAdminCreatures()
 const create = useCreateCreature()
 const schedule = useScheduleRarityChange()
 const cancel = useCancelRarityChange()
+const uploadSprite = useUploadSprite()
 
 const today = new Date().toISOString().slice(0, 10)
 const search = ref('')
@@ -50,31 +52,45 @@ const blank = () => ({
   description: '',
   family: 'NATURE',
   rarity: 'LEGENDARY',
-  image: 'sprites/',
   stock: 50 as number | null,
 })
 const form = reactive(blank())
 const formErrors = ref<Record<string, string>>({})
-const imagePreview = computed(() =>
-  /^sprites\/[a-z0-9_-]+\.png$/.test(form.image)
-    ? `${creatures.value?.[0]?.imageUrl.replace(/sprites\/.*$/, '') ?? '/'}${form.image}`
-    : null,
-)
 
 async function addCard() {
   formErrors.value = {}
   try {
     const card = await create.mutateAsync({
       ...form,
+      image: 'sprites/placeholder.png',
       stock: form.rarity === 'LEGENDARY' ? form.stock : null,
     })
-    toast(`${card.name} sera disponible le ${formatDate(card.availableFrom)}, à minuit.`, 'success')
+    toast(`${card.name} sera disponible le ${formatDate(card.availableFrom)}, à minuit. Ajoutez le sprite ci-dessous.`, 'success')
     Object.assign(form, blank())
   } catch (e) {
     const fields = (e as { problem?: { errors?: { field: string; message: string }[] } }).problem
       ?.errors
     formErrors.value = Object.fromEntries((fields ?? []).map((f) => [f.field, f.message]))
     toast(errorMessage(e), 'error')
+  }
+}
+
+// ── Upload de sprite ──────────────────────────────────────────────────────
+const uploadingFor = ref<string | null>(null)
+
+async function onSpriteFile(c: AdminCreature, event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = ''
+  uploadingFor.value = c.id
+  try {
+    const updated = await uploadSprite.mutateAsync({ id: c.id, file })
+    toast(`Sprite de ${updated.name} mis à jour.`, 'success')
+  } catch (e) {
+    toast(errorMessage(e), 'error')
+  } finally {
+    uploadingFor.value = null
   }
 }
 
@@ -121,8 +137,8 @@ async function cancelChange(c: AdminCreature) {
     <form class="card-pixel bg-butter p-5 sm:p-6" @submit.prevent="addCard">
       <h2 class="font-sans text-lg font-bold">Ajouter une carte</h2>
       <p class="mt-1 text-sm">
-        Visible et tirable à partir du prochain minuit (heure de Paris). L’image doit déjà être sur
-        le CDN, dans le dossier <code>sprites/</code>.
+        Visible et tirable à partir du prochain minuit (heure de Paris). Ajoutez le sprite depuis la
+        liste des cartes après la création.
       </p>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label class="text-sm font-semibold">
@@ -143,7 +159,7 @@ async function cancelChange(c: AdminCreature) {
           </select>
         </label>
         <label v-if="form.rarity === 'LEGENDARY'" class="text-sm font-semibold">
-          Nombre d’exemplaires
+          Nombre d'exemplaires
           <input
             v-model.number="form.stock"
             type="number"
@@ -154,24 +170,12 @@ async function cancelChange(c: AdminCreature) {
           />
           <span v-if="formErrors.stock" class="text-xs text-brick">{{ formErrors.stock }}</span>
         </label>
-        <label class="text-sm font-semibold">
-          Image (clé sur le CDN)
-          <input v-model="form.image" required pattern="sprites/[a-z0-9_\-]+\.png" class="field" />
-          <span v-if="formErrors.image" class="text-xs text-brick">{{ formErrors.image }}</span>
-        </label>
         <label class="text-sm font-semibold sm:col-span-2 lg:col-span-3">
           Description
           <textarea v-model="form.description" maxlength="500" rows="2" class="field" />
         </label>
       </div>
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <img
-          v-if="imagePreview"
-          :src="imagePreview"
-          alt="Aperçu de l’image"
-          class="pixelated size-16 border-2 border-ink bg-white"
-        />
-        <span v-else />
+      <div class="mt-4 flex justify-end">
         <button type="submit" class="btn btn-primary bg-white" :disabled="create.isPending.value">
           <PixelIcon name="check" :size="18" />
           {{ create.isPending.value ? 'Ajout…' : 'Ajouter au prochain minuit' }}
@@ -243,9 +247,24 @@ async function cancelChange(c: AdminCreature) {
             </button>
             <button type="button" class="btn btn-secondary" @click="editing = null">Fermer</button>
           </form>
-          <button v-else type="button" class="btn btn-secondary" @click="startEdit(c)">
-            Changer la rareté
-          </button>
+          <div v-else class="flex flex-wrap gap-2">
+            <button type="button" class="btn btn-secondary" @click="startEdit(c)">
+              Changer la rareté
+            </button>
+            <label
+              class="btn btn-secondary cursor-pointer"
+              :class="{ 'opacity-50': uploadingFor === c.id }"
+            >
+              {{ uploadingFor === c.id ? 'Upload…' : 'Sprite PNG' }}
+              <input
+                type="file"
+                accept="image/png"
+                class="sr-only"
+                :disabled="uploadingFor === c.id"
+                @change="onSpriteFile(c, $event)"
+              />
+            </label>
+          </div>
         </li>
       </ul>
     </AsyncState>
