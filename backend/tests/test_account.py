@@ -107,7 +107,7 @@ def test_delete_account(client):
 
     # Historique de Bob anonymisé ; Alice introuvable pour les autres joueurs.
     history = client.get(f"{API}/trades", headers=b["headers"]).json()["items"]
-    assert history[0]["recipient"]["pseudo"].startswith("Joueur supprimé #")
+    assert history[0]["recipient"]["pseudo"] == "Joueur supprimé"
     assert client.get(f"{API}/players", params={"search": "ali"}, headers=b["headers"]).json()["items"] == []
     problem(client.post(f"{API}/trades", json={"recipientId": str(a["id"])}, headers=b["headers"]), 404, "NOT_FOUND")
 
@@ -129,3 +129,23 @@ def test_last_admin_cannot_delete_account(client, admin_headers):
     # Le second est désormais le dernier.
     second = auth_headers(login(client, "admin2", "admin2-password"))
     problem(client.request("DELETE", f"{API}/me", json={"password": "admin2-password"}, headers=second), 409, "LAST_ADMIN")
+
+
+def test_deleting_accounts_with_similar_ids(client):
+    """Comptes de démo : identifiants qui commencent tous par 00000000-… Les supprimer l'un après
+    l'autre ne doit pas heurter l'unicité des pseudos ; l'API affiche « Joueur supprimé »."""
+    ids = [uuid.UUID("00000000-0000-4000-8000-0000000000a1"), uuid.UUID("00000000-0000-4000-8000-0000000000a2")]
+    with SessionLocal() as db:
+        for n, user_id in enumerate(ids, 1):
+            db.add(Utilisateur(id=user_id, pseudo=f"Demo{n}", identifiant=f"demo{n}", mot_de_passe_hash=hash_password(PASSWORD), role=Role.JOUEUR))
+        db.commit()
+    witness = register_and_login(client, "Temoin")
+    trades = []
+    for n in (1, 2):
+        headers = auth_headers(login(client, f"demo{n}", PASSWORD))
+        trades.append(client.post(f"{API}/trades", json={"recipientId": str(witness["id"])}, headers=headers).json())
+        r = client.request("DELETE", f"{API}/me", json={"password": PASSWORD}, headers=headers)
+        assert r.status_code == 204, r.text
+    for trade in trades:
+        seen = client.get(f"{API}/trades/{trade['id']}", headers=witness["headers"]).json()
+        assert seen["proposer"]["pseudo"] == "Joueur supprimé" and seen["status"] == "CANCELLED"

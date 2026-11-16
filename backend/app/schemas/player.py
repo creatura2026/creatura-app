@@ -13,7 +13,7 @@ class PlayerOut(ApiModel):
 
     @classmethod
     def of(cls, u: Utilisateur) -> "PlayerOut":
-        return cls(id=u.id, pseudo=u.pseudo)
+        return cls(id=u.id, pseudo=u.pseudo_public)
 
 
 class TradeableCardOut(ApiModel):

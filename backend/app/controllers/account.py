@@ -2,7 +2,8 @@
 
 Suppression : la ligne `utilisateur` n'est pas effacée, car les échanges et la discussion des
 autres joueurs la référencent. Elle est anonymisée dans une seule transaction :
-- pseudo « Joueur supprimé #… » (impossible à choisir à l'inscription : espace et accent),
+- pseudo « Joueur supprimé #<fin de l'identifiant> » en base, unique (impossible à choisir à
+  l'inscription : espace et accent) ; l'API affiche simplement « Joueur supprimé »,
   identifiant libéré, mot de passe inutilisable, `supprime_le` renseigné ;
 - collection effacée, les légendaires retournant au stock (stock_total = restant + collections) ;
 - échanges en cours abandonnés (annulés s'il les proposait, refusés sinon), salles prévenues ;
@@ -92,7 +93,8 @@ def delete_account(db: Session, me: Utilisateur, password: str) -> list[uuid.UUI
         )
     db.execute(Collection.__table__.delete().where(Collection.utilisateur_id == me.id))
 
-    me.pseudo = f"{DELETED_PSEUDO}{me.id.hex[:8]}"
+    # Fin de l'identifiant (12 caractères) : le début peut être commun (comptes de démo 00000000-…).
+    me.pseudo = f"{DELETED_PSEUDO}{me.id.hex[-12:]}"
     me.identifiant = f"supprime:{me.id}"
     me.mot_de_passe_hash = UNUSABLE_HASH
     me.supprime_le = func.now()

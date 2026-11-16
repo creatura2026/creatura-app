@@ -71,6 +71,12 @@ class Utilisateur(Base):
     # Les jetons émis avant cette date sont refusés (changement de mot de passe, évolution 09).
     jetons_depuis: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    @property
+    def pseudo_public(self) -> str:
+        """Pseudo affiché aux joueurs : « Joueur supprimé » pour un compte supprimé (le suffixe
+        stocké en base ne sert qu'à garder les pseudos uniques)."""
+        return "Joueur supprimé" if self.supprime_le is not None else self.pseudo
+
 
 class Creature(Base):
     __tablename__ = "creature"

@@ -68,7 +68,7 @@ class UserOut(ApiModel):
 
     @classmethod
     def of(cls, u: Utilisateur) -> "UserOut":
-        return cls(id=u.id, pseudo=u.pseudo, role=ROLE_CODES[u.role], created_at=u.cree_le)
+        return cls(id=u.id, pseudo=u.pseudo_public, role=ROLE_CODES[u.role], created_at=u.cree_le)
 
 
 class AuthTokensOut(ApiModel):
