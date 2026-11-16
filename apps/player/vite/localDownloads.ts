@@ -1,8 +1,9 @@
 /**
- * En local (`vite` et `vite preview`), sert le dossier des exe de l'application Windows
- * (`apps/desktop/release/`, produit par `pnpm desktop`) sous `/telechargements/` : la page
- * d'accueil propose alors le téléchargement sans rien publier sur S3. En ligne, ce même chemin
- * est servi par CloudFront depuis le bucket du front.
+ * En local (`vite` et `vite preview`), sert sous `/telechargements/` les dossiers des
+ * applications : exe Windows (`apps/desktop/release/`, produit par `pnpm desktop`) et APK Android
+ * (`apps/mobile/release/`). La page d'accueil propose alors le téléchargement sans rien publier
+ * sur S3. En ligne, ce même chemin est servi par CloudFront depuis le bucket du front.
+ * Un fichier est cherché dans chaque dossier, dans l'ordre.
  */
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -11,10 +12,11 @@ import type { Connect, Plugin } from 'vite'
 const PREFIX = '/telechargements/'
 const TYPES: Record<string, string> = {
   '.exe': 'application/vnd.microsoft.portable-executable',
+  '.apk': 'application/vnd.android.package-archive',
   '.json': 'application/json; charset=utf-8',
 }
 
-export function localDownloads(releaseDir: string): Plugin {
+export function localDownloads(releaseDirs: string[]): Plugin {
   const middleware: Connect.NextHandleFunction = (req, res, next) => {
     const url = req.url ?? ''
     if (!url.startsWith(PREFIX)) return next()
@@ -26,8 +28,11 @@ export function localDownloads(releaseDir: string): Plugin {
     }
     // Seulement les fichiers à la racine du dossier : ni sous-dossier, ni chemin remontant.
     const type = TYPES[path.extname(name).toLowerCase()]
-    const file = path.join(releaseDir, name)
-    if (!type || name !== path.basename(name) || !existsSync(file)) {
+    const file =
+      type && name === path.basename(name)
+        ? releaseDirs.map((dir) => path.join(dir, name)).find((f) => existsSync(f))
+        : undefined
+    if (!type || !file) {
       res.statusCode = 404
       res.end()
       return

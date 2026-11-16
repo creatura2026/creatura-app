@@ -5,10 +5,15 @@ import boosterUrl from '@creatura/shared/assets/booster.png'
 import { CREATURES } from '@creatura/shared/fixtures/catalog'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
 
+import AndroidDownload from '@/components/AndroidDownload.vue'
 import DesktopDownload from '@/components/DesktopDownload.vue'
+import { onMobileDevice, useAndroidDownload } from '@/composables/useAndroidDownload'
 import { useDesktopDownload } from '@/composables/useDesktopDownload'
 
 const { release } = useDesktopDownload()
+const { release: android, offered: androidOffered } = useAndroidDownload()
+/** Sur téléphone, seule l'application Android est proposée ; sur ordinateur, seul l'exe. */
+const mobile = onMobileDevice()
 
 const showcase = ['Moussou', 'Cristille', 'Flammille'].map((n) =>
   CREATURES.find((c) => c.name === n)!,
@@ -66,6 +71,14 @@ const LOOP = [
                 >J’ai déjà un compte</RouterLink
               >
             </div>
+            <a
+              v-if="android && mobile"
+              href="#application-android"
+              class="mt-4 inline-flex items-center gap-2 text-cream/85 underline underline-offset-4 hover:text-sun"
+            >
+              <PixelIcon name="download" :size="18" />
+              Installer l’application Android
+            </a>
           </div>
           <!--
             Booster et, quand l'exe est en ligne, son téléchargement (sur mobile : section plus bas).
@@ -79,7 +92,7 @@ const LOOP = [
               class="pixelated mx-auto w-[150px] animate-float xl:w-[225px]"
             />
             <div
-              v-if="release"
+              v-if="release && !mobile"
               class="absolute top-full right-0 mt-8 flex flex-col items-end gap-2 whitespace-nowrap xl:right-1/2 xl:translate-x-1/2 xl:items-center"
             >
               <a :href="release.setup.url" download class="btn btn-primary">
@@ -105,8 +118,12 @@ const LOOP = [
       </div>
     </section>
 
-    <!-- Application Windows : seulement si l'exe est en ligne -->
-    <DesktopDownload v-if="release" :release="release" />
+    <!--
+      Application de l'appareil du visiteur : l'exe sur ordinateur (s'il est en ligne), l'APK sur
+      téléphone (« bientôt disponible » tant qu'il n'est pas publié).
+    -->
+    <AndroidDownload v-if="mobile && androidOffered" :release="android" class="border-t-2" />
+    <DesktopDownload v-else-if="!mobile && release" :release="release" />
 
     <!-- Notre ambition -->
     <section class="mx-auto max-w-6xl px-4 py-12 sm:py-16">
