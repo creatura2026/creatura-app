@@ -7,6 +7,7 @@
 #   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
 #   4. Windows   : l'exe de l'application (apps/desktop) en artefact, hors PR ;
 #                  Release GitHub sur un tag v*
+#   5. Android   : l'APK de l'application (apps/mobile), de la même façon
 #
 # La release validée est déployée par le workflow deploy-aws.yml du dépôt infra.
 # Aucun accès AWS dans ce dépôt ; voir docs/ci-cd.md.
@@ -305,6 +306,141 @@ jobs:
             if [ -n "$API_URL" ]; then echo "Backend : \`$API_URL\`"; else echo "Démonstration (API simulée)"; fi
             echo
             echo "Artefact : \`creatura-windows-$VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Application Android (apps/mobile) : APK en artefact, et ajouté à la Release
+  # GitHub sur un tag v* de la même version. Adresse du site : variable
+  # CUSTOM_DOMAIN de l'environnement production, comme pour l'exe ; sans elle,
+  # APK de démonstration sur l'API simulée. Signature : secrets ANDROID_* ;
+  # sans eux, APK signé avec une clé de debug.
+  # ---------------------------------------------------------------------------
+  mobile:
+    name: Application Android
+    needs: frontend
+    # Pas sur les PR : plusieurs minutes de Gradle à chaque mise à jour.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # Donne accès aux variables et secrets de l'environnement production.
+    environment: production
+    # Facultatif, comme l'exe : un échec est signalé sur ce job sans faire échouer la CI.
+    continue-on-error: true
+    timeout-minutes: 30
+    permissions:
+      contents: write # Release GitHub sur un tag v*
+    env:
+      CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Capacitor 8 demande Java 21 ; le SDK Android est déjà installé sur le runner.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Version
+        id: version
+        run: |
+          version=$(node -p "require('./apps/mobile/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Un tag v1.2.3 ne reçoit l'APK que si apps/mobile/package.json est aussi en 1.2.3.
+          publish=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            if [ "${GITHUB_REF_NAME#v}" = "$version" ]; then
+              publish=true
+            else
+              echo "::notice::Tag $GITHUB_REF_NAME, APK en version $version : il n'est pas ajouté à la Release."
+            fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Clé de signature
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::Secret ANDROID_KEYSTORE_BASE64 absent : APK signé avec une clé de debug. Chaque run a sa propre clé : pour mettre à jour l'application, il faudra la désinstaller d'abord."
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/creatura.jks"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            echo "ANDROID_KEYSTORE_FILE=$keystore"
+            echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+      - name: Construire l'APK
+        run: |
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            # « creatura.fr » ou « https://creatura.fr/ » : l'APK veut une adresse https:// sans / final.
+            domain="${CUSTOM_DOMAIN%/}"
+            case "$domain" in http://*|https://*) site_url="$domain" ;; *) site_url="https://$domain" ;; esac
+            echo "SITE_URL=$site_url" >> "$GITHUB_ENV"
+            pnpm mobile --url "$site_url"
+          else
+            echo "::warning::Variable CUSTOM_DOMAIN absente de l'environnement production : APK de démonstration (API simulée)."
+            pnpm mobile:demo
+          fi
+          test -f apps/mobile/release/android.json
+
+      - name: Publier l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: creatura-android-${{ steps.version.outputs.version }}
+          path: |
+            apps/mobile/release/Creatura-*.apk
+            apps/mobile/release/android.json
+          if-no-files-found: error
+          compression-level: 0 # un APK est déjà compressé
+
+      - name: Release GitHub
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          files=(apps/mobile/release/Creatura-*.apk apps/mobile/release/android.json)
+          # Le job Windows peut créer la même Release au même moment : on réessaie l'envoi.
+          for attempt in 1 2 3; do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber && exit 0
+            else
+              gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "Créatura $VERSION" --generate-notes && exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Résumé
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Application Android $VERSION"
+            if [ -n "$SITE_URL" ]; then echo "Site : \`$SITE_URL\`"; else echo "Démonstration (API simulée)"; fi
+            if [ -n "$ANDROID_KEYSTORE_FILE" ]; then echo "Signé avec la clé de publication"; else echo "Signé avec une clé de debug"; fi
+            echo
+            echo "Artefact : \`creatura-android-$VERSION\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
