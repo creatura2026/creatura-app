@@ -59,7 +59,7 @@ if (!demo) {
   if (!rawApi) {
     fail(
       'Adresse du backend manquante. Au choix :\n' +
-        '  - copier config.example.json en config.json et y mettre le domaine CloudFront ;\n' +
+        '  - copier config.example.json en config.json (domaine du site déjà rempli) ;\n' +
         '  - ou la donner au build : pnpm desktop --api https://creatura.creasmaloud.dev\n' +
         'Version sans serveur : pnpm desktop:demo',
     )

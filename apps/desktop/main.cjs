@@ -34,8 +34,11 @@ const BUILT = readJson(path.join(__dirname, 'app-config.json'))
 const EXE_DIR = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe'))
 const LOCAL = app.isPackaged ? readJson(path.join(EXE_DIR, 'creatura.json')) : {}
 
-// La démo garde ses données à part : ses comptes simulés ne se mélangent pas aux vrais.
-if (BUILT.demo) app.setPath('userData', path.join(app.getPath('appData'), 'Creatura Demo'))
+// Dossier des données (session, stockage local) : %APPDATA%\Creatura, celui que l'installeur
+// efface à la désinstallation (deleteAppDataOnUninstall). Sans ce réglage, Electron prendrait le
+// « name » du package.json (« desktop »). La démo garde ses données à part : ses comptes simulés
+// ne se mélangent pas aux vrais.
+app.setPath('userData', path.join(app.getPath('appData'), BUILT.demo ? 'Creatura Demo' : 'Creatura'))
 
 const PORT = Number(process.env.CREATURA_PORT || 47321)
 const API_SETTING =

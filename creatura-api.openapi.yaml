@@ -76,8 +76,8 @@ info:
       tout ou rien. Si une carte manque, elle est retirée du tapis, les validations sont retirées et les deux
       joueurs reçoivent une erreur `CARDS_UNAVAILABLE` ; l'échange reste ouvert.
 servers:
-  - url: https://app.creatura.fr/api/v1
-    description: Production (CloudFront, chemin /api/*)
+  - url: https://creatura.creasmaloud.dev/api/v1
+    description: Production (domaine du site devant CloudFront, chemin /api/*)
   - url: https://dev.creatura.fr/api/v1
     description: Développement
   - url: http://localhost:8000/api/v1
@@ -384,14 +384,14 @@ paths:
                       name: Moussou
                       family: { code: NATURE, label: Nature }
                       rarity: { code: COMMON, label: Commun }
-                      imageUrl: https://app.creatura.fr/images/moussou.webp
+                      imageUrl: https://creatura.creasmaloud.dev/sprites/moussou.png
                     isNew: false
                   - creature:
                       id: '6'
                       name: Cristille
                       family: { code: CRISTAL, label: Cristal }
                       rarity: { code: RARE, label: Rare }
-                      imageUrl: https://app.creatura.fr/images/cristille.webp
+                      imageUrl: https://creatura.creasmaloud.dev/sprites/cristille.png
                     isNew: true
         '401':
           $ref: '#/components/responses/Unauthorized'

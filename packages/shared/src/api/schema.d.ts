@@ -617,7 +617,10 @@ export interface components {
             label: string;
         };
         RaritySummary: {
-            /** @example UNCOMMON */
+            /**
+             * @description COMMON, UNCOMMON, RARE ou LEGENDARY
+             * @example UNCOMMON
+             */
             code: string;
             /** @example Peu commun */
             label: string;
@@ -1392,7 +1395,7 @@ export interface operations {
                      *               "code": "COMMON",
                      *               "label": "Commun"
                      *             },
-                     *             "imageUrl": "https://app.creatura.fr/images/moussou.webp"
+                     *             "imageUrl": "https://creatura.creasmaloud.dev/sprites/moussou.png"
                      *           },
                      *           "isNew": false
                      *         },
@@ -1408,7 +1411,7 @@ export interface operations {
                      *               "code": "RARE",
                      *               "label": "Rare"
                      *             },
-                     *             "imageUrl": "https://app.creatura.fr/images/cristille.webp"
+                     *             "imageUrl": "https://creatura.creasmaloud.dev/sprites/cristille.png"
                      *           },
                      *           "isNew": true
                      *         }

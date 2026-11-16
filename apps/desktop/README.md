@@ -61,13 +61,17 @@ construit l'exe sur un runner Windows, après le job « Front », à chaque push
 - **Échec** : le job est facultatif (`continue-on-error`) ; s'il échoue, la CI reste verte.
 - **Récupérer l'exe** : page du run → section *Artifacts* → `creatura-windows-<version>` (les deux
   exe et `latest.json`).
-- **Release** : pousser un tag `v<version>` (par exemple `v0.1.1`, identique à la version de
-  `package.json`, sinon le job échoue) publie les fichiers dans une Release GitHub.
+- **Release** (facultatif) : pousser un tag `v<version>` (par exemple `v0.1.1`, identique à la
+  version de `package.json`, sinon le job échoue) publie les fichiers dans une Release GitHub. Le
+  téléchargement depuis le site n'en dépend pas : il suit les push sur `develop`. Taguer de
+  préférence après le merge, sur le commit qui contient la nouvelle version.
 
 ```sh
 cd apps/desktop && npm version patch --no-git-tag-version && cd ../..
 git commit -am "chore(desktop): version 0.1.1"
-git tag v0.1.1 && git push --follow-tags
+# Tag annoté, poussé explicitement (--follow-tags ignore les tags légers)
+git tag -a v0.1.1 -m "Créatura 0.1.1"
+git push origin v0.1.1
 ```
 
 Le dépôt creatura-infra construit aussi l'exe au déploiement du front (job « Publish Windows app ») :
@@ -121,10 +125,9 @@ L'ALB de l'EKS n'accepte que le trafic venant de CloudFront (`creatura-infra/eks
 connexion directe est refusée. Pour vérifier : `https://creatura.creasmaloud.dev/api/v1/health` doit
 répondre `{"status":"ok","database":"ok"}`.
 
-Le domaine du site ne change pas quand l'infra est recréée, contrairement au nom CloudFront
-(`dxxxx.cloudfront.net`, sortie `cloudfront_domain_name` de la stack `infra/`). Ce nom CloudFront
-reste utilisable, mais il faut alors mettre à jour `config.json` à chaque recréation, ou corriger un
-exe déjà distribué (section suivante).
+Le domaine du site ne change pas quand l'infra est recréée. Ne pas utiliser le nom technique de la
+distribution CloudFront (`dxxxx.cloudfront.net`) : il change à chaque recréation, et chaque exe
+distribué deviendrait à corriger (section suivante).
 
 ## Où l'exe lit l'adresse du backend
 
@@ -185,6 +188,8 @@ Autres choix :
   perdre.
 - **Pas de service worker** : l'exe contient déjà tous les fichiers, et un cache pourrait afficher
   l'ancienne version après une mise à jour.
+- **Désinstallation complète** : l'installeur efface aussi `%APPDATA%\Creatura` (session, données
+  locales), à partir de la version 0.1.1. Une réinstallation repart d'une app déconnectée.
 - **Une seule instance** : relancer l'exe remet la fenêtre ouverte au premier plan.
 - **Démo à part** : la version démo range ses données dans `%APPDATA%\Creatura Demo`, pour que ses
   comptes simulés ne se mélangent pas à une vraie session.
