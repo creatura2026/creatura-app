@@ -14,8 +14,8 @@ DECLARE
 BEGIN
     -- Catalogue ---------------------------------------------------------------
     SELECT count(*) INTO n FROM creature;
-    ASSERT n = 84, format('KO  84 créatures attendues, %s trouvées', n);
-    RAISE NOTICE 'OK  84 créatures au catalogue';
+    ASSERT n = 88, format('KO  88 créatures attendues, %s trouvées', n);
+    RAISE NOTICE 'OK  88 créatures au catalogue';
 
     SELECT count(*) INTO n FROM creature WHERE image NOT LIKE 'sprites/%.png';
     ASSERT n = 0, 'KO  chaque image doit être une clé sprites/….png du CDN';
@@ -92,7 +92,7 @@ END $$;
 \i /db/init/04_evolution_reglage_echec.sql
 \o /dev/null
 DO $$ BEGIN
-    ASSERT (SELECT count(*) FROM creature) = 84,    'KO  ré-exécution : créatures dupliquées';
+    ASSERT (SELECT count(*) FROM creature) = 88,    'KO  ré-exécution : créatures dupliquées';
     ASSERT (SELECT count(*) FROM utilisateur) = 3,  'KO  ré-exécution : comptes dupliqués';
     ASSERT (SELECT count(*) FROM echange_ligne) = 2,'KO  ré-exécution : lignes dupliquées';
     ASSERT (SELECT count(*) FROM reglage) = 1,      'KO  ré-exécution : réglages dupliqués';

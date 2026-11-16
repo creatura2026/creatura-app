@@ -97,7 +97,7 @@ def test_drop_rates_follow_rarity_weights_and_legendary_stock(client):
     rates = {r["code"]: r["dropRate"] for r in client.get(f"{API}/rarities", headers=h).json()}
     assert rates == {"COMMON": 0.7141, "UNCOMMON": 0.204, "RARE": 0.0655, "LEGENDARY": 0.0164}
 
-    set_stock({"Serazou": 0, "DioDaLionseau": 0})
+    set_stock({}, others=0)
     rates = {r["code"]: r["dropRate"] for r in client.get(f"{API}/rarities", headers=h).json()}
     assert rates["LEGENDARY"] == 0.0 and abs(sum(rates.values()) - 1) < 0.001
     assert rates["RARE"] > 0.0655

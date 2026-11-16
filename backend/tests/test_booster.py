@@ -181,7 +181,7 @@ def test_concurrent_requests_open_one_booster(client):
 
 def test_exhausted_legendaries_cancel_the_booster_without_losing_it(client):
     set_weights(**ONLY_LEGENDARIES)  # seules les légendaires sont tirables
-    set_stock({"Serazou": 1, "DioDaLionseau": 0})
+    set_stock({"Serazou": 1}, others=0)
     a, b = register_and_login(client, "Alice"), register_and_login(client, "Bob")
     not_first_booster(a["id"], b["id"])
 
@@ -200,7 +200,7 @@ def test_exhausted_legendaries_cancel_the_booster_without_losing_it(client):
 def test_concurrent_boosters_never_exceed_legendary_stock(client):
     """Quatre joueurs se disputent les 3 derniers exemplaires légendaires."""
     set_weights(**ONLY_LEGENDARIES)
-    set_stock({"Serazou": 2, "DioDaLionseau": 1})
+    set_stock({"Serazou": 2, "DioDaLionseau": 1}, others=0)
     players = [register_and_login(client, f"Joueur{i}") for i in range(4)]
     not_first_booster(*(p["id"] for p in players))
 

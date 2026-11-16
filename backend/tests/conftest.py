@@ -157,9 +157,19 @@ def set_booster_size(cards: int) -> None:
         db.commit()
 
 
-def set_stock(stocks: dict[str, int]) -> None:
-    """Fixe le stock des légendaires citées (les autres créatures sont illimitées)."""
+def set_stock(stocks: dict[str, int], others: int | None = None) -> None:
+    """Fixe le stock des légendaires citées (les autres créatures sont illimitées).
+
+    `others` : stock donné à toutes les autres légendaires (0 = épuisées), pour qu'un test ne
+    dépende pas du nombre de légendaires au catalogue.
+    """
     with SessionLocal() as db:
+        if others is not None:
+            db.execute(
+                update(Creature)
+                .where(Creature.rarete == Rarete.LEGENDAIRE, Creature.nom.not_in(stocks))
+                .values(stock_total=others, stock_restant=others)
+            )
         for name, n in stocks.items():
             done = db.execute(update(Creature).where(Creature.nom == name).values(stock_total=n, stock_restant=n))
             assert done.rowcount == 1, name

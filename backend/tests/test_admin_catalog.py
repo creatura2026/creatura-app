@@ -73,12 +73,11 @@ def test_new_card_appears_at_midnight(client, admin_headers):
 
 
 def test_new_limited_edition_is_drawn_within_its_stock(client, admin_headers):
-    card = client.post(f"{API}/admin/creatures", json=NEW_CARD, headers=admin_headers).json()
-    set_weights(COMMUN=1, PEU_COMMUN=0, RARE=0, LEGENDAIRE=1000)
-    with_old_legendaries_out = {"Serazou": 0, "DioDaLionseau": 0}
     from conftest import set_stock
 
-    set_stock(with_old_legendaries_out)
+    set_stock({}, others=0)  # légendaires du catalogue épuisées : seule la nouvelle reste tirable
+    card = client.post(f"{API}/admin/creatures", json=NEW_CARD, headers=admin_headers).json()
+    set_weights(COMMUN=1, PEU_COMMUN=0, RARE=0, LEGENDAIRE=1000)
     players = [register_and_login(client, f"Joueur{i}") for i in range(4)]
     not_first_booster(*(p["id"] for p in players))
 

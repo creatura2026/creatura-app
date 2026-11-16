@@ -3,7 +3,7 @@
 -- Ticket : AS-41
 -- À appliquer PARTOUT (local, dev, prod) après 01_schema.sql.
 --
--- 84 créatures, une par sprite du CDN (dossier sprites/ du bucket S3).
+-- 88 créatures, une par sprite du CDN (dossier sprites/ du bucket S3).
 -- Les variantes presque identiques (eye_orb_2, star_moth_3, moon_bat_2…) ne
 -- sont pas utilisées. Moussou, Cristille, Brumel et Flammille viennent du
 -- cahier des charges.
@@ -12,7 +12,7 @@
 --   COMMUN          33      illimité (NULL)
 --   PEU_COMMUN      32      illimité (NULL)
 --   RARE            17      illimité (NULL)
---   LEGENDAIRE       2      50 exemplaires chacune (édition limitée)
+--   LEGENDAIRE       6      50 exemplaires chacune (édition limitée)
 --
 -- Les poids de tirage sont portés par la rareté (table rarete_tirage,
 -- 07_evolution_tirage_par_rarete.sql) : 70 / 20 / 8 / 2 par défaut, réglables
@@ -202,7 +202,15 @@ VALUES
     ('Serazou', 'Charmant et attentionné, il surprend par ses bouclettes d''Argan.',
      'LUEUR', 'LEGENDAIRE', 'sprites/serazou.png', 50, 50),
     ('DioDaLionseau', 'Lionceau boudeur à la crinière d''automne. Il tire la langue à qui ose le traiter de chaton.',
-     'NATURE', 'LEGENDAIRE', 'sprites/diodalionseau.png', 50, 50)
+     'NATURE', 'LEGENDAIRE', 'sprites/diodalionseau.png', 50, 50),
+    ('Louleloup', 'Loup spectral drapé de flammes violettes. Il rôde sans un bruit, et sa barbe reste impeccable même au cœur du brasier.',
+     'BRUME', 'LEGENDAIRE', 'sprites/louleloup.png', 50, 50),
+    ('Zeinv', 'Dragonne aux ailes de braise et aux longues tresses. D''un seul regard, elle rallume la flamme au bout de sa queue.',
+     'LUEUR', 'LEGENDAIRE', 'sprites/zeinv.png', 50, 50),
+    ('Lectroniqua', 'Toujours chargée à bloc, elle remonte ses lunettes avant de lancer l''éclair. Ses idées filent plus vite que la foudre.',
+     'LUEUR', 'LEGENDAIRE', 'sprites/lectroniqua.png', 50, 50),
+    ('Delphin', 'Dragon des vagues au sourire contagieux. Il surfe sur les déferlantes et éclabousse tous ceux qui s''ennuient.',
+     'BRUME', 'LEGENDAIRE', 'sprites/delphin.png', 50, 50)
 ON CONFLICT ON CONSTRAINT uq_creature_nom DO UPDATE
     SET description = EXCLUDED.description,
         image       = EXCLUDED.image;
