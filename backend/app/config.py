@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # CDN des illustrations (CloudFront devant le bucket S3) : la clé stockée en base
     # (sprites/moss_puff.png) y est concaténée.
-    image_base_url: str = "https://d2qfl3ji3yaa9i.cloudfront.net"
+    image_base_url: str = "https://creatura.creasmaloud.dev"
 
     # Compte administrateur créé au démarrage s'il n'existe pas (mot de passe haché par le back).
     admin_login: str | None = None

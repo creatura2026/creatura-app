@@ -23,7 +23,7 @@ Tests unitaires : `pnpm --filter player test:unit` et `pnpm --filter admin test:
 ## Application Windows (.exe)
 
 ```sh
-cp apps/desktop/config.example.json apps/desktop/config.json   # y mettre le domaine CloudFront
+cp apps/desktop/config.example.json apps/desktop/config.json   # domaine du site, déjà rempli
 pnpm desktop        # exe branché sur le backend AWS
 pnpm desktop:demo   # exe avec l'API simulée, aucun serveur nécessaire
 ```

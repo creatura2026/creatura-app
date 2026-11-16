@@ -42,7 +42,7 @@ const creature = (name: string, family: string) => ({
   name,
   family: { code: family, label: family },
   rarity: { code: 'COMMON', label: 'Commun' },
-  imageUrl: `https://d37thcbqe85nlg.cloudfront.net/sprites/${name.toLowerCase()}.png`,
+  imageUrl: `https://creatura.creasmaloud.dev/sprites/${name.toLowerCase()}.png`,
 })
 
 afterEach(() => vi.unstubAllGlobals())
@@ -74,7 +74,7 @@ describe('API HTTP du joueur', () => {
     const page = await createHttpPlayerApi(memorySession()).listCreatures()
 
     expect(page.items[0]!.imageUrl).toBe(
-      'https://d37thcbqe85nlg.cloudfront.net/sprites/moussou.png',
+      'https://creatura.creasmaloud.dev/sprites/moussou.png',
     )
   })
 
@@ -193,7 +193,7 @@ describe('Salle d’échange (WebSocket)', () => {
 
   function join(fetches: (Response | Error)[] = []) {
     vi.stubGlobal('WebSocket', FakeSocket)
-    vi.stubGlobal('location', { href: 'https://app.creatura.fr/echanges/t1' })
+    vi.stubGlobal('location', { href: 'https://creatura.creasmaloud.dev/echanges/t1' })
     mockFetch(...fetches)
     const received: { type: string; problem?: { code: string } }[] = []
     const connection = createHttpPlayerApi(memorySession()).joinTrade('t1', (m) => received.push(m))
@@ -204,7 +204,7 @@ describe('Salle d’échange (WebSocket)', () => {
     const { connection, received } = join()
     const socket = FakeSocket.all[0]!
 
-    expect(socket.url).toBe('wss://app.creatura.fr/api/v1/trades/t1/live?access_token=access-1')
+    expect(socket.url).toBe('wss://creatura.creasmaloud.dev/api/v1/trades/t1/live?access_token=access-1')
     socket.open()
     connection.send({ type: 'ready', ready: true })
 
