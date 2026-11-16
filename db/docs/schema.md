@@ -10,8 +10,12 @@ erDiagram
     creature    ||--o{ collection : "est possédée dans"
     utilisateur ||--o{ echange : "propose"
     utilisateur ||--o{ echange : "reçoit"
-    echange     ||--|{ echange_ligne : "contient"
+    echange     ||--o{ echange_ligne : "tapis"
+    echange     ||--o{ echange_message : "discussion"
+    utilisateur ||--o{ echange_message : "écrit"
+    creature    |o--o{ echange : "est cherchée dans"
     creature    ||--o{ echange_ligne : "est échangée dans"
+    utilisateur |o--o{ reglage : "a modifié"
 
     utilisateur {
         uuid        id                PK
@@ -28,9 +32,9 @@ erDiagram
         varchar     nom               UK
         text        description
         varchar     famille              "NATURE | CRISTAL | BRUME | LUEUR"
-        varchar     rarete               "COMMUN | PEU_COMMUN | RARE"
+        varchar     rarete               "COMMUN | PEU_COMMUN | RARE | LEGENDAIRE"
         integer     poids                "> 0, probabilité de tirage"
-        varchar     image                "chemin, ex. images/moussou.png"
+        varchar     image                "clé S3 du CDN, ex. sprites/moss_puff.png"
         integer     stock_total          ">= 0"
         integer     stock_restant        "entre 0 et stock_total"
     }
@@ -45,9 +49,13 @@ erDiagram
         uuid        id                PK
         uuid        proposeur_id      FK
         uuid        destinataire_id   FK "différent du proposeur"
-        varchar     statut               "EN_ATTENTE | ACCEPTE | REFUSE | ANNULE"
+        varchar     statut               "EN_ATTENTE | ACCEPTE | REFUSE | ANNULE | ECHOUE"
         timestamptz cree_le
         timestamptz decide_le            "NULL tant qu'en attente"
+        varchar     motif_echec          "rempli si et seulement si ECHOUE"
+        boolean     proposeur_pret       "a validé les deux tapis"
+        boolean     destinataire_pret    "a validé les deux tapis"
+        integer     creature_cherchee_id FK "NULL si non indiquée"
     }
 
     echange_ligne {
@@ -55,6 +63,21 @@ erDiagram
         integer     creature_id       PK, FK
         varchar     sens              PK "OFFERT | DEMANDE"
         integer     quantite             "> 0"
+    }
+
+    echange_message {
+        uuid        id                PK
+        uuid        echange_id        FK
+        uuid        auteur_id         FK "proposeur ou destinataire"
+        varchar     texte                "1 à 500 caractères"
+        timestamptz envoye_le
+    }
+
+    reglage {
+        smallint    id                PK "toujours 1 : une seule ligne"
+        integer     cartes_par_booster   "1 à 10, 5 par défaut"
+        timestamptz modifie_le           "NULL si jamais modifié"
+        uuid        modifie_par       FK "administrateur"
     }
 ```
 
@@ -97,9 +120,9 @@ erDiagram
 | nom | varchar(50) | NOT NULL, UNIQUE | Nom de l'espèce |
 | description | text | | Texte affiché dans le catalogue |
 | famille | varchar(20) | NOT NULL, CHECK `NATURE`/`CRISTAL`/`BRUME`/`LUEUR` | Famille (filtre UC-07) |
-| rarete | varchar(20) | NOT NULL, CHECK `COMMUN`/`PEU_COMMUN`/`RARE` | Rareté de l'espèce |
+| rarete | varchar(20) | NOT NULL, CHECK `COMMUN`/`PEU_COMMUN`/`RARE`/`LEGENDAIRE` | Rareté de l'espèce (`LEGENDAIRE` : 06_evolution_rarete_legendaire.sql) |
 | poids | integer | NOT NULL, CHECK `> 0` | Poids de tirage |
-| image | varchar(255) | NOT NULL | Chemin relatif de l'image (le front ajoute l'URL du CDN) |
+| image | varchar(255) | NOT NULL | Clé du fichier dans le bucket S3 (ex. `sprites/moss_puff.png`) ; le back y ajoute l'URL du CDN CloudFront |
 | stock_total | integer | NOT NULL, CHECK `>= 0` | Exemplaires existant au total |
 | stock_restant | integer | NOT NULL, CHECK `0 <= stock_restant <= stock_total` | Exemplaires encore tirables |
 
@@ -118,11 +141,21 @@ Index : `(creature_id) WHERE quantite > 0` — « qui possède cette carte ? » 
 | id | uuid | PK, défaut `gen_random_uuid()` | Identifiant |
 | proposeur_id | uuid | NOT NULL, FK → utilisateur | Joueur qui propose |
 | destinataire_id | uuid | NOT NULL, FK → utilisateur, CHECK `<> proposeur_id` | Joueur qui décide |
-| statut | varchar(12) | NOT NULL, défaut `EN_ATTENTE`, CHECK `EN_ATTENTE`/`ACCEPTE`/`REFUSE`/`ANNULE` | État |
+| statut | varchar(12) | NOT NULL, défaut `EN_ATTENTE`, CHECK `EN_ATTENTE`/`ACCEPTE`/`REFUSE`/`ANNULE`/`ECHOUE` | État ; `ECHOUE` = acceptation impossible, une carte n'était plus disponible |
 | cree_le | timestamptz | NOT NULL, défaut `now()` | Date de proposition |
-| decide_le | timestamptz | NULL ; CHECK : NULL si et seulement si `EN_ATTENTE` | Date de décision |
+| decide_le | timestamptz | NULL ; CHECK : NULL si et seulement si `EN_ATTENTE` | Date de décision (ou d'échec) |
+| motif_echec | varchar(30) | NULL ; CHECK : rempli si et seulement si `ECHOUE` | Code de l'échec (ex. `CARDS_UNAVAILABLE`) |
 
-Index : `(destinataire_id, statut)`, `(proposeur_id)`.
+| proposeur_pret | boolean | NOT NULL, défaut `false` | Le proposeur a validé les deux tapis tels qu'ils sont |
+| destinataire_pret | boolean | NOT NULL, défaut `false` | Le destinataire a validé les deux tapis tels qu'ils sont |
+| creature_cherchee_id | integer | NULL, FK → creature, ON DELETE SET NULL | Carte que le proposeur cherche chez le destinataire |
+
+Index : `(destinataire_id, statut)`, `(proposeur_id)`, `(proposeur_id, destinataire_id) WHERE statut = 'EN_ATTENTE'`.
+
+Les trois dernières colonnes viennent de `init/05_evolution_salle_echange.sql` : un échange est une
+**salle** où chaque joueur pose ses cartes sur son tapis (`echange_ligne`), discute (`echange_message`)
+et valide. L'échange est conclu quand les deux joueurs ont validé ; toute modification d'un tapis
+retire les deux validations (règle appliquée par l'API).
 
 ### echange_ligne
 | Colonne | Type | Contraintes | Description |
@@ -131,6 +164,31 @@ Index : `(destinataire_id, statut)`, `(proposeur_id)`.
 | creature_id | integer | PK, FK → creature | Créature échangée |
 | sens | varchar(8) | PK, CHECK `OFFERT`/`DEMANDE` | `OFFERT` = donnée par le proposeur, `DEMANDE` = donnée par le destinataire |
 | quantite | integer | NOT NULL, CHECK `> 0` | Nombre d'exemplaires |
+
+Un tapis peut être vide tant que l'échange est en cours : la salle s'ouvre tapis vides.
+
+### echange_message
+Ajoutée par `init/05_evolution_salle_echange.sql`.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| id | uuid | PK, défaut `gen_random_uuid()` | Identifiant |
+| echange_id | uuid | NOT NULL, FK → echange, ON DELETE CASCADE | Échange concerné |
+| auteur_id | uuid | NOT NULL, FK → utilisateur | Proposeur ou destinataire (vérifié par l'API) |
+| texte | varchar(500) | NOT NULL, CHECK non vide | Message |
+| envoye_le | timestamptz | NOT NULL, défaut `now()` | Date d'envoi |
+
+Index : `(echange_id, envoye_le)` — la discussion d'un échange, dans l'ordre.
+
+### reglage
+Ajoutée par `init/04_evolution_reglage_echec.sql` (avec `echange.motif_echec` et le statut `ECHOUE`).
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| id | smallint | PK, défaut 1, CHECK `= 1` | Une seule ligne : réglages globaux |
+| cartes_par_booster | integer | NOT NULL, défaut 5, CHECK entre 1 et 10 | Cartes tirées par booster (modifiable depuis le dashboard admin) |
+| modifie_le | timestamptz | NULL ; CHECK : renseigné dès qu'il y a un auteur | Dernière modification |
+| modifie_par | uuid | NULL, FK → utilisateur, ON DELETE SET NULL | Administrateur auteur |
 
 ## Règles vérifiées par les tests
 

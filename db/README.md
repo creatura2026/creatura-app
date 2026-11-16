@@ -27,10 +27,28 @@ Au **premier** démarrage, la base est créée avec le schéma, le catalogue et
 ⚠️ Les scripts ne s'exécutent que sur un volume vide : après une modification
 d'un fichier SQL, il faut **réinitialiser** pour la voir.
 
+### Faire évoluer le schéma
+
+`01_schema.sql` ne se modifie plus : une évolution est un nouveau fichier
+`init/NN_evolution_….sql`, **ré-exécutable** (`IF NOT EXISTS`, `DROP CONSTRAINT IF EXISTS`…).
+`scripts/appliquer.sh` les applique toutes, dans l'ordre, à chaque lancement (Job EKS compris).
+
+| Fichier | Contenu |
+|---|---|
+| `04_evolution_reglage_echec.sql` | Table `reglage` (cartes par booster) ; statut d'échange `ECHOUE` et colonne `motif_echec` |
+| `05_evolution_salle_echange.sql` | Salle d'échange : validations `proposeur_pret` / `destinataire_pret`, carte cherchée, table `echange_message` (discussion) |
+
+Pour les appliquer à une base locale déjà créée, sans perdre ses données :
+
+```bash
+docker exec -i creatura-db psql -U creatura -d creatura < init/04_evolution_reglage_echec.sql
+docker exec -i creatura-db psql -U creatura -d creatura < init/05_evolution_salle_echange.sql
+```
+
 ## Connexion depuis le back
 
 ```
-DATABASE_URL=postgres://creatura:creatura@localhost:5432/creatura
+DATABASE_URL=postgres://creatura:creatura@127.0.0.1:5432/creatura
 ```
 
 - **Les fichiers SQL de `db/init/` sont la seule source du schéma.** L'ORM lit la
@@ -57,8 +75,9 @@ Moussou ×1, et un échange `EN_ATTENTE` (Alice offre 1 Moussou contre le Brumel
 |---|---|
 | `utilisateur.role` | `JOUEUR`, `ADMIN` |
 | `creature.famille` | `NATURE`, `CRISTAL`, `BRUME`, `LUEUR` |
-| `creature.rarete` | `COMMUN`, `PEU_COMMUN`, `RARE` |
-| `echange.statut` | `EN_ATTENTE`, `ACCEPTE`, `REFUSE`, `ANNULE` |
+| `creature.rarete` | `COMMUN`, `PEU_COMMUN`, `RARE`, `LEGENDAIRE` |
+| `echange.statut` | `EN_ATTENTE`, `ACCEPTE`, `REFUSE`, `ANNULE`, `ECHOUE` (avec `motif_echec`) |
+| `reglage.cartes_par_booster` | de 1 à 10 (5 par défaut) |
 | `echange_ligne.sens` | `OFFERT` (donné par le proposeur), `DEMANDE` (donné par le destinataire) |
 
 Longueurs max : `pseudo` 30, `identifiant` 50, `creature.nom` 50.
@@ -74,7 +93,8 @@ contrainte** (`err.constraint`). Toutes les contraintes sont nommées :
 | `23505` | `uq_utilisateur_identifiant` | Identifiant déjà utilisé | 409 |
 | `23514` | `ck_collection_quantite` | Plus assez d'exemplaires (échange) | 409 |
 | `23514` | `ck_creature_stock_restant` | Stock épuisé (booster) | 409 |
-| `23514` | `ck_echange_participants` | Échange avec soi-même | 400 |
+| `23514` | `ck_echange_participants` | Échange avec soi-même | 422 |
+| `23514` | `ck_reglage_cartes_par_booster` | Booster de 0 ou de plus de 10 cartes | 400 |
 | `23514` | `ck_utilisateur_pseudo`, `ck_utilisateur_identifiant` | Champ vide | 400 |
 | `23514` | autres `ck_…` | Valeur hors liste (statut, sens…) : bug côté back | 500 |
 | `23503` | `fk_echange_destinataire`, `fk_collection_utilisateur` | Joueur inexistant | 404 |

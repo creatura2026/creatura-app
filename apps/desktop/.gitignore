@@ -1,0 +1,6 @@
+# Build de la PWA copié pour l'application, et paquets Windows produits
+web/
+release/
+# Adresse du backend : réglage local (copie de config.example.json) et fichier généré au build
+config.json
+app-config.json

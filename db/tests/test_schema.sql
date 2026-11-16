@@ -42,9 +42,9 @@ VALUES ('00000000-0000-0000-0000-00000000000a', 'TestA', 'test_a', 'hash'),
 INSERT INTO utilisateur (pseudo, identifiant, mot_de_passe_hash, role)
 VALUES ('TestAdmin', 'test_admin', 'hash', 'ADMIN');
 
-INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-VALUES ('TestMoussou', 'NATURE', 'COMMUN', 60, 'images/moussou.png', 100, 100),
-       ('TestBrumel',  'BRUME',  'RARE',   10, 'images/brumel.png',   10,  10);
+INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+VALUES ('TestMoussou', 'NATURE', 'COMMUN',     'images/moussou.png', NULL, NULL),
+       ('TestBrumel',  'BRUME',  'LEGENDAIRE', 'images/brumel.png',    10,   10);
 
 INSERT INTO collection (utilisateur_id, creature_id, quantite)
 SELECT '00000000-0000-0000-0000-00000000000a', id, 2 FROM creature WHERE nom = 'TestMoussou';
@@ -89,21 +89,39 @@ SELECT pg_temp.doit_echouer('pseudo vide refusé',
 -- creature
 -- ---------------------------------------------------------------------------
 SELECT pg_temp.doit_echouer('nom de créature unique',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('TestMoussou', 'NATURE', 'COMMUN', 1, 'x.png', 1, 1)$q$,
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('TestMoussou', 'NATURE', 'COMMUN', 'x.png', NULL, NULL)$q$,
     'uq_creature_nom');
 SELECT pg_temp.doit_echouer('famille inconnue refusée',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('X', 'FEU', 'COMMUN', 1, 'x.png', 1, 1)$q$,
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'FEU', 'COMMUN', 'x.png', NULL, NULL)$q$,
     'ck_creature_famille');
 SELECT pg_temp.doit_echouer('rareté inconnue refusée',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('X', 'NATURE', 'LEGENDAIRE', 1, 'x.png', 1, 1)$q$,
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'NATURE', 'MYTHIQUE', 'x.png', NULL, NULL)$q$,
     'ck_creature_rarete');
-SELECT pg_temp.doit_echouer('poids nul refusé',
-    $q$INSERT INTO creature (nom, famille, rarete, poids, image, stock_total, stock_restant)
-       VALUES ('X', 'NATURE', 'COMMUN', 0, 'x.png', 1, 1)$q$,
-    'ck_creature_poids');
+SELECT pg_temp.doit_echouer('stock refusé hors légendaire (illimité)',
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'NATURE', 'RARE', 'x.png', 5, 5)$q$,
+    'ck_creature_stock_legendaire');
+SELECT pg_temp.doit_echouer('légendaire sans stock refusée',
+    $q$INSERT INTO creature (nom, famille, rarete, image, stock_total, stock_restant)
+       VALUES ('X', 'NATURE', 'LEGENDAIRE', 'x.png', NULL, NULL)$q$,
+    'ck_creature_stock_legendaire');
+SELECT pg_temp.doit_echouer('stock total sans stock restant refusé',
+    $q$UPDATE creature SET stock_restant = NULL WHERE nom = 'TestBrumel'$q$,
+    'ck_creature_stock_restant');
+SELECT pg_temp.doit_echouer('poids de rareté négatif refusé',
+    $q$UPDATE rarete_tirage SET poids = -1 WHERE rarete = 'RARE'$q$,
+    'ck_rarete_tirage_poids');
+SELECT pg_temp.doit_echouer('booster de 2 cartes refusé',
+    $q$UPDATE reglage SET cartes_par_booster = 2$q$,
+    'ck_reglage_cartes_par_booster');
+SELECT pg_temp.doit_echouer('motif de tirage inconnu refusé',
+    $q$INSERT INTO booster_carte (booster_id, position, utilisateur_id, jour, creature_id, rarete, motif)
+       SELECT gen_random_uuid(), 1, '00000000-0000-0000-0000-00000000000a', current_date, id, 'COMMUN', 'CADEAU'
+       FROM creature WHERE nom = 'TestMoussou'$q$,
+    'ck_booster_carte_motif');
 SELECT pg_temp.doit_echouer('stock restant négatif refusé',
     $q$UPDATE creature SET stock_restant = stock_restant - 1000 WHERE nom = 'TestBrumel'$q$,
     'ck_creature_stock_restant');
@@ -187,6 +205,81 @@ DO $$ BEGIN
     VALUES ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b', 'REFUSE', now());
     RAISE NOTICE 'OK  échange décidé avec sa date accepté';
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- echange échoué (04_evolution_reglage_echec.sql)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+    INSERT INTO echange (id, proposeur_id, destinataire_id, statut, decide_le, motif_echec)
+    VALUES ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-00000000000a',
+            '00000000-0000-0000-0000-00000000000b', 'ECHOUE', now(), 'CARDS_UNAVAILABLE');
+    RAISE NOTICE 'OK  échange échoué avec son motif accepté';
+END $$;
+SELECT pg_temp.doit_echouer('échec sans motif refusé',
+    $q$UPDATE echange SET motif_echec = NULL WHERE id = '00000000-0000-0000-0000-0000000000e2'$q$,
+    'ck_echange_motif_echec');
+SELECT pg_temp.doit_echouer('motif sur un échange non échoué refusé',
+    $q$UPDATE echange SET statut = 'ACCEPTE' WHERE id = '00000000-0000-0000-0000-0000000000e2'$q$,
+    'ck_echange_motif_echec');
+
+-- ---------------------------------------------------------------------------
+-- salle d'échange (05_evolution_salle_echange.sql)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+    INSERT INTO echange (id, proposeur_id, destinataire_id, creature_cherchee_id)
+    SELECT '00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a',
+           '00000000-0000-0000-0000-00000000000b', id FROM creature WHERE nom = 'TestBrumel';
+    ASSERT (SELECT NOT proposeur_pret AND NOT destinataire_pret FROM echange
+            WHERE id = '00000000-0000-0000-0000-0000000000e3'), 'KO  validations à faux par défaut';
+    INSERT INTO echange_message (echange_id, auteur_id, texte)
+    VALUES ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a', 'Bonjour !');
+    RAISE NOTICE 'OK  salle ouverte tapis vides, sans validation, avec un message';
+END $$;
+SELECT pg_temp.doit_echouer('carte cherchée inexistante refusée',
+    $q$UPDATE echange SET creature_cherchee_id = -1 WHERE id = '00000000-0000-0000-0000-0000000000e3'$q$,
+    'fk_echange_creature_cherchee');
+SELECT pg_temp.doit_echouer('message vide refusé',
+    $q$INSERT INTO echange_message (echange_id, auteur_id, texte)
+       VALUES ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a', '   ')$q$,
+    'ck_echange_message_texte');
+SELECT pg_temp.doit_echouer('message d''un auteur inexistant refusé',
+    $q$INSERT INTO echange_message (echange_id, auteur_id, texte)
+       VALUES ('00000000-0000-0000-0000-0000000000e3', gen_random_uuid(), 'Salut')$q$,
+    'fk_echange_message_auteur');
+SELECT pg_temp.doit_echouer('message de plus de 500 caractères refusé',
+    $q$INSERT INTO echange_message (echange_id, auteur_id, texte)
+       VALUES ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-00000000000a', repeat('a', 501))$q$,
+    '');
+DO $$ BEGIN
+    DELETE FROM echange WHERE id = '00000000-0000-0000-0000-0000000000e3';
+    ASSERT (SELECT count(*) FROM echange_message
+            WHERE echange_id = '00000000-0000-0000-0000-0000000000e3') = 0, 'KO  cascade echange -> echange_message';
+    RAISE NOTICE 'OK  suppression d''un échange supprime sa discussion';
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- reglage (04_evolution_reglage_echec.sql)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+    ASSERT (SELECT cartes_par_booster FROM reglage WHERE id = 1) IS NOT NULL,
+        'KO  la ligne de réglage doit exister';
+    RAISE NOTICE 'OK  ligne de réglage présente';
+END $$;
+SELECT pg_temp.doit_echouer('une seule ligne de réglage',
+    $q$INSERT INTO reglage (id) VALUES (2)$q$,
+    'ck_reglage_ligne_unique');
+SELECT pg_temp.doit_echouer('booster vide refusé',
+    $q$UPDATE reglage SET cartes_par_booster = 0$q$,
+    'ck_reglage_cartes_par_booster');
+SELECT pg_temp.doit_echouer('booster de plus de 10 cartes refusé',
+    $q$UPDATE reglage SET cartes_par_booster = 11$q$,
+    'ck_reglage_cartes_par_booster');
+SELECT pg_temp.doit_echouer('auteur sans date de modification refusé',
+    $q$UPDATE reglage SET modifie_par = '00000000-0000-0000-0000-00000000000a', modifie_le = NULL$q$,
+    'ck_reglage_modification');
+SELECT pg_temp.doit_echouer('auteur inexistant refusé',
+    $q$UPDATE reglage SET modifie_par = gen_random_uuid(), modifie_le = now()$q$,
+    'fk_reglage_modifie_par');
 
 ROLLBACK;
 \echo '>>> Tous les tests du schéma sont passés.'

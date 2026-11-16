@@ -1,0 +1,14 @@
+# Contexte de build du front (racine du repo) : seulement le monorepo pnpm.
+.git
+.github
+.claude
+.idea
+backend
+db
+docs
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+**/.env
+**/.env.*

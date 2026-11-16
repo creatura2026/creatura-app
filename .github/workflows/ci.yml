@@ -1,0 +1,462 @@
+# =============================================================================
+# CREATURA - Intégration continue du repo app
+#
+#   1. Vérifier  : tests de la base (SQL), du back (pytest sur PostgreSQL),
+#                  du front (types, tests unitaires, build)
+#   2. Construire: une image Docker par composant
+#   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
+#   4. Windows   : l'exe de l'application (apps/desktop) en artefact, hors PR ;
+#                  Release GitHub sur un tag v*
+#
+# La release validée est déployée par le workflow deploy-aws.yml du dépôt infra.
+# Aucun accès AWS dans ce dépôt ; voir docs/ci-cd.md.
+# =============================================================================
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Une PR mise à jour annule l'exécution précédente ; jamais sur main/develop.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+  # Les PR construisent les images (le Dockerfile est vérifié) sans les publier.
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
+  # Architecture des nœuds EKS (ajouter linux/arm64 pour des nœuds Graviton).
+  PLATFORMS: linux/amd64
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Composants présents dans ce commit (le front arrive avec la branche as-35)
+  # ---------------------------------------------------------------------------
+  detect:
+    name: Composants
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.detect.outputs.frontend }}
+      images: ${{ steps.detect.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: detect
+        run: |
+          images='[
+            {"name": "creatura-backend", "context": "backend", "file": "backend/Dockerfile"},
+            {"name": "creatura-db",      "context": "db",      "file": "db/Dockerfile"}
+          ]'
+          frontend=false
+          if [ -f pnpm-workspace.yaml ]; then frontend=true; fi
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "images=$(jq -c . <<< "$images")" >> "$GITHUB_OUTPUT"
+          echo "Front présent : $frontend" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Base de données : scripts SQL de db/ et image du Job de schéma
+  # ---------------------------------------------------------------------------
+  db:
+    name: Base de données
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construire l'image de la base
+        run: docker build -t creatura-db:ci db
+
+      - name: Démarrer la base (schéma, catalogue et démo)
+        run: |
+          docker run -d --name creatura-db \
+            -e POSTGRES_USER=creatura -e POSTGRES_PASSWORD=creatura -e POSTGRES_DB=creatura \
+            -e CREATURA_DEMO=true \
+            creatura-db:ci
+          for _ in $(seq 1 60); do
+            health=$(docker inspect -f '{{.State.Health.Status}}' creatura-db)
+            [ "$health" = healthy ] && break
+            sleep 2
+          done
+          docker logs creatura-db
+          [ "$health" = healthy ]
+
+      - name: Tests du schéma et des données
+        run: |
+          for test in test_schema test_donnees; do
+            docker exec creatura-db psql -U creatura -d creatura -v ON_ERROR_STOP=1 -f "/db/tests/$test.sql"
+          done
+
+      - name: appliquer.sh est ré-exécutable (Job de schéma sur RDS)
+        run: |
+          docker exec -e PGUSER=creatura -e PGDATABASE=creatura -e CREATURA_DEMO=true \
+            creatura-db /db/scripts/appliquer.sh
+          docker exec creatura-db psql -U creatura -d creatura -v ON_ERROR_STOP=1 -f /db/tests/test_donnees.sql
+
+  # ---------------------------------------------------------------------------
+  # Back : tests sur un vrai PostgreSQL 16 (même version que RDS)
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Back
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: creatura
+          POSTGRES_PASSWORD: creatura
+          POSTGRES_DB: creatura
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U creatura"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # Les tests créent cette base et y appliquent db/init/ avant chaque test.
+      TEST_DATABASE_URL: postgres://creatura:creatura@localhost:5432/creatura_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Installer les dépendances
+        run: uv sync --frozen
+
+      - name: Tests
+        run: uv run pytest --junitxml=../reports/backend-tests.xml
+
+      - name: Publier le rapport de tests
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/backend-tests.xml
+
+  # ---------------------------------------------------------------------------
+  # Front : PWA joueur et dashboard admin (monorepo pnpm)
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Front
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Vérification des types et build déployable
+        env:
+          VITE_API_BASE_URL: /api/v1
+          VITE_API_MOCK: 'false'
+        run: |
+          pnpm --filter player run type-check
+          pnpm --filter admin run type-check
+          pnpm --filter player exec vite build
+          pnpm --filter admin exec vite build --base=/admin/
+          mkdir -p release-site/admin
+          cp -a apps/player/dist/. release-site/
+          cp -a apps/admin/dist/. release-site/admin/
+          test -f release-site/index.html
+          test -f release-site/admin/index.html
+
+      - name: Tests unitaires
+        run: pnpm -r run test:unit --run
+
+      - name: Emballer et identifier le frontend testé
+        run: python scripts/ci/package-frontend.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-meta-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend-meta.json
+          if-no-files-found: error
+
+      - name: Publier les applications construites
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-frontend/frontend.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Application Windows (apps/desktop) : exe en artefact, et Release GitHub sur
+  # un tag v*. Adresse du backend : variable CUSTOM_DOMAIN de l'environnement
+  # production (domaine du site, devant CloudFront) ; sans elle, exe de
+  # démonstration sur l'API simulée.
+  # ---------------------------------------------------------------------------
+  desktop:
+    name: Application Windows
+    needs: frontend
+    # Pas sur les PR : plusieurs minutes de runner Windows à chaque mise à jour.
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    # Donne accès aux variables de l'environnement production (CUSTOM_DOMAIN).
+    environment: production
+    # Facultatif : un échec de l'exe est signalé sur ce job mais ne fait pas échouer la CI
+    # (tests, front et images restent seuls juges). Aucun autre job n'en dépend.
+    continue-on-error: true
+    timeout-minutes: 30
+    permissions:
+      contents: write # Release GitHub sur un tag v*
+    defaults:
+      run:
+        shell: bash
+    env:
+      CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+    steps:
+      # L'installeur Windows ne se construit que sous Windows : on s'arrête avant tout le reste.
+      - name: Vérifier le système du runner
+        if: runner.os != 'Windows'
+        run: |
+          echo "::error::L'exe se construit sur un runner Windows (runs-on: windows-latest), pas sur $RUNNER_OS."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Version
+        id: version
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Un tag v1.2.3 publie la version 1.2.3 : elle doit être celle de apps/desktop/package.json.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Le tag $GITHUB_REF_NAME ne correspond pas à la version $version de apps/desktop/package.json."
+            exit 1
+          fi
+
+      - name: Construire l'exe
+        run: |
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            # « creatura.fr » ou « https://creatura.fr/ » : l'exe veut une adresse https:// sans / final.
+            domain="${CUSTOM_DOMAIN%/}"
+            case "$domain" in http://*|https://*) api_url="$domain" ;; *) api_url="https://$domain" ;; esac
+            echo "API_URL=$api_url" >> "$GITHUB_ENV"
+            pnpm desktop --api "$api_url"
+          else
+            echo "::warning::Variable CUSTOM_DOMAIN absente de l'environnement production : exe de démonstration (API simulée)."
+            pnpm desktop:demo
+          fi
+          test -f apps/desktop/release/latest.json
+
+      - name: Publier l'exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: creatura-windows-${{ steps.version.outputs.version }}
+          path: |
+            apps/desktop/release/Creatura-*.exe
+            apps/desktop/release/latest.json
+          if-no-files-found: error
+          compression-level: 0 # les exe sont déjà compressés
+
+      - name: Release GitHub
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          files=(apps/desktop/release/Creatura-*.exe apps/desktop/release/latest.json)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "Créatura $VERSION" --generate-notes
+          fi
+
+      - name: Résumé
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Application Windows $VERSION"
+            if [ -n "$API_URL" ]; then echo "Backend : \`$API_URL\`"; else echo "Démonstration (API simulée)"; fi
+            echo
+            echo "Artefact : \`creatura-windows-$VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Images Docker : construites à chaque fois, publiées si tout est vert
+  # ---------------------------------------------------------------------------
+  images:
+    name: Image ${{ matrix.image.name }}
+    needs: [detect, db, backend, frontend]
+    # Le front peut être absent (job ignoré) ; tout le reste doit avoir réussi.
+    if: >-
+      ${{ !cancelled()
+      && needs.db.result == 'success'
+      && needs.backend.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.frontend.result) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.detect.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Nom de l'image (GHCR exige des minuscules)
+        run: echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image.name }}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Connexion à GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tags et labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # sha-xxxxxxx : repère lisible ; la release référence le digest immuable.
+          # develop / main : suit la branche. 1.2.3 et 1.2 : versions (tags git v1.2.3).
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=run-${{ github.run_id }}-${{ github.run_attempt }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image.name }}
+            org.opencontainers.image.vendor=CREATURA
+
+      - name: Construire${{ env.PUBLISH == 'true' && ' et publier' || '' }}
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          build-args: ${{ matrix.image.app && format('APP={0}', matrix.image.app) || '' }}
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+
+      - name: Résumé
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### ${{ matrix.image.name }}"
+            if [ "$PUBLISH" = true ]; then
+              echo "Publiée : \`${IMAGE}@${DIGEST}\`"
+            else
+              echo "Construite, non publiée (pull request)."
+            fi
+            echo '```'
+            echo "$TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enregistrer le digest construit
+        if: env.PUBLISH == 'true'
+        env:
+          IMAGE_NAME: ${{ matrix.image.name }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p release-images
+          jq -n --arg name "$IMAGE_NAME" --arg image "$IMAGE@$IMAGE_DIGEST" \
+            '{name: $name, image: $image}' > "release-images/$IMAGE_NAME.json"
+
+      - uses: actions/upload-artifact@v4
+        if: env.PUBLISH == 'true'
+        with:
+          name: release-${{ matrix.image.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-images/*.json
+          if-no-files-found: error
+
+  release:
+    name: Release et déploiement develop
+    needs: [db, backend, frontend, images]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-creatura-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-images
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-meta-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend-meta
+      - name: Assembler la release du run validé
+        env:
+          APP_SHA: ${{ github.sha }}
+          APP_RUN_ID: ${{ github.run_id }}
+          APP_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          jq -s --arg sha "$APP_SHA" --arg run_id "$APP_RUN_ID" --arg attempt "$APP_RUN_ATTEMPT" \
+            --slurpfile front frontend-meta/frontend-meta.json \
+            '{schema_version: 2, commit: $sha, run_id: $run_id, run_attempt: $attempt,
+              frontend_artifact: $front[0].frontend_artifact, frontend_sha256: $front[0].frontend_sha256,
+              images: (map({key: .name, value: .image}) | from_entries)}' \
+            release-images/*.json > release.json
+          jq -e '.images["creatura-backend"] and .images["creatura-db"] and .frontend_sha256' release.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: creatura-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release.json
+          if-no-files-found: error
+
+  notify-infra:
+    name: Déclencher le déploiement AWS
+    needs: release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Attendre la conclusion CI puis demander le déploiement
+        # Le run courant est encore in_progress. L'infra attend sa conclusion avant tout accès AWS.
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+          APP_RUN_ID: ${{ github.run_id }}
+          APP_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          test -n "$GH_TOKEN"
+          jq -n --arg run_id "$APP_RUN_ID" --arg attempt "$APP_RUN_ATTEMPT" \
+            '{ref: "develop", inputs: {app_run_id: $run_id, app_run_attempt: $attempt}}' > /tmp/dispatch.json
+          gh api --method POST repos/creatura2026/creatura-infra/actions/workflows/deploy-aws.yml/dispatches --input /tmp/dispatch.json

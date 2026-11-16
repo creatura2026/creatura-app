@@ -30,6 +30,14 @@ else
     $PSQL -f "$DOSSIER_SQL/01_schema.sql"
 fi
 
+# Évolutions du schéma (NN_evolution_*.sql), dans l'ordre de leur numéro.
+# Chacune est ré-exécutable : on les applique à chaque lancement.
+for evolution in "$DOSSIER_SQL"/[0-9][0-9]_evolution_*.sql; do
+    [ -e "$evolution" ] || continue
+    echo "[creatura] Évolution du schéma ($(basename "$evolution"))"
+    $PSQL -f "$evolution"
+done
+
 echo "[creatura] Catalogue des créatures (02_catalogue.sql)"
 $PSQL -f "$DOSSIER_SQL/02_catalogue.sql"
 

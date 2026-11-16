@@ -1,3 +1,30 @@
-# Secrets et configuration locale
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# Dépendances
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+coverage/
+
+# Variables d'environnement (ne jamais commiter de secrets)
 .env
+.env.*
 !.env.example
+!.env.mock
+
+# Logs
+*.log
+
+# Éditeurs et système
+.idea/
+.DS_Store
+Thumbs.db
+
+# CI packaging scratch
+release-site/
+release-frontend/
+frontend-meta.json
