@@ -1,8 +1,11 @@
 <script setup lang="ts">
-/** UC-02 · Consulter son profil. */
+/** UC-02 · Consulter son profil ; changer son mot de passe, supprimer son compte. */
 import { useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
+import type { PasswordChangeRequest } from '@creatura/shared/api/types'
+import AccountDeletePanel from '@creatura/shared/ui/AccountDeletePanel.vue'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
+import PasswordChangeForm from '@creatura/shared/ui/PasswordChangeForm.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
 import ProgressBar from '@creatura/shared/ui/ProgressBar.vue'
@@ -21,6 +24,24 @@ const queryClient = useQueryClient()
 async function logout() {
   await auth.logout()
   queryClient.clear()
+  await router.replace({ name: 'landing' })
+}
+
+async function changePassword(body: PasswordChangeRequest) {
+  await auth.changePassword(body)
+  toast('Mot de passe changé. Vos autres sessions ont été déconnectées.', 'success')
+}
+
+const DELETE_CONSEQUENCES = [
+  'Votre collection et vos identifiants sont effacés.',
+  'Vos échanges en cours sont abandonnés.',
+  'Dans l’historique des autres joueurs, vous apparaîtrez comme « Joueur supprimé ».',
+]
+
+async function deleteAccount(password: string) {
+  await auth.deleteAccount(password)
+  queryClient.clear()
+  toast('Votre compte a été supprimé.', 'info')
   await router.replace({ name: 'landing' })
 }
 
@@ -78,6 +99,17 @@ async function resetData() {
           </div>
         </div>
 
+        <div class="card-pixel bg-white p-5 md:col-span-2">
+          <h2 class="font-bold">Sécurité</h2>
+          <p class="mt-1 text-sm">
+            Changer votre mot de passe déconnecte vos autres sessions (autres appareils, autres
+            navigateurs).
+          </p>
+          <div class="mt-4 max-w-md">
+            <PasswordChangeForm :submit="changePassword" />
+          </div>
+        </div>
+
         <div v-if="USE_MOCK_API" class="card-pixel-sm border-dashed bg-butter p-5 md:col-span-2">
           <p class="font-bold">Mode démonstration</p>
           <p class="mt-1 text-sm">
@@ -91,6 +123,14 @@ async function resetData() {
             <button type="button" class="btn btn-secondary" @click="resetData">
               <PixelIcon name="refresh" :size="18" /> Réinitialiser les données
             </button>
+          </div>
+        </div>
+
+        <div class="card-pixel-sm border-brick bg-salmon/40 p-5 md:col-span-2">
+          <h2 class="font-bold">Zone sensible</h2>
+          <p class="mt-1 text-sm">La suppression de votre compte est définitive.</p>
+          <div class="mt-4 max-w-md">
+            <AccountDeletePanel :submit="deleteAccount" :consequences="DELETE_CONSEQUENCES" />
           </div>
         </div>
       </div>

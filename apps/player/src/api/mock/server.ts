@@ -171,6 +171,48 @@ export function createMockPlayerApi({
     // Mode simulé : les jetons n'expirent pas, rien à renouveler.
     async keepAlive() {},
 
+    async changePassword(body) {
+      await delay()
+      const db = loadDb()
+      const user = db.users.find((u) => u.id === currentUser().id)!
+      if (user.password !== body.currentPassword) {
+        throw problem('VALIDATION_ERROR', 'Mot de passe incorrect.', {
+          errors: [{ field: 'currentPassword', message: 'Mot de passe incorrect.' }],
+        })
+      }
+      if (body.newPassword === body.currentPassword) {
+        const message = 'Le nouveau mot de passe doit être différent de l’actuel.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'newPassword', message }] })
+      }
+      user.password = body.newPassword
+      saveDb()
+      return {
+        accessToken: getToken() ?? `mock.${uuid()}`,
+        refreshToken: `refresh.${uuid()}`,
+        tokenType: 'Bearer',
+        expiresIn: 900,
+        sessionIdleSeconds: 1200,
+        user: toUser(user),
+      }
+    },
+
+    async deleteAccount(body) {
+      await delay()
+      const db = loadDb()
+      const user = db.users.find((u) => u.id === currentUser().id)!
+      if (user.password !== body.password) {
+        throw problem('VALIDATION_ERROR', 'Mot de passe incorrect.', {
+          errors: [{ field: 'password', message: 'Mot de passe incorrect.' }],
+        })
+      }
+      // Version simplifiée du serveur : le compte disparaît, sa collection aussi.
+      db.users = db.users.filter((u) => u.id !== user.id)
+      delete db.collections[user.id]
+      for (const [token, id] of Object.entries(db.sessions))
+        if (id === user.id) delete db.sessions[token]
+      saveDb()
+    },
+
     async logout() {
       await delay(50, 120)
       const token = getToken()

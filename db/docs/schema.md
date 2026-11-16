@@ -25,6 +25,8 @@ erDiagram
         varchar     role                 "JOUEUR | ADMIN"
         date        dernier_booster      "NULL si jamais ouvert"
         timestamptz cree_le
+        timestamptz supprime_le          "NULL, ou compte supprimé et anonymisé (09)"
+        timestamptz jetons_depuis        "jetons émis avant : refusés (09)"
     }
 
     creature {

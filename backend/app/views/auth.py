@@ -2,9 +2,21 @@
 
 from fastapi import APIRouter, status
 
-from app.controllers import auth
+from starlette.concurrency import run_in_threadpool
+
+from app.controllers import account, auth
 from app.dependencies import CurrentUser, DbSession
-from app.schemas.auth import AuthTokensOut, LoginIn, MeOut, RefreshIn, RegisterIn, UserOut
+from app.schemas.auth import (
+    AccountDeleteIn,
+    AuthTokensOut,
+    LoginIn,
+    MeOut,
+    PasswordChangeIn,
+    RefreshIn,
+    RegisterIn,
+    UserOut,
+)
+from app.views.trades import notify_room
 
 router = APIRouter(tags=["Authentification"])
 
@@ -34,6 +46,23 @@ def logout(_: CurrentUser, data: RefreshIn | None = None):
     Le schéma n'a pas de table de sessions : le jeton de rafraîchissement envoyé n'est pas
     révoqué, il reste valide jusqu'à son expiration.
     """
+
+
+@router.put("/me/password", response_model=AuthTokensOut)
+def change_password(data: PasswordChangeIn, user: CurrentUser, db: DbSession):
+    """Change le mot de passe (l'actuel est demandé). Les autres sessions sont fermées ;
+    celle-ci reçoit de nouveaux jetons."""
+    return account.change_password(db, user, data.current_password, data.new_password)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(data: AccountDeleteIn, user: CurrentUser, db: DbSession):
+    """Supprime son compte (le mot de passe est demandé) : identifiants et collection effacés,
+    échanges en cours abandonnés, historique des autres joueurs anonymisé (« Joueur supprimé »).
+    Un administrateur ne peut le faire que s'il reste un autre administrateur (409 LAST_ADMIN)."""
+    abandoned = await run_in_threadpool(account.delete_account, db, user, data.password)
+    for trade_id in abandoned:
+        await notify_room(trade_id)
 
 
 @router.get("/me", response_model=MeOut)

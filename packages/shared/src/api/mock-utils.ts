@@ -14,6 +14,7 @@ const TITLES: Record<ErrorCode, string> = {
   CARDS_UNAVAILABLE: 'Cartes indisponibles',
   CARDS_NOT_OWNED: 'Cartes non possédées',
   TRADE_WITH_SELF: 'Échange avec soi-même',
+  LAST_ADMIN: 'Dernier administrateur',
   RATE_LIMITED: 'Trop de tentatives',
   INTERNAL_ERROR: 'Erreur interne',
 }
@@ -31,6 +32,7 @@ const STATUS: Record<ErrorCode, number> = {
   CARDS_UNAVAILABLE: 409,
   CARDS_NOT_OWNED: 422,
   TRADE_WITH_SELF: 422,
+  LAST_ADMIN: 409,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
 }

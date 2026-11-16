@@ -13,7 +13,7 @@ from app.schemas.base import PageParams, PageResult
 
 def get_player(db: Session, player_id: uuid.UUID) -> Utilisateur:
     player = db.get(Utilisateur, player_id)
-    if player is None or player.role != Role.JOUEUR:
+    if player is None or player.role != Role.JOUEUR or player.supprime_le is not None:
         raise NotFound("Ce joueur n'existe pas.")
     return player
 
@@ -24,6 +24,7 @@ def search_players(db: Session, me: Utilisateur, search: str, params: PageParams
         select(Utilisateur)
         .where(
             Utilisateur.role == Role.JOUEUR,
+            Utilisateur.supprime_le.is_(None),
             Utilisateur.id != me.id,
             plain(Utilisateur.pseudo).startswith(normalize(search), autoescape=True),
         )

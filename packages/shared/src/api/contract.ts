@@ -4,6 +4,7 @@
  * (en attendant le back) ou l'implémentation HTTP (openapi-fetch) sans les modifier.
  */
 import type {
+  AccountDeleteRequest,
   AdminStats,
   AdminStatsQuery,
   AdminTradesQuery,
@@ -22,6 +23,7 @@ import type {
   ListMyTradesQuery,
   LoginRequest,
   Me,
+  PasswordChangeRequest,
   PlayerPage,
   Rarity,
   RarityDistribution,
@@ -50,6 +52,10 @@ export interface AuthApi {
    * côté serveur. Sans effet si la session a déjà expiré (la requête suivante renverra 401).
    */
   keepAlive(): Promise<void>
+  /** Change le mot de passe ; renvoie les nouveaux jetons de cette session (les autres sont fermées). */
+  changePassword(body: PasswordChangeRequest): Promise<AuthTokens>
+  /** Supprime (anonymise) le compte ; le client oublie ensuite ses jetons. */
+  deleteAccount(body: AccountDeleteRequest): Promise<void>
 }
 
 /**

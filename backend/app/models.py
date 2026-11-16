@@ -66,6 +66,10 @@ class Utilisateur(Base):
     role: Mapped[Role] = mapped_column(_varchar_enum(Role, 10), default=Role.JOUEUR)
     dernier_booster: Mapped[date | None] = mapped_column(Date)
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Compte supprimé (et anonymisé) par son titulaire : plus aucune connexion (évolution 09).
+    supprime_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Les jetons émis avant cette date sont refusés (changement de mot de passe, évolution 09).
+    jetons_depuis: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Creature(Base):

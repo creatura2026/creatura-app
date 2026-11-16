@@ -96,7 +96,10 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           <span class="truncate font-semibold">{{ auth.user?.pseudo }}</span>
           <span class="ml-auto border border-sun px-1.5 text-xs text-sun">ADMIN</span>
         </p>
-        <button type="button" class="btn btn-dark mt-3 w-full" @click="logout">
+        <RouterLink :to="{ name: 'account' }" class="btn btn-dark mt-3 w-full">
+          <PixelIcon name="lock" :size="18" /> Mon compte
+        </RouterLink>
+        <button type="button" class="btn btn-dark mt-2 w-full" @click="logout">
           <PixelIcon name="logout" :size="18" /> Se déconnecter
         </button>
       </div>
