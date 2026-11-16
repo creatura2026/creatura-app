@@ -57,6 +57,8 @@ class AuthTokensOut(ApiModel):
     refresh_token: str
     token_type: Literal["Bearer"] = "Bearer"
     expires_in: int  # durée de validité du jeton d'accès, en secondes
+    # Inactivité au bout de laquelle la session expire, en secondes : le front s'y règle.
+    session_idle_seconds: int
     user: UserOut
 
 

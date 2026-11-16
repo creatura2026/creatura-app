@@ -55,7 +55,8 @@ info:
     - Tirage : rareté selon les poids (`rarityWeights`, réglables), puis créature au hasard ; au plus une rare ou une
       légendaire par booster ; rare garantie au premier booster ; la carte la plus rare est la dernière de `cards`.
       `dropRate` est la probabilité exacte qu'une carte soit de cette rareté, règle d'exclusion comprise.
-    - Pas de rotation ni de révocation des refresh tokens : ils restent valides jusqu'à leur expiration.
+    - Pas de rotation ni de révocation des refresh tokens : ils restent valides jusqu'à leur expiration
+      (1,25 × `sessionIdleSeconds`, renouvelée tant que l'utilisateur agit).
     - Pas encore de limitation des tentatives (`RATE_LIMITED`).
     - La salle d'échange (WebSocket) fonctionne avec plusieurs répliques de l'API : les répliques se préviennent
       par PostgreSQL LISTEN/NOTIFY. Deux actions simultanées des deux joueurs, traitées par deux répliques,
@@ -1140,7 +1141,7 @@ components:
 
     AuthTokens:
       type: object
-      required: [accessToken, refreshToken, tokenType, expiresIn, user]
+      required: [accessToken, refreshToken, tokenType, expiresIn, sessionIdleSeconds, user]
       properties:
         accessToken:
           type: string
@@ -1155,6 +1156,14 @@ components:
           type: integer
           description: Durée de validité du jeton d'accès, en secondes
           examples: [900]
+        sessionIdleSeconds:
+          type: integer
+          description: |
+            Inactivité (sans action de l'utilisateur) au bout de laquelle la session expire, en
+            secondes. Le client avertit 30 s avant puis déconnecte ; il renouvelle les jetons
+            (`POST /auth/refresh`) tant que l'utilisateur agit. Le refresh token ne vit que
+            1,25 × cette durée : une session abandonnée ne peut plus être prolongée.
+          examples: [1200]
         user:
           $ref: '#/components/schemas/User'
 

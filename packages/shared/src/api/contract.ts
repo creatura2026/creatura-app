@@ -45,6 +45,11 @@ export interface AuthApi {
   login(body: LoginRequest): Promise<AuthTokens>
   logout(): Promise<void>
   getMe(): Promise<Me>
+  /**
+   * L'utilisateur agit : les jetons sont renouvelés, ce qui repousse l'expiration de la session
+   * côté serveur. Sans effet si la session a déjà expiré (la requête suivante renverra 401).
+   */
+  keepAlive(): Promise<void>
 }
 
 /**

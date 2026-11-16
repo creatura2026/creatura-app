@@ -585,6 +585,14 @@ export interface components {
              * @example 900
              */
             expiresIn: number;
+            /**
+             * @description Inactivité (sans action de l'utilisateur) au bout de laquelle la session expire, en
+             *     secondes. Le client avertit 30 s avant puis déconnecte ; il renouvelle les jetons
+             *     (`POST /auth/refresh`) tant que l'utilisateur agit. Le refresh token ne vit que
+             *     1,25 × cette durée : une session abandonnée ne peut plus être prolongée.
+             * @example 1200
+             */
+            sessionIdleSeconds: number;
             user: components["schemas"]["User"];
         };
         /** @enum {string} */
