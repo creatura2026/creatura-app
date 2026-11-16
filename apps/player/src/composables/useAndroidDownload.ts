@@ -51,8 +51,12 @@ export const onMobileDevice = () =>
     typeof navigator !== 'undefined' &&
     navigator.maxTouchPoints > 1)
 
-/** L'application tourne déjà dans l'APK (WebView Android) : inutile de proposer de la télécharger. */
-const insideAndroidApp = () => /; wv\)/.test(userAgent())
+/**
+ * L'application tourne déjà dans l'APK : inutile de proposer de la télécharger. L'APK ajoute
+ * « CreaturaAndroid » à l'identifiant du navigateur (apps/mobile) ; « ; wv) » reconnaît toute
+ * WebView Android.
+ */
+const insideAndroidApp = () => /CreaturaAndroid|; wv\)/.test(userAgent())
 
 const isManifest = (value: unknown): value is Manifest =>
   typeof value === 'object' &&

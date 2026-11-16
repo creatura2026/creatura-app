@@ -7,6 +7,7 @@ Monorepo pnpm contenant :
 | `apps/player` | PWA joueur, mobile d'abord (UC-01 à UC-11) |
 | `apps/admin` | Dashboard administrateur Web / Desktop (UC-12 à UC-14) |
 | `apps/desktop` | Application Windows (.exe) : la PWA joueur dans Electron |
+| `apps/mobile` | Application Android (.apk) : la PWA joueur dans Capacitor |
 | `packages/shared` | Thème (couleurs et typographies du document de vision), composants, types générés depuis `creatura-api.openapi.yaml`, catalogue fictif |
 
 ## Démarrer
@@ -31,6 +32,19 @@ pnpm desktop:demo   # exe avec l'API simulée, aucun serveur nécessaire
 Les exe arrivent dans `apps/desktop/release/`, avec un `latest.json` : une fois publiés dans
 `telechargements/` du bucket du front, la page d'accueil propose de télécharger cette version.
 Version, publication, adresse du backend et dépannage : [apps/desktop/README.md](apps/desktop/README.md).
+
+## Application Android (.apk)
+
+Prérequis : Java 21 et le SDK Android (Android Studio).
+
+```sh
+cp apps/mobile/config.example.json apps/mobile/config.json     # domaine du site, déjà rempli
+pnpm mobile         # APK qui ouvre le site en ligne
+pnpm mobile:demo    # APK avec l'API simulée, aucun serveur nécessaire
+```
+
+L'APK arrive dans `apps/mobile/release/`, avec un `android.json` lu par la page d'accueil, ouverte
+sur un téléphone. Signature, CI et dépannage : [apps/mobile/README.md](apps/mobile/README.md).
 
 ## API simulée (pas encore de back)
 

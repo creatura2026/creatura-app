@@ -89,4 +89,11 @@ describe('useAndroidDownload', () => {
     expect(await probeOffered()).toBe(false)
     expect(fetch).not.toHaveBeenCalled()
   })
+
+  it("reconnaît l'application Android à la marque qu'elle ajoute au navigateur", async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36 CreaturaAndroid',
+    )
+    expect(await probeOffered()).toBe(false)
+  })
 })

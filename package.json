@@ -9,6 +9,8 @@
     "build": "pnpm -r run build",
     "desktop": "pnpm --filter desktop dist",
     "desktop:demo": "pnpm --filter desktop dist:demo",
+    "mobile": "pnpm --filter mobile dist",
+    "mobile:demo": "pnpm --filter mobile dist:demo",
     "lint": "pnpm -r run lint",
     "format": "pnpm -r run format"
   }
