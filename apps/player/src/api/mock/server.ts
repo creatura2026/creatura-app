@@ -163,9 +163,13 @@ export function createMockPlayerApi({
         refreshToken: `refresh.${uuid()}`,
         tokenType: 'Bearer',
         expiresIn: 900,
+        sessionIdleSeconds: 1200,
         user: toUser(user),
       }
     },
+
+    // Mode simulé : les jetons n'expirent pas, rien à renouveler.
+    async keepAlive() {},
 
     async logout() {
       await delay(50, 120)

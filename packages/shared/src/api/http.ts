@@ -133,6 +133,7 @@ export function createHttpClient(session: SessionStore, baseUrl: string = API_BA
       request<T>('POST', path, { body, auth }),
     put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
     del: <T>(path: string) => request<T>('DELETE', path, {}),
+    refresh: refreshTokens,
     session,
   }
 }
@@ -273,6 +274,9 @@ function authApi(http: HttpClient): AuthApi {
       await http.post('/auth/logout', refreshToken ? { refreshToken } : undefined).catch(() => {})
     },
     getMe: () => http.get('/me'),
+    async keepAlive() {
+      await http.refresh()
+    },
   }
 }
 

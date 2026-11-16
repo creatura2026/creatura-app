@@ -35,7 +35,11 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const formError = ref<string | null>(
-  route.query.expired ? 'Votre session a expiré, reconnectez-vous.' : null,
+  route.query.expired === 'idle'
+    ? `Vous avez été déconnecté après ${route.query.minutes ?? '20'} min sans activité. Reconnectez-vous.`
+    : route.query.expired
+      ? 'Votre session a expiré, reconnectez-vous.'
+      : null,
 )
 
 const onSubmit = handleSubmit(async (values) => {

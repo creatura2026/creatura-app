@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,7 +31,11 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-secret-change-me-in-production-please-0123456789"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 15
-    refresh_token_days: int = 7
+    # Expiration des sessions : sans action de l'utilisateur pendant ce temps, il est déconnecté.
+    # Le front l'applique à la seconde (avertissement 30 s avant) ; côté serveur, le jeton de
+    # rafraîchissement ne vit que cette durée plus une marge (security.py), renouvelé tant que
+    # l'utilisateur est actif.
+    session_idle_minutes: float = Field(default=20, gt=0)
 
     # Le nombre de cartes par booster est un réglage en base (table reglage), modifiable par l'admin.
     # Fuseau qui définit le « jour » du booster (calculé par Postgres, RDS étant en UTC).

@@ -263,6 +263,7 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
         refreshToken: `refresh.${account.id}`,
         tokenType: 'Bearer',
         expiresIn: 900,
+        sessionIdleSeconds: 1200,
         user: toUser(account),
       }
     },
@@ -271,6 +272,9 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
       const token = getToken()
       if (token) sessions.delete(token)
     },
+
+    // Mode simulé : les jetons n'expirent pas, rien à renouveler.
+    async keepAlive() {},
 
     async getMe() {
       await delay(80, 160)
@@ -474,5 +478,8 @@ function mockCreatures(): AdminCreature[] {
     availableFrom: '2026-01-01',
     scheduledChange: null,
   }))
-  return [...base, ...addedCreatures].map((c) => ({ ...c, scheduledChange: rarityChanges.get(c.id) ?? null }))
+  return [...base, ...addedCreatures].map((c) => ({
+    ...c,
+    scheduledChange: rarityChanges.get(c.id) ?? null,
+  }))
 }

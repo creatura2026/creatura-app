@@ -276,8 +276,15 @@ de `creatura-api.openapi.yaml`) :
   c'est un minimum, exact pour aujourd'hui. `/admin/rarity-distribution` compte les cartes
   sorties du stock depuis le lancement, quelle que soit la période.
 - **Pas de table de sessions** : `POST /auth/logout` répond 204 et le client oublie ses jetons,
-  mais ils restent valides jusqu'à expiration (15 min pour l'accès, 7 jours pour le
-  rafraîchissement) ; `POST /auth/refresh` ne fait pas de rotation.
+  mais ils restent valides jusqu'à expiration ; `POST /auth/refresh` ne révoque pas l'ancien jeton.
+- **Expiration des sessions** (`SESSION_IDLE_MINUTES`, 20 par défaut) : sans action de
+  l'utilisateur (clic, touche, défilement, retour sur l'onglet) pendant ce temps, il est
+  déconnecté. Le front l'applique à la seconde, tous onglets confondus, avec un avertissement
+  30 s avant ; les rechargements automatiques et la salle d'échange ouverte ne comptent pas
+  comme activité. Côté serveur : le jeton d'accès vit au plus cette durée (15 min sinon) et le
+  jeton de rafraîchissement 1,25 × cette durée, renouvelé par le front tant que l'utilisateur
+  agit : une session abandonnée ne peut plus être prolongée. La valeur est envoyée au front à
+  la connexion (`sessionIdleSeconds`) : la changer ne demande que de redémarrer le back.
 - **Pas de limitation des tentatives** (`RATE_LIMITED`, 429) sur la connexion.
 - **Salle d'échange sur plusieurs répliques** : chaque processus tient ses connexions WebSocket
   en mémoire, et les processus se préviennent par PostgreSQL LISTEN/NOTIFY (`app/bus.py`, canal

@@ -4,20 +4,28 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.controllers import booster, collection
 from app.dependencies import user_from_token
 from app.errors import Unauthorized, field_error, from_integrity_error
 from app.models import Role, Utilisateur
 from app.schemas.auth import AuthTokensOut, MeOut, RegisterIn, UserOut
-from app.security import ACCESS, REFRESH, create_token, hash_password, verify_password
+from app.security import (
+    ACCESS,
+    REFRESH,
+    access_lifetime,
+    create_token,
+    hash_password,
+    session_idle,
+    verify_password,
+)
 
 
 def _tokens(user: Utilisateur) -> AuthTokensOut:
     return AuthTokensOut(
         access_token=create_token(user, ACCESS),
         refresh_token=create_token(user, REFRESH),
-        expires_in=get_settings().access_token_minutes * 60,
+        expires_in=int(access_lifetime().total_seconds()),
+        session_idle_seconds=int(session_idle().total_seconds()),
         user=UserOut.of(user),
     )
 

@@ -109,6 +109,7 @@ describe('API HTTP du joueur', () => {
         refreshToken: 'refresh-2',
         tokenType: 'Bearer',
         expiresIn: 900,
+        sessionIdleSeconds: 1200,
         user: USER,
       }),
       json(200, { ...USER, progress: {}, boosterAvailableToday: true }),
