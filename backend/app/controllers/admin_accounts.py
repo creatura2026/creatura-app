@@ -5,6 +5,7 @@ suppression d'un joueur) sont dans les fonctions SQL de db/init/10_evolution_jou
 Leurs refus portent un nom de contrainte, traduit en erreur d'API par app.errors.
 """
 
+import secrets
 import uuid
 from datetime import date
 
@@ -29,6 +30,7 @@ from app.models import (
 )
 from app.schemas.admin import DailyCount, Period
 from app.schemas.admin_accounts import (
+    AdminAccountCreatedOut,
     AdminAccountIn,
     AdminAccountOut,
     AdminPlayerDetailOut,
@@ -267,8 +269,20 @@ def _admin_out(db: Session, admin_id: uuid.UUID) -> AdminAccountOut:
     return next(a for a in list_admins(db) if a.id == admin_id)
 
 
-def create_admin(db: Session, creator: Utilisateur, data: AdminAccountIn) -> AdminAccountOut:
-    """Nouvel admin, avec un mot de passe provisoire qu'il remplacera à sa première connexion."""
+# Mot de passe provisoire : 16 caractères en 4 groupes (« k7mq-x2vd-9tfp-a4ne »), sans les
+# caractères qui se confondent à la lecture (l, 1, i, o, 0). Environ 79 bits de hasard.
+TEMP_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+
+
+def generate_temporary_password() -> str:
+    return "-".join("".join(secrets.choice(TEMP_PASSWORD_ALPHABET) for _ in range(4)) for _ in range(4))
+
+
+def create_admin(db: Session, creator: Utilisateur, data: AdminAccountIn) -> AdminAccountCreatedOut:
+    """Nouvel admin, avec un mot de passe provisoire généré ici, renvoyé une seule fois.
+
+    Seul son hash est stocké ; le nouvel admin le remplace à sa première connexion.
+    """
     if db.scalar(select(Utilisateur.id).where(Utilisateur.identifiant == data.login)):
         raise field_error("LOGIN_ALREADY_USED", "login", "Cet identifiant est déjà utilisé.")
     if db.scalar(select(Utilisateur.id).where(func.lower(Utilisateur.pseudo) == data.pseudo.lower())):
@@ -276,14 +290,16 @@ def create_admin(db: Session, creator: Utilisateur, data: AdminAccountIn) -> Adm
     admin = Utilisateur(
         pseudo=data.pseudo,
         identifiant=data.login,
-        mot_de_passe_hash=hash_password(data.temporary_password),
+        mot_de_passe_hash=hash_password(temporary_password := generate_temporary_password()),
         role=Role.ADMIN,
         cree_par=creator.id,
         mot_de_passe_provisoire=True,
     )
     db.add(admin)
     db.commit()  # création simultanée : uq_utilisateur_*, traduit par app.errors
-    return _admin_out(db, admin.id)
+    return AdminAccountCreatedOut(
+        **_admin_out(db, admin.id).model_dump(by_alias=False), temporary_password=temporary_password
+    )
 
 
 def deactivate_admin(db: Session, admin: Utilisateur, target_id: uuid.UUID) -> AdminAccountOut:

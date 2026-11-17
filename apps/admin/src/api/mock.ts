@@ -290,6 +290,14 @@ function months(from: string, to: string): string[] {
 
 const REQUEST_DAYS = 7
 
+/** Comme le serveur : 4 groupes de 4 caractères, sans l, 1, i, o, 0 (« k7mq-x2vd-9tfp-a4ne »). */
+const TEMP_PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
+function generateTemporaryPassword(): string {
+  const bytes = crypto.getRandomValues(new Uint32Array(16))
+  const chars = Array.from(bytes, (n) => TEMP_PASSWORD_ALPHABET[n % TEMP_PASSWORD_ALPHABET.length])
+  return [0, 4, 8, 12].map((i) => chars.slice(i, i + 4).join('')).join('-')
+}
+
 export function createMockAdminApi(getToken: () => string | null): AdminApi {
   const sessions = new Map<string, MockAccount>()
   // Comptes, joueurs supprimés et demandes : propres à chaque instance (perdus au rechargement).
@@ -879,11 +887,12 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
         const message = 'Ce pseudonyme est déjà pris.'
         throw problem('PSEUDO_ALREADY_USED', message, { errors: [{ field: 'pseudo', message }] })
       }
+      const temporaryPassword = generateTemporaryPassword()
       const account: MockAccount = {
         id: uuid(),
         pseudo: body.pseudo,
         login: body.login,
-        password: body.temporaryPassword,
+        password: temporaryPassword,
         role: 'ADMIN',
         createdAt: new Date().toISOString(),
         mustChangePassword: true,
@@ -892,7 +901,7 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
         deactivatedBy: null,
       }
       accounts.push(account)
-      return clone(toAdminAccount(account))
+      return clone({ ...toAdminAccount(account), temporaryPassword })
     },
 
     async deactivateAdmin(adminId) {

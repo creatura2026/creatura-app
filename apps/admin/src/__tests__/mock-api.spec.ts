@@ -155,21 +155,19 @@ describe('Réglage des boosters (simulé)', () => {
     let token: string | null = null
     const api = createMockAdminApi(() => token)
     token = (await api.login(DEMO_ACCOUNTS.admin)).accessToken
-    const created = await api.createAdmin({
-      pseudo: 'Lou',
-      login: 'lou',
-      temporaryPassword: 'provisoire-1234',
-    })
+    const created = await api.createAdmin({ pseudo: 'Lou', login: 'lou' })
     expect(created.mustChangePassword).toBe(true)
+    // Mot de passe provisoire généré, au format « k7mq-x2vd-9tfp-a4ne »
+    expect(created.temporaryPassword).toMatch(/^[a-z2-9]{4}(-[a-z2-9]{4}){3}$/)
 
-    const tokens = await api.login({ login: 'lou', password: 'provisoire-1234' })
+    const tokens = await api.login({ login: 'lou', password: created.temporaryPassword })
     token = tokens.accessToken
     expect(tokens.user.mustChangePassword).toBe(true)
     await expect(api.getAdminStats()).rejects.toSatisfy((e) =>
       isApiError(e, 'PASSWORD_CHANGE_REQUIRED'),
     )
     await api.changePassword({
-      currentPassword: 'provisoire-1234',
+      currentPassword: created.temporaryPassword,
       newPassword: 'nouveau-mot-de-passe',
     })
     await expect(api.getAdminStats()).resolves.toBeTruthy()
