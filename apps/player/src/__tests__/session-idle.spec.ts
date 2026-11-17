@@ -8,8 +8,8 @@ const IDLE = 120 // 2 minutes, comme le test en conditions réelles
 function setup(active = true) {
   const scope = effectScope()
   const signedIn = ref(active)
-  const keepAlive = vi.fn(() => Promise.resolve())
-  const onExpire = vi.fn()
+  const keepAlive = vi.fn<() => Promise<void>>(() => Promise.resolve())
+  const onExpire = vi.fn<() => void>()
   const idle = scope.run(() =>
     useSessionIdle({
       storageKey: KEY,

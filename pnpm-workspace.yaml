@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Tests de bout en bout (Playwright), voir docs/tests/README.md
+  - "e2e"
 allowBuilds:
   vue-demi: true
   # Télécharge le binaire Electron (application de bureau, apps/desktop)

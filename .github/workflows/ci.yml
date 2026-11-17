@@ -2,7 +2,8 @@
 # CREATURA - Intégration continue du repo app
 #
 #   1. Vérifier  : tests de la base (SQL), du back (pytest sur PostgreSQL),
-#                  du front (types, tests unitaires, build)
+#                  du front (lint, types, tests unitaires, build),
+#                  de bout en bout (Playwright sur l'API simulée)
 #   2. Construire: une image Docker par composant
 #   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
 #   4. Windows   : l'exe de l'application (apps/desktop) en artefact, hors PR ;
@@ -168,6 +169,13 @@ jobs:
       - name: Installer les dépendances
         run: pnpm install --frozen-lockfile
 
+      # Les scripts lint corrigent ce qui peut l'être (--fix) : une correction non commitée
+      # apparaît dans git diff et fait échouer l'étape, comme une erreur non corrigeable.
+      - name: Lint
+        run: |
+          pnpm -r run lint
+          git diff --exit-code
+
       - name: Vérification des types et build déployable
         env:
           VITE_API_BASE_URL: /api/v1
@@ -201,6 +209,68 @@ jobs:
           name: frontend-dist-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-frontend/frontend.tar.gz
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Tests de bout en bout (e2e/) : site joueur et dashboard admin sur l'API
+  # simulée, dans Chromium. Stratégie et scénarios : docs/tests/README.md
+  # ---------------------------------------------------------------------------
+  e2e-mock:
+    name: E2E (API simulée)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Vérification des types des tests
+        run: pnpm --filter e2e run type-check
+
+      - name: Version de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter e2e exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache des navigateurs
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+
+      - name: Installer Chromium
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      - name: Dépendances système de Chromium
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter e2e exec playwright install-deps chromium
+
+      - name: Tests
+        run: pnpm --filter e2e run test:mock
+
+      - name: Publier le rapport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-mock-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report/
+            e2e/reports/
+            e2e/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
   # Application Windows (apps/desktop) : exe en artefact, et Release GitHub sur
@@ -448,13 +518,14 @@ jobs:
   # ---------------------------------------------------------------------------
   images:
     name: Image ${{ matrix.image.name }}
-    needs: [detect, db, backend, frontend]
+    needs: [detect, db, backend, frontend, e2e-mock]
     # Le front peut être absent (job ignoré) ; tout le reste doit avoir réussi.
     if: >-
       ${{ !cancelled()
       && needs.db.result == 'success'
       && needs.backend.result == 'success'
-      && contains(fromJSON('["success", "skipped"]'), needs.frontend.result) }}
+      && contains(fromJSON('["success", "skipped"]'), needs.frontend.result)
+      && contains(fromJSON('["success", "skipped"]'), needs['e2e-mock'].result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
