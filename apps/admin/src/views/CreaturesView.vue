@@ -56,23 +56,65 @@ const blank = () => ({
 })
 const form = reactive(blank())
 const formErrors = ref<Record<string, string>>({})
+const newFile = ref<File | null>(null)
+const newFileInput = ref<HTMLInputElement | null>(null)
+
+/** Nom de carte → clé de fichier : minuscules, accents retirés, snake_case. « Léo Brume » → leo_brume */
+function slugify(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+const spriteKey = computed(() => slugify(form.name))
+
+function onNewFile(event: Event) {
+  newFile.value = (event.target as HTMLInputElement).files?.[0] ?? null
+}
 
 async function addCard() {
   formErrors.value = {}
+  const file = newFile.value
+  const key = spriteKey.value
+  if (!file) {
+    formErrors.value = { file: 'Choisissez une image PNG pour la carte.' }
+    return
+  }
+  if (!key) {
+    formErrors.value = { name: 'Le nom doit contenir des lettres ou des chiffres.' }
+    return
+  }
   try {
     const card = await create.mutateAsync({
       ...form,
-      image: 'sprites/placeholder.png',
+      image: `sprites/${key}.png`,
       stock: form.rarity === 'LEGENDARY' ? form.stock : null,
     })
-    toast(`${card.name} sera disponible le ${formatDate(card.availableFrom)}, à minuit. Ajoutez le sprite ci-dessous.`, 'success')
-    Object.assign(form, blank())
+    // La carte existe : on y attache le sprite (clé dérivée du nom). Un échec ici n'annule pas
+    // la carte (le back n'a pas de suppression) : on le signale et le sprite reste à reprendre.
+    try {
+      await uploadSprite.mutateAsync({ id: card.id, file, filename: key })
+    } catch (e) {
+      toast(`${card.name} créée, mais l'image a échoué : ${errorMessage(e)} Reprenez le sprite dans la liste.`, 'error')
+      resetForm()
+      return
+    }
+    toast(`${card.name} sera disponible le ${formatDate(card.availableFrom)}, à minuit.`, 'success')
+    resetForm()
   } catch (e) {
     const fields = (e as { problem?: { errors?: { field: string; message: string }[] } }).problem
       ?.errors
     formErrors.value = Object.fromEntries((fields ?? []).map((f) => [f.field, f.message]))
     toast(errorMessage(e), 'error')
   }
+}
+
+function resetForm() {
+  Object.assign(form, blank())
+  newFile.value = null
+  if (newFileInput.value) newFileInput.value.value = ''
 }
 
 // ── Upload de sprite ──────────────────────────────────────────────────────
@@ -137,8 +179,8 @@ async function cancelChange(c: AdminCreature) {
     <form class="card-pixel bg-butter p-5 sm:p-6" @submit.prevent="addCard">
       <h2 class="font-sans text-lg font-bold">Ajouter une carte</h2>
       <p class="mt-1 text-sm">
-        Visible et tirable à partir du prochain minuit (heure de Paris). Ajoutez le sprite depuis la
-        liste des cartes après la création.
+        Visible et tirable à partir du prochain minuit (heure de Paris). L'image PNG est publiée
+        sur le CDN sous une clé dérivée du nom.
       </p>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label class="text-sm font-semibold">
@@ -170,15 +212,34 @@ async function cancelChange(c: AdminCreature) {
           />
           <span v-if="formErrors.stock" class="text-xs text-brick">{{ formErrors.stock }}</span>
         </label>
+        <label class="text-sm font-semibold">
+          Image (PNG)
+          <input
+            ref="newFileInput"
+            type="file"
+            accept="image/png"
+            required
+            class="field"
+            @change="onNewFile"
+          />
+          <span v-if="spriteKey" class="text-xs font-normal">
+            Clé sur le CDN : <code>sprites/{{ spriteKey }}.png</code>
+          </span>
+          <span v-if="formErrors.file" class="text-xs text-brick">{{ formErrors.file }}</span>
+        </label>
         <label class="text-sm font-semibold sm:col-span-2 lg:col-span-3">
           Description
           <textarea v-model="form.description" maxlength="500" rows="2" class="field" />
         </label>
       </div>
       <div class="mt-4 flex justify-end">
-        <button type="submit" class="btn btn-primary bg-white" :disabled="create.isPending.value">
+        <button
+          type="submit"
+          class="btn btn-primary bg-white"
+          :disabled="create.isPending.value || uploadSprite.isPending.value"
+        >
           <PixelIcon name="check" :size="18" />
-          {{ create.isPending.value ? 'Ajout…' : 'Ajouter au prochain minuit' }}
+          {{ create.isPending.value || uploadSprite.isPending.value ? 'Ajout…' : 'Ajouter au prochain minuit' }}
         </button>
       </div>
     </form>

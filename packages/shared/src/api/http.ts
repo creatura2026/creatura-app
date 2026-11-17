@@ -344,9 +344,9 @@ export function createHttpAdminApi(session: SessionStore): AdminApi {
     createAdminCreature: (body) => http.post('/admin/creatures', body),
     scheduleRarityChange: (creatureId, body) => http.put(`/admin/creatures/${id(creatureId)}/rarity`, body),
     cancelRarityChange: (creatureId) => http.del(`/admin/creatures/${id(creatureId)}/rarity`),
-    uploadSprite: (creatureId, file) => {
+    uploadSprite: (creatureId, file, filename) => {
       const form = new FormData()
-      form.append('file', file, file.name)
+      form.append('file', file, filename ? `${filename}.png` : file.name)
       return http.putForm(`/admin/creatures/${id(creatureId)}/sprite`, form)
     },
   }

@@ -89,7 +89,8 @@ export function useCancelRarityChange() {
 export function useUploadSprite() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, file }: { id: string; file: File }) => api.uploadSprite(id, file),
+    mutationFn: ({ id, file, filename }: { id: string; file: File; filename?: string }) =>
+      api.uploadSprite(id, file, filename),
     onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
   })
 }

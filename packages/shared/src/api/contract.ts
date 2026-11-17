@@ -98,6 +98,10 @@ export interface AdminApi extends AuthApi {
   /** Nouvelle rareté d'une carte, appliquée au prochain minuit. */
   scheduleRarityChange(creatureId: string, body: RarityChangeInput): Promise<AdminCreature>
   cancelRarityChange(creatureId: string): Promise<AdminCreature>
-  /** Upload un sprite PNG pour une carte et met à jour creature.image. */
-  uploadSprite(creatureId: string, file: File): Promise<AdminCreature>
+  /**
+   * Upload un sprite PNG pour une carte et met à jour creature.image.
+   * `filename` (sans extension) impose la clé S3 `sprites/<filename>.png` ; sans lui, le nom
+   * du fichier choisi est utilisé. Doit être en snake_case minuscules (validé côté serveur).
+   */
+  uploadSprite(creatureId: string, file: File, filename?: string): Promise<AdminCreature>
 }

@@ -463,14 +463,15 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
       return clone(creature)
     },
 
-    async uploadSprite(creatureId, file) {
+    async uploadSprite(creatureId, file, filename) {
       await delay()
       admin()
       const creature = mockCreatures().find((c) => c.id === creatureId)
       if (!creature) throw problem('NOT_FOUND', "Cette créature n'existe pas.")
-      if (!file.name.match(/^[a-z0-9_-]+\.png$/))
+      const name = filename ? `${filename}.png` : file.name
+      if (!name.match(/^[a-z0-9_-]+\.png$/))
         throw problem('VALIDATION_ERROR', "Le nom de fichier doit être en snake_case minuscules, extension .png.")
-      const updated = { ...creature, image: `sprites/${file.name}`, imageUrl: URL.createObjectURL(file) }
+      const updated = { ...creature, image: `sprites/${name}`, imageUrl: URL.createObjectURL(file) }
       const idx = addedCreatures.findIndex((c) => c.id === creatureId)
       if (idx >= 0) addedCreatures[idx] = updated
       return clone(updated)
