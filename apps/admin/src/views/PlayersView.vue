@@ -82,14 +82,25 @@ function onCreated() {
 }
 
 const toValidate = useRequestsToValidate()
+
+/** Rafraîchit la liste des joueurs et les demandes de suppression à la demande (bouton). */
+function refreshAll() {
+  refetch()
+  toValidate.refetch()
+  history.refetch()
+}
 const historyPage = ref(1)
 const history = useDeletionRequests(computed(() => ({ page: historyPage.value, pageSize: 10 })))
 </script>
 
 <template>
   <section>
-    <PageHeader eyebrow="AS-71 · Suivi des joueurs" title="Joueurs">
+    <PageHeader eyebrow="Suivi des joueurs" title="Joueurs">
       <template #actions>
+        <button type="button" class="btn btn-secondary" :disabled="isFetching" @click="refreshAll">
+          <PixelIcon name="refresh" :size="16" />
+          {{ isFetching ? 'Actualisation…' : 'Rafraîchir' }}
+        </button>
         <button
           type="button"
           class="btn btn-primary"

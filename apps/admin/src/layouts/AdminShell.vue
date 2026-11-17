@@ -9,14 +9,14 @@ import { USE_MOCK_API } from '@/api'
 import { useRequestsToValidate } from '@/api/queries'
 import { useAuthStore } from '@/stores/auth'
 
-const NAV: { name: string; label: string; uc: string; icon: IconName }[] = [
-  { name: 'dashboard', label: 'Statistiques', uc: 'UC-12', icon: 'chart' },
-  { name: 'trades', label: 'Échanges', uc: 'UC-13', icon: 'trade' },
-  { name: 'rarities', label: 'Raretés', uc: 'UC-14', icon: 'gem' },
-  { name: 'creatures', label: 'Cartes', uc: '', icon: 'collection' },
-  { name: 'settings', label: 'Réglages booster', uc: '', icon: 'booster' },
-  { name: 'players', label: 'Joueurs', uc: '', icon: 'user' },
-  { name: 'admins', label: 'Administrateurs', uc: '', icon: 'lock' },
+const NAV: { name: string; label: string; icon: IconName }[] = [
+  { name: 'dashboard', label: 'Statistiques', icon: 'chart' },
+  { name: 'trades', label: 'Échanges', icon: 'trade' },
+  { name: 'rarities', label: 'Raretés', icon: 'gem' },
+  { name: 'creatures', label: 'Cartes', icon: 'collection' },
+  { name: 'settings', label: 'Réglages booster', icon: 'booster' },
+  { name: 'players', label: 'Joueurs', icon: 'user' },
+  { name: 'admins', label: 'Administrateurs', icon: 'lock' },
 ]
 
 const auth = useAuthStore()
@@ -99,7 +99,6 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           >
             {{ toValidate.data.value.totalItems }}
           </span>
-          <span v-else class="text-xs opacity-70">{{ item.uc }}</span>
         </RouterLink>
 
         <div class="my-2 border-t border-cream/20" />

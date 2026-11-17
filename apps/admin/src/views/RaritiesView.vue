@@ -32,7 +32,7 @@ const maxGap = computed(() =>
 
 <template>
   <section>
-    <PageHeader eyebrow="UC-14 · Analyser les raretés" title="Distribution des raretés" />
+    <PageHeader eyebrow="Analyser les raretés" title="Distribution des raretés" />
     <PeriodPicker />
 
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">

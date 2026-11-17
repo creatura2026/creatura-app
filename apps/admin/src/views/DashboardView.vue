@@ -36,7 +36,7 @@ const boosterAvg = computed(() =>
 
 <template>
   <section>
-    <PageHeader eyebrow="UC-12 · Statistiques" title="Piloter Créatura" />
+    <PageHeader eyebrow="Statistiques" title="Piloter Créatura" />
     <PeriodPicker />
 
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
