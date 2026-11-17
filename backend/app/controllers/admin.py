@@ -24,7 +24,7 @@ from app.controllers.catalog import CATALOG_ORDER, parse_creature_id, paginate, 
 from app.controllers.planning import next_midnight_day
 from app.errors import BadRequest, NotFound, field_error
 from app.models import BoosterCarte, Creature, Echange, Rarete, RareteTirage, Reglage, Role, Statut, Utilisateur
-from app.schemas.admin import AdminCreatureIn, RarityChangeIn
+from app.schemas.admin import AdminCreatureIn, AdminCreatureUpdateIn, RarityChangeIn
 from app.schemas.admin import (
     AdminStatsOut,
     CompletedTrades,
@@ -226,6 +226,24 @@ def create_creature(db: Session, data: AdminCreatureIn) -> Creature:
     )
     db.add(creature)
     db.commit()  # nom déjà pris : uq_creature_nom, traduit en erreur de champ (app.errors)
+    db.refresh(creature)
+    return creature
+
+
+def update_creature(db: Session, creature_id: str, data: AdminCreatureUpdateIn) -> Creature:
+    """Met à jour le nom, la description et/ou la famille d'une carte (immédiat).
+
+    Seuls les champs fournis changent. Le nom déjà pris est refusé (uq_creature_nom).
+    """
+    creature = get_creature(db, creature_id)
+    provided = data.model_fields_set
+    if "name" in provided and data.name is not None:
+        creature.nom = data.name.strip()
+    if "description" in provided:
+        creature.description = (data.description or "").strip() or None
+    if "family" in provided and data.family is not None:
+        creature.famille = data.family
+    db.commit()  # nom déjà pris : uq_creature_nom (app.main : gestionnaire IntegrityError)
     db.refresh(creature)
     return creature
 

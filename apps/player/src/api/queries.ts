@@ -3,8 +3,10 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import type {
   CollectionQuery,
+  CreateGiftRequest,
   CreateTradeRequest,
   ListCreaturesQuery,
+  ListMyGiftsQuery,
   ListMyTradesQuery,
 } from '@creatura/shared/api/types'
 
@@ -23,6 +25,7 @@ export const keys = {
   owners: (creatureId: string) => ['owners', creatureId] as const,
   trades: (q: ListMyTradesQuery) => ['trades', q] as const,
   trade: (id: string) => ['trade', id] as const,
+  gifts: (q: ListMyGiftsQuery) => ['gifts', q] as const,
 }
 
 export function useMe() {
@@ -159,5 +162,44 @@ export function useLeaveTrade() {
         client.invalidateQueries({ queryKey: ['trades'] }),
         client.invalidateQueries({ queryKey: keys.trade(id) }),
       ]),
+  })
+}
+
+
+// ── Dons de carte ────────────────────────────────────────────────────────────
+
+export function useMyGifts(query: MaybeRefOrGetter<ListMyGiftsQuery>) {
+  return useQuery({
+    queryKey: computed(() => keys.gifts(toValue(query))),
+    queryFn: () => api.listMyGifts(toValue(query)),
+  })
+}
+
+/** Dons reçus en attente : badge et liste à décider. */
+export function useReceivedGifts() {
+  return useMyGifts({ role: 'received', status: 'PENDING', pageSize: 100 })
+}
+
+export function useCreateGift() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateGiftRequest) => api.createGift(body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['gifts'] }),
+  })
+}
+
+/** Accepter / refuser / annuler un don ; l'acceptation déplace des cartes. */
+export function useDecideGift() {
+  const client = useQueryClient()
+  const invalidate = useInvalidateCollection()
+  return useMutation({
+    mutationFn: ({ id, decision }: { id: string; decision: 'accept' | 'refuse' | 'cancel' }) =>
+      decision === 'accept'
+        ? api.acceptGift(id)
+        : decision === 'refuse'
+          ? api.refuseGift(id)
+          : api.cancelGift(id),
+    onSettled: () =>
+      Promise.all([client.invalidateQueries({ queryKey: ['gifts'] }), invalidate()]),
   })
 }

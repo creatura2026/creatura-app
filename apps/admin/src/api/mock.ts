@@ -642,6 +642,29 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
       return clone(created)
     },
 
+    async updateCreature(creatureId, body) {
+      await delay()
+      admin()
+      const creature = mockCreatures().find((c) => c.id === creatureId)
+      if (!creature) throw problem('NOT_FOUND', "Cette créature n'existe pas.")
+      if (
+        body.name !== undefined &&
+        mockCreatures().some((c) => c.id !== creatureId && normalize(c.name) === normalize(body.name!))
+      ) {
+        const message = 'Une carte porte déjà ce nom.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'name', message }] })
+      }
+      const edit = { ...creatureEdits.get(creatureId) }
+      if (body.name !== undefined) edit.name = body.name.trim()
+      if (body.description !== undefined) edit.description = body.description ?? ''
+      if (body.family !== undefined) {
+        const family = FAMILIES.find((f) => f.code === body.family)
+        if (family) edit.family = family
+      }
+      creatureEdits.set(creatureId, edit)
+      return clone(mockCreatures().find((c) => c.id === creatureId)!)
+    },
+
     async scheduleRarityChange(creatureId, body) {
       await delay()
       admin()
@@ -901,6 +924,8 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
 // Cartes ajoutées et changements de rareté de la démo : en mémoire, perdus au rechargement.
 const addedCreatures: AdminCreature[] = []
 const rarityChanges = new Map<string, NonNullable<AdminCreature['scheduledChange']>>()
+// Modifications immédiates d'une carte (nom, description, famille) par l'admin.
+const creatureEdits = new Map<string, Partial<Pick<AdminCreature, 'name' | 'description' | 'family'>>>()
 
 function mockCreatures(): AdminCreature[] {
   const base: AdminCreature[] = CREATURES.map((c) => ({
@@ -913,6 +938,7 @@ function mockCreatures(): AdminCreature[] {
   }))
   return [...base, ...addedCreatures].map((c) => ({
     ...c,
+    ...creatureEdits.get(c.id),
     scheduledChange: rarityChanges.get(c.id) ?? null,
   }))
 }

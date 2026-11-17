@@ -8,6 +8,7 @@ import type {
   Role,
   Trade,
   TradeMessage,
+  Gift,
 } from '@creatura/shared/api/types'
 import { problem } from '@creatura/shared/api/mock-utils'
 import { CREATURES } from '@creatura/shared/fixtures/catalog'
@@ -32,6 +33,8 @@ export interface MockDb {
   collections: Record<string, Record<string, number>>
   boosters: MockBooster[]
   trades: Trade[]
+  /** dons de carte, du plus ancien au plus récent */
+  gifts: Gift[]
   /** tradeId → discussion de l'échange, du plus ancien message au plus récent */
   messages: Record<string, TradeMessage[]>
   /** jeton → userId */
@@ -40,7 +43,7 @@ export interface MockDb {
 
 const STORAGE_KEY = 'creatura.mock-db'
 /** À incrémenter quand la forme des données change : les données de démonstration repartent de zéro. */
-const VERSION = 2
+const VERSION = 3
 
 export const DEMO_PASSWORD = 'creatura-demo'
 
@@ -232,6 +235,7 @@ function seed(): MockDb {
       ],
     },
     sessions: {},
+    gifts: [],
   }
 }
 

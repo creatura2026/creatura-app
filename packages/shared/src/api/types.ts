@@ -141,3 +141,43 @@ export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return 'Une erreur inattendue est survenue.'
 }
+
+// ── Dons de carte (contrat « Gift ») ─────────────────────────────────────────
+// Types écrits à la main en attendant la régénération du contrat (openapi-typescript).
+export type GiftStatus = TradeStatus // mêmes états que l'échange
+export type GiftRole = 'all' | 'sent' | 'received'
+
+export interface Gift {
+  id: string
+  status: GiftStatus
+  giver: PlayerSummary
+  recipient: PlayerSummary
+  creature: CreatureSummary
+  quantity: number
+  createdAt: string
+  decidedAt: string | null
+  failureReason?: string | null
+}
+
+export type GiftPage = PageMeta & { items: Gift[] }
+
+export interface CreateGiftRequest {
+  recipientId: string
+  /** Identifiant de la carte dans le catalogue */
+  creatureId: string
+  quantity?: number
+}
+
+export interface ListMyGiftsQuery {
+  role?: GiftRole
+  status?: GiftStatus
+  page?: number
+  pageSize?: number
+}
+
+/** Mise à jour d'une carte par l'admin (immédiate) ; champs omis inchangés. */
+export interface AdminCreatureUpdate {
+  name?: string
+  description?: string
+  family?: string
+}

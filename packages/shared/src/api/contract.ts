@@ -15,6 +15,10 @@ import type {
   CollectionPage,
   CollectionQuery,
   CreateTradeRequest,
+  CreateGiftRequest,
+  Gift,
+  GiftPage,
+  ListMyGiftsQuery,
   Creature,
   CreatureOwners,
   CreaturePage,
@@ -40,6 +44,7 @@ import type {
   AdminCreature,
   AdminCreatureInput,
   RarityChangeInput,
+  AdminCreatureUpdate,
   AdminAccount,
   AdminAccountInput,
   AdminPlayerDetail,
@@ -96,6 +101,15 @@ export interface PlayerApi extends AuthApi {
   cancelTrade(tradeId: string): Promise<Trade>
   /** Entre dans la salle d'échange ; `onMessage` reçoit `init`, puis chaque événement. */
   joinTrade(tradeId: string, onMessage: (message: TradeServerMessage) => void): TradeConnection
+  /** Offre une carte possédée à un autre joueur ; en attente de sa décision. */
+  createGift(body: CreateGiftRequest): Promise<Gift>
+  /** Mes dons reçus et/ou envoyés (`role`), du plus récent au plus ancien. */
+  listMyGifts(query?: ListMyGiftsQuery): Promise<GiftPage>
+  /** Le destinataire accepte : les cartes passent dans sa collection. */
+  acceptGift(giftId: string): Promise<Gift>
+  refuseGift(giftId: string): Promise<Gift>
+  /** Le donneur annule son don tant qu'il est en attente. */
+  cancelGift(giftId: string): Promise<Gift>
 }
 
 export interface AdminApi extends AuthApi {
@@ -111,6 +125,8 @@ export interface AdminApi extends AuthApi {
   listAdminCreatures(): Promise<AdminCreature[]>
   /** Nouvelle carte, visible et tirable au prochain minuit. */
   createAdminCreature(body: AdminCreatureInput): Promise<AdminCreature>
+  /** Nom, description et/ou famille d'une carte existante, tout de suite (champs omis inchangés). */
+  updateCreature(creatureId: string, body: AdminCreatureUpdate): Promise<AdminCreature>
   /** Nouvelle rareté d'une carte, appliquée au prochain minuit. */
   scheduleRarityChange(creatureId: string, body: RarityChangeInput): Promise<AdminCreature>
   cancelRarityChange(creatureId: string): Promise<AdminCreature>

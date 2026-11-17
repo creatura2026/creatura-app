@@ -9,16 +9,17 @@ const props = withDefaults(defineProps<{ code: string; label: string; size?: num
 
 const RARITY_GEMS: Record<string, number> = { COMMON: 1, UNCOMMON: 2, RARE: 3, LEGENDARY: 4 }
 const count = computed(() => RARITY_GEMS[props.code] ?? 1)
-// Trois emplacements d'ordinaire ; un quatrième seulement pour une carte légendaire.
-const slots = computed(() => Math.max(3, count.value))
+// Toujours quatre emplacements : les gemmes remplies marquent le niveau de rareté (4 = légendaire).
+const SLOTS = 4
 const color = computed(() => rarityColor(props.code))
 </script>
 
 <template>
-  <p class="flex gap-1" role="img" :aria-label="`Rareté : ${label}`">
+  <p class="flex flex-wrap justify-center gap-1" role="img" :aria-label="`Rareté : ${label}`">
     <svg
-      v-for="i in slots"
+      v-for="i in SLOTS"
       :key="i"
+      class="shrink-0"
       viewBox="0 0 8 8"
       :width="size"
       :height="size"

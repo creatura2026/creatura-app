@@ -147,3 +147,48 @@ def test_first_booster_rare_is_counted_in_stats(client, admin_headers):
     dist = client.get(f"{API}/admin/rarity-distribution", headers=admin_headers).json()
     assert dist["totalCardsDistributed"] == 5
     assert next(i for i in dist["items"] if i["rarity"]["code"] == "RARE")["observedCount"] >= 1
+
+
+def _creature(client, admin_headers, name):
+    return next(c for c in client.get(f"{API}/admin/creatures", headers=admin_headers).json() if c["name"] == name)
+
+
+def test_update_creature_applies_immediately(client, admin_headers):
+    """Nom, description et famille d'une carte changent tout de suite (pas au prochain minuit)."""
+    moussou = _creature(client, admin_headers, "Moussou")
+    r = client.patch(
+        f"{API}/admin/creatures/{moussou['id']}",
+        json={"name": "Moussoute", "description": "Relookée.", "family": "LUEUR"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["name"] == "Moussoute" and body["description"] == "Relookée." and body["family"]["code"] == "LUEUR"
+    # Vu immédiatement par un joueur, sans passage de minuit.
+    h = register_and_login(client, "Lina")["headers"]
+    card = client.get(f"{API}/creatures/{moussou['id']}", headers=h).json()
+    assert card["name"] == "Moussoute" and card["family"]["code"] == "LUEUR"
+
+
+def test_update_creature_partial_keeps_other_fields(client, admin_headers):
+    moussou = _creature(client, admin_headers, "Moussou")
+    r = client.patch(
+        f"{API}/admin/creatures/{moussou['id']}", json={"description": "Juste la description."}, headers=admin_headers
+    )
+    assert r.status_code == 200
+    assert r.json()["name"] == "Moussou" and r.json()["description"] == "Juste la description."
+
+
+def test_update_creature_duplicate_name_rejected(client, admin_headers):
+    moussou = _creature(client, admin_headers, "Moussou")
+    other = next(
+        c for c in client.get(f"{API}/admin/creatures", headers=admin_headers).json() if c["name"] != "Moussou"
+    )
+    r = client.patch(f"{API}/admin/creatures/{moussou['id']}", json={"name": other["name"]}, headers=admin_headers)
+    problem(r, 400, "VALIDATION_ERROR")
+
+
+def test_update_creature_requires_admin(client):
+    h = register_and_login(client, "Lina")["headers"]
+    moussou_id = client.get(f"{API}/creatures", params={"pageSize": 1}, headers=h).json()["items"][0]["id"]
+    problem(client.patch(f"{API}/admin/creatures/{moussou_id}", json={"name": "Pirate"}, headers=h), 403, "FORBIDDEN")

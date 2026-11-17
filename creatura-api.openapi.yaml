@@ -37,6 +37,9 @@ info:
     | `CARDS_UNAVAILABLE` | 409 | Une carte posée n'est plus disponible au moment de conclure ; les validations sont retirées |
     | `CARDS_NOT_OWNED` | 422 | Cartes posées sur le tapis que le joueur ne possède pas (ou pas en quantité suffisante) |
     | `TRADE_WITH_SELF` | 422 | Échange proposé à soi-même |
+    | `GIFT_WITH_SELF` | 422 | Don d'une carte à soi-même |
+    | `GIFT_NOT_PENDING` | 409 | Don déjà accepté, refusé, annulé ou échoué |
+    | `GIFT_ALREADY_PENDING` | 409 | Un don de cette carte à ce joueur est déjà en attente |
     | `RATE_LIMITED` | 429 | Trop de tentatives ; réessayer après le délai `Retry-After` |
     | `ACCOUNT_DISABLED` | 403 | Compte administrateur désactivé par un autre admin (après un mot de passe correct) |
     | `PASSWORD_CHANGE_REQUIRED` | 403 | Admin créé depuis le dashboard : changer d'abord le mot de passe provisoire (`PUT /me/password`) |
@@ -771,6 +774,131 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /gifts:
+    post:
+      tags: [Dons]
+      operationId: createGift
+      summary: Offrir une carte possédée à un autre joueur
+      description: Crée un don en attente (`PENDING`). Le destinataire l'accepte ou le refuse ; le donneur peut l'annuler.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateGiftRequest'}
+      responses:
+        '201':
+          description: Don créé, en attente de la décision du destinataire
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don identique déjà en attente (`GIFT_ALREADY_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '422':
+          description: Don à soi-même (`GIFT_WITH_SELF`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    get:
+      tags: [Dons]
+      operationId: listMyGifts
+      summary: Mes dons, reçus et/ou envoyés
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: role
+          in: query
+          description: Dons envoyés, reçus, ou les deux
+          schema: {type: string, enum: [all, sent, received], default: all}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/GiftStatus'}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Dons du joueur connecté, du plus récent au plus ancien
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /gifts/{giftId}/accept:
+    parameters:
+      - {name: giftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Dons]
+      operationId: acceptGift
+      summary: Accepter un don reçu
+      description: Les cartes passent dans la collection du destinataire, tout ou rien. Si le donneur ne les possède plus, le don passe `FAILED` (aucun transfert).
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Don accepté (ou `FAILED` si la carte n'était plus disponible)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don déjà traité (`GIFT_NOT_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+
+  /gifts/{giftId}/refuse:
+    parameters:
+      - {name: giftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Dons]
+      operationId: refuseGift
+      summary: Refuser un don reçu
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Don refusé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don déjà traité (`GIFT_NOT_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+
+  /gifts/{giftId}/cancel:
+    parameters:
+      - {name: giftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Dons]
+      operationId: cancelGift
+      summary: Annuler un don envoyé (tant qu'il est en attente)
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Don annulé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don déjà traité (`GIFT_NOT_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+
   /admin/trades:
     get:
       tags: [Administration]
@@ -909,6 +1037,30 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /admin/creatures/{creatureId}:
+    parameters:
+      - {name: creatureId, in: path, required: true, schema: {type: string}}
+    patch:
+      tags: [Administration]
+      operationId: updateCreature
+      summary: Modifier le nom, la description et/ou la famille d'une carte (immédiat)
+      description: Les champs omis restent inchangés. La rareté passe par `/rarity` (prochain minuit), l'image par `/sprite`.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminCreatureUpdate'}
+      responses:
+        '200':
+          description: Carte mise à jour
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminCreature'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /admin/creatures/{creatureId}/rarity:
     parameters:
       - {name: creatureId, in: path, required: true, schema: {type: string}}
@@ -1378,6 +1530,9 @@ components:
         - CARDS_UNAVAILABLE
         - CARDS_NOT_OWNED
         - TRADE_WITH_SELF
+        - GIFT_WITH_SELF
+        - GIFT_NOT_PENDING
+        - GIFT_ALREADY_PENDING
         - LAST_ADMIN
         - RATE_LIMITED
         - ACCOUNT_DISABLED
@@ -2170,6 +2325,45 @@ components:
         image: {type: string, pattern: '^sprites/[a-z0-9_-]+\.png$', description: Fichier déjà présent sur le CDN}
         stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Obligatoire pour une légendaire (édition limitée), interdit sinon}
 
+    GiftStatus:
+      type: string
+      description: >-
+        PENDING : en attente de la décision du destinataire. ACCEPTED : accepté, cartes transférées.
+        REFUSED : refusé par le destinataire. CANCELLED : annulé par le donneur. FAILED : le donneur ne
+        possédait plus la carte au moment d'accepter ; aucun transfert.
+      enum: [PENDING, ACCEPTED, REFUSED, CANCELLED, FAILED]
+
+    CreateGiftRequest:
+      type: object
+      required: [recipientId, creatureId]
+      additionalProperties: false
+      properties:
+        recipientId: {type: string, format: uuid}
+        creatureId: {type: string, description: Identifiant de la carte dans le catalogue}
+        quantity: {type: integer, minimum: 1, maximum: 10, default: 1}
+
+    Gift:
+      type: object
+      required: [id, status, giver, recipient, creature, quantity, createdAt, decidedAt]
+      properties:
+        id: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/GiftStatus'}
+        giver: {$ref: '#/components/schemas/PlayerSummary'}
+        recipient: {$ref: '#/components/schemas/PlayerSummary'}
+        creature: {$ref: '#/components/schemas/CreatureSummary'}
+        quantity: {type: integer, minimum: 1}
+        createdAt: {type: string, format: date-time}
+        decidedAt: {type: [string, 'null'], format: date-time, description: Date de la décision ; null tant que le don est en attente}
+        failureReason: {type: [string, 'null'], description: Raison quand le statut vaut FAILED}
+
+    GiftPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: {type: array, items: {$ref: '#/components/schemas/Gift'}}
+
     RarityChangeInput:
       type: object
       required: [rarity]
@@ -2177,6 +2371,15 @@ components:
       properties:
         rarity: {type: string, enum: [COMMON, UNCOMMON, RARE, LEGENDARY]}
         stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Exemplaires à tirer, obligatoire vers légendaire}
+
+    AdminCreatureUpdate:
+      type: object
+      additionalProperties: false
+      description: Modification immédiate d'une carte ; chaque champ est facultatif (omis = inchangé).
+      properties:
+        name: {type: string, minLength: 2, maxLength: 50}
+        description: {type: string, maxLength: 500}
+        family: {type: string, enum: [NATURE, CRISTAL, BRUME, LUEUR]}
 
     RarityWeights:
       type: object
