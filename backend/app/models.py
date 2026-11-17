@@ -164,6 +164,30 @@ class EchangeLigne(Base):
     creature: Mapped[Creature] = relationship(lazy="joined")
 
 
+class Don(Base):
+    """Don d'une carte d'un joueur à un autre (11_evolution_don_carte.sql).
+
+    Réutilise `Statut` : EN_ATTENTE jusqu'à la décision du destinataire, puis ACCEPTE
+    (cartes transférées), REFUSE, ANNULE (par le donneur) ou ECHOUE (carte indisponible).
+    """
+
+    __tablename__ = "don"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    donneur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id", ondelete="CASCADE"))
+    destinataire_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id", ondelete="CASCADE"))
+    creature_id: Mapped[int] = mapped_column(ForeignKey("creature.id"))
+    quantite: Mapped[int] = mapped_column(Integer)
+    statut: Mapped[Statut] = mapped_column(_varchar_enum(Statut, 12), default=Statut.EN_ATTENTE)
+    motif_echec: Mapped[str | None] = mapped_column(String(30))
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    donneur: Mapped[Utilisateur] = relationship(foreign_keys=[donneur_id], lazy="joined")
+    destinataire: Mapped[Utilisateur] = relationship(foreign_keys=[destinataire_id], lazy="joined")
+    creature: Mapped[Creature] = relationship(lazy="joined")
+
+
 class Reglage(Base):
     """Réglages du jeu modifiables par un administrateur (une seule ligne, id = 1)."""
 

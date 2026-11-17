@@ -11,6 +11,7 @@ from app.errors import BadRequest
 from app.schemas.admin import (
     AdminCreatureIn,
     AdminCreatureOut,
+    AdminCreatureUpdateIn,
     AdminStatsOut,
     BoosterSettingsIn,
     BoosterSettingsOut,
@@ -79,6 +80,12 @@ def list_creatures(db: DbSession):
 def create_creature(data: AdminCreatureIn, db: DbSession):
     """Nouvelle carte, visible et tirable au prochain minuit. Légendaire : édition limitée (stock)."""
     return AdminCreatureOut.of(admin.create_creature(db, data))
+
+
+@router.patch("/creatures/{creatureId}", response_model=AdminCreatureOut)
+def update_creature(creatureId: str, data: AdminCreatureUpdateIn, db: DbSession):  # noqa: N803 (nom du contrat)
+    """Nom, description et/ou famille d'une carte existante, tout de suite (champs omis inchangés)."""
+    return AdminCreatureOut.of(admin.update_creature(db, creatureId, data))
 
 
 @router.put("/creatures/{creatureId}/rarity", response_model=AdminCreatureOut)

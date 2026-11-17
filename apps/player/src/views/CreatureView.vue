@@ -58,7 +58,7 @@ const isEgg = computed(() => creature.value?.imageUrl.startsWith('data:') ?? fal
           <dl class="grid grid-cols-2 gap-3">
             <div class="border-2 border-ink bg-cream p-3">
               <dt class="text-xs font-bold tracking-wider uppercase">Rareté</dt>
-              <dd class="mt-1 flex items-center gap-2 font-semibold">
+              <dd class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
                 {{ creature.rarity.label }}
                 <RarityGems :code="creature.rarity.code" :label="creature.rarity.label" />
               </dd>

@@ -10,6 +10,7 @@ import type {
   DeletionRequestsQuery,
   Period,
   RarityChangeInput,
+  AdminCreatureUpdate,
   UpdateBoosterSettingsRequest,
 } from '@creatura/shared/api/types'
 
@@ -40,9 +41,11 @@ export function useRarityDistribution(period: MaybeRefOrGetter<Period>) {
 }
 
 export function useAdminPlayerSearch(search: MaybeRefOrGetter<string>) {
+  // Recherche via l'endpoint admin (`/admin/players`) : l'admin n'a pas accès à `/players`
+  // (route joueur), qui renverrait un 403 et détournerait vers « Accès refusé ».
   return useQuery({
-    queryKey: computed(() => ['admin', 'players', toValue(search).trim()]),
-    queryFn: () => api.searchPlayers({ search: toValue(search).trim(), pageSize: 8 }),
+    queryKey: computed(() => ['admin', 'player-search', toValue(search).trim()]),
+    queryFn: () => api.listAdminPlayers({ search: toValue(search).trim(), pageSize: 8 }),
     enabled: computed(() => toValue(search).trim().length >= 2),
   })
 }
@@ -70,6 +73,15 @@ export function useCreateCreature() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (body: AdminCreatureInput) => api.createAdminCreature(body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
+  })
+}
+
+export function useUpdateCreature() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: AdminCreatureUpdate }) =>
+      api.updateCreature(id, body),
     onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
   })
 }

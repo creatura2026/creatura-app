@@ -133,6 +133,7 @@ export function createHttpClient(session: SessionStore, baseUrl: string = API_BA
       request<T>('POST', path, { body, auth }),
     put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
     del: <T>(path: string, body?: unknown) => request<T>('DELETE', path, { body }),
+    patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body }),
     /** Envoie un FormData (multipart) sans Content-Type, laissé au navigateur. */
     async putForm<T>(path: string, form: FormData): Promise<T> {
       const headers: Record<string, string> = { Accept: 'application/json' }
@@ -332,6 +333,11 @@ export function createHttpPlayerApi(
     refuseTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/refuse`),
     cancelTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/cancel`),
     joinTrade: (tradeId, onMessage) => joinTradeRoom(http, baseUrl, tradeId, onMessage),
+    createGift: (body) => http.post('/gifts', body),
+    listMyGifts: (query) => http.get('/gifts', query),
+    acceptGift: (giftId) => http.post(`/gifts/${id(giftId)}/accept`),
+    refuseGift: (giftId) => http.post(`/gifts/${id(giftId)}/refuse`),
+    cancelGift: (giftId) => http.post(`/gifts/${id(giftId)}/cancel`),
   }
 }
 
@@ -348,6 +354,7 @@ export function createHttpAdminApi(session: SessionStore): AdminApi {
     updateBoosterSettings: (body) => http.put('/admin/settings/booster', body),
     listAdminCreatures: () => http.get('/admin/creatures'),
     createAdminCreature: (body) => http.post('/admin/creatures', body),
+    updateCreature: (creatureId, body) => http.patch(`/admin/creatures/${id(creatureId)}`, body),
     scheduleRarityChange: (creatureId, body) => http.put(`/admin/creatures/${id(creatureId)}/rarity`, body),
     cancelRarityChange: (creatureId) => http.del(`/admin/creatures/${id(creatureId)}/rarity`),
     uploadSprite: (creatureId, file, filename) => {

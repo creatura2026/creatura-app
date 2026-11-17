@@ -144,6 +144,15 @@ class AdminCreatureIn(ApiInput):
     stock: int | None = Field(default=None, ge=1, le=MAX_LIMITED_STOCK)
 
 
+class AdminCreatureUpdateIn(ApiInput):
+    """Modifie les attributs d'une carte existante, tout de suite. Les champs omis restent inchangés
+    (la rareté passe par `/rarity` au prochain minuit, l'image par `/sprite`)."""
+
+    name: str | None = Field(default=None, min_length=2, max_length=50)
+    description: str | None = Field(default=None, max_length=500)
+    family: Famille | None = None
+
+
 class RarityChangeIn(ApiInput):
     """Nouvelle rareté d'une carte existante, appliquée au prochain minuit."""
 
