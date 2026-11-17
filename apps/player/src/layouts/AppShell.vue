@@ -76,6 +76,17 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
           <PixelIcon name="user" :size="18" />
           <span class="max-w-28 truncate sm:max-w-40">{{ pseudo }}</span>
         </RouterLink>
+
+        <a
+          href="/guides/joueur/index.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex min-h-10 items-center gap-2 border-2 border-cream/40 px-2.5 text-sm font-semibold hover:border-cream sm:px-3"
+          aria-label="Guide du joueur (nouvelle fenêtre)"
+        >
+          <PixelIcon name="help" :size="18" />
+          <span class="hidden sm:inline">Guide</span>
+        </a>
       </div>
     </header>
 
@@ -107,7 +118,7 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
       class="fixed inset-x-0 bottom-0 z-30 border-t-2 border-ink bg-cream pb-[env(safe-area-inset-bottom)] md:hidden"
       aria-label="Navigation principale"
     >
-      <ul class="grid grid-cols-5">
+      <ul class="grid grid-cols-6">
         <li v-for="item in NAV" :key="item.to">
           <RouterLink
             :to="item.to"
@@ -124,6 +135,18 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
               {{ pendingCount }}
             </span>
           </RouterLink>
+        </li>
+        <li>
+          <a
+            href="/guides/joueur/index.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex min-h-16 flex-col items-center justify-center gap-1 px-1 text-[0.7rem] font-semibold"
+            aria-label="Guide du joueur (nouvelle fenêtre)"
+          >
+            <PixelIcon name="help" :size="22" />
+            <span class="truncate">Guide</span>
+          </a>
         </li>
       </ul>
     </nav>

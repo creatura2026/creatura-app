@@ -101,6 +101,20 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           </span>
           <span v-else class="text-xs opacity-70">{{ item.uc }}</span>
         </RouterLink>
+
+        <div class="my-2 border-t border-cream/20" />
+
+        <a
+          href="/guides/admin/index.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex min-h-12 items-center gap-3 border-2 border-transparent px-3 font-semibold hover:border-cream/40"
+          aria-label="Guide administrateur (nouvelle fenêtre)"
+        >
+          <PixelIcon name="help" :size="20" />
+          <span class="flex-1">Guide</span>
+          <span class="text-xs opacity-70">↗</span>
+        </a>
       </nav>
       <div class="border-t-2 border-cream/20 p-4">
         <p class="flex items-center gap-2 text-sm">
