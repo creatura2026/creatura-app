@@ -31,6 +31,7 @@ ERROR_CODES: dict[str, tuple[int, str]] = {
     "PASSWORD_CHANGE_REQUIRED": (403, "Mot de passe à changer"),
     "PLAYER_ALREADY_REQUESTED": (409, "Suppression déjà demandée"),
     "REQUEST_NOT_PENDING": (409, "Demande close"),
+    "RESET_LINK_INVALID": (400, "Lien de réinitialisation invalide"),
     "INTERNAL_ERROR": (500, "Erreur interne"),
 }
 

@@ -48,6 +48,8 @@ import type {
   AdminAccount,
   AdminAccountInput,
   AdminAccountCreated,
+  PasswordResetLink,
+  PasswordResetRequest,
   AdminPlayerDetail,
   AdminPlayerPage,
   AdminPlayerQuery,
@@ -111,6 +113,8 @@ export interface PlayerApi extends AuthApi {
   refuseGift(giftId: string): Promise<Gift>
   /** Le donneur annule son don tant qu'il est en attente. */
   cancelGift(giftId: string): Promise<Gift>
+  /** AS-75 (sans session) : nouveau mot de passe avec le jeton d'un lien généré par un admin. */
+  resetPassword(body: PasswordResetRequest): Promise<void>
 }
 
 export interface AdminApi extends AuthApi {
@@ -154,4 +158,6 @@ export interface AdminApi extends AuthApi {
   createAdmin(body: AdminAccountInput): Promise<AdminAccountCreated>
   /** Jamais son propre compte ; ses demandes en attente sont annulées. */
   deactivateAdmin(adminId: string): Promise<AdminAccount>
+  /** AS-75 : lien de réinitialisation du mot de passe d'un joueur, 5 minutes, usage unique. */
+  createPasswordResetLink(playerId: string): Promise<PasswordResetLink>
 }

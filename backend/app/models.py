@@ -287,3 +287,21 @@ class DemandeSuppression(Base):
     demandeur: Mapped[Utilisateur] = relationship(foreign_keys=[demande_par], lazy="joined")
     valideur: Mapped[Utilisateur] = relationship(foreign_keys=[valideur_id], lazy="joined")
     joueurs: Mapped[list[DemandeSuppressionJoueur]] = relationship(lazy="selectin")
+
+
+class ReinitialisationMdp(Base):
+    """Lien de réinitialisation du mot de passe généré par un admin (12_evolution_…, AS-75).
+
+    Seule l'empreinte SHA-256 du jeton est stockée. 5 minutes, usage unique.
+    """
+
+    __tablename__ = "reinitialisation_mdp"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    utilisateur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    jeton_hash: Mapped[str] = mapped_column(String(64))
+    cree_par: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expire_le: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    utilise_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    annule_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

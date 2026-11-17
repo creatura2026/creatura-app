@@ -333,6 +333,7 @@ export function createHttpPlayerApi(
     refuseTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/refuse`),
     cancelTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/cancel`),
     joinTrade: (tradeId, onMessage) => joinTradeRoom(http, baseUrl, tradeId, onMessage),
+    resetPassword: (body) => http.post('/auth/password-reset', body, false),
     createGift: (body) => http.post('/gifts', body),
     listMyGifts: (query) => http.get('/gifts', query),
     acceptGift: (giftId) => http.post(`/gifts/${id(giftId)}/accept`),
@@ -372,5 +373,7 @@ export function createHttpAdminApi(session: SessionStore): AdminApi {
     listAdmins: () => http.get('/admin/admins'),
     createAdmin: (body) => http.post('/admin/admins', body),
     deactivateAdmin: (adminId) => http.post(`/admin/admins/${id(adminId)}/deactivate`),
+    createPasswordResetLink: (playerId) =>
+      http.post(`/admin/players/${id(playerId)}/password-reset`),
   }
 }

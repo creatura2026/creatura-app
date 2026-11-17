@@ -904,6 +904,18 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
       return clone({ ...toAdminAccount(account), temporaryPassword })
     },
 
+    async createPasswordResetLink(playerId) {
+      await delay()
+      admin()
+      if (!livePlayers().some((p) => p.id === playerId))
+        throw problem('NOT_FOUND', "Ce joueur n'existe pas.")
+      // Mode simulé : l'appli joueur simulée accepte le jeton « demo-lien » (compte Dresseur).
+      return {
+        url: 'http://localhost:5173/reinitialiser?jeton=demo-lien',
+        expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      }
+    },
+
     async deactivateAdmin(adminId) {
       await delay()
       const me = admin()

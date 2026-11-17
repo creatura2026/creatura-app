@@ -10,7 +10,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.controllers import admin, admin_accounts
+from app.controllers import admin, admin_accounts, password_reset
 from app.dependencies import AdminUser, DbSession, Pagination, require_admin
 from app.schemas.admin_accounts import (
     STATUT_DEMANDE_OF,
@@ -27,6 +27,7 @@ from app.schemas.admin_accounts import (
     SortOrder,
 )
 from app.schemas.base import Page
+from app.schemas.password_reset import PasswordResetLinkOut
 from app.views.admin import DateFrom, DateTo
 
 router = APIRouter(prefix="/admin", tags=["Administration"], dependencies=[Depends(require_admin)])
@@ -62,6 +63,15 @@ def get_player(
     """Fiche d'un joueur : cartes par rareté et par famille, connexions par jour ou par mois."""
     period = admin.resolve_period(db, date_from, date_to)
     return admin_accounts.player_detail(db, playerId, period, granularity)
+
+
+@router.post(
+    "/players/{playerId}/password-reset", response_model=PasswordResetLinkOut, status_code=status.HTTP_201_CREATED
+)
+def create_password_reset_link(playerId: uuid.UUID, user: AdminUser, db: DbSession):  # noqa: N803
+    """AS-75 : lien de réinitialisation du mot de passe, valable 5 minutes et une seule fois.
+    Le lien précédent du joueur, s'il n'a pas servi, est annulé."""
+    return password_reset.create_link(db, user, playerId)
 
 
 # ── Demandes de suppression ──────────────────────────────────────────────────

@@ -544,7 +544,7 @@ export interface components {
             boosterId?: string;
         };
         /** @enum {string} */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "GIFT_WITH_SELF" | "GIFT_NOT_PENDING" | "GIFT_ALREADY_PENDING" | "LAST_ADMIN" | "RATE_LIMITED" | "ACCOUNT_DISABLED" | "PASSWORD_CHANGE_REQUIRED" | "PLAYER_ALREADY_REQUESTED" | "REQUEST_NOT_PENDING" | "INTERNAL_ERROR";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "GIFT_WITH_SELF" | "GIFT_NOT_PENDING" | "GIFT_ALREADY_PENDING" | "LAST_ADMIN" | "RATE_LIMITED" | "ACCOUNT_DISABLED" | "PASSWORD_CHANGE_REQUIRED" | "PLAYER_ALREADY_REQUESTED" | "REQUEST_NOT_PENDING" | "RESET_LINK_INVALID" | "INTERNAL_ERROR";
         PageMeta: {
             page: number;
             pageSize: number;
@@ -1084,6 +1084,17 @@ export interface components {
         AdminAccountInput: {
             pseudo: string;
             login: string;
+        };
+        PasswordResetLink: {
+            /** @description Lien à copier et envoyer au joueur ; il ne sera plus affiché */
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        PasswordResetRequest: {
+            /** @description Jeton du lien (paramètre `jeton`) */
+            token: string;
+            newPassword: string;
         };
         AdminAccountCreated: components["schemas"]["AdminAccount"] & {
             /** @description Mot de passe provisoire généré par le serveur, renvoyé cette seule fois */
