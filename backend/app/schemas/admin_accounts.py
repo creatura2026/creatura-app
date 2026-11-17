@@ -4,11 +4,11 @@ import datetime as dt
 import enum
 import uuid
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
 from app.models import DemandeSuppression, StatutDemande
 from app.schemas.admin import DailyCount, Period
-from app.schemas.auth import Login, Pseudo, _fits_bcrypt
+from app.schemas.auth import Login, Pseudo
 from app.schemas.base import ApiInput, ApiModel, Page
 from app.schemas.catalog import FamilyOut, RaritySummaryOut
 from app.schemas.player import PlayerOut
@@ -157,10 +157,9 @@ class AdminAccountOut(ApiModel):
 class AdminAccountIn(ApiInput):
     pseudo: Pseudo
     login: Login
-    # Mot de passe provisoire, à remplacer par le nouvel admin à sa première connexion
-    temporary_password: str = Field(min_length=12, max_length=128)
 
-    @field_validator("temporary_password")
-    @classmethod
-    def password_fits_bcrypt(cls, value: str) -> str:
-        return _fits_bcrypt(value)
+
+class AdminAccountCreatedOut(AdminAccountOut):
+    # Mot de passe provisoire généré par le serveur : renvoyé cette seule fois, jamais stocké en
+    # clair. Le nouvel admin le remplace à sa première connexion.
+    temporary_password: str

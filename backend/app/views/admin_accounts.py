@@ -14,6 +14,7 @@ from app.controllers import admin, admin_accounts
 from app.dependencies import AdminUser, DbSession, Pagination, require_admin
 from app.schemas.admin_accounts import (
     STATUT_DEMANDE_OF,
+    AdminAccountCreatedOut,
     AdminAccountIn,
     AdminAccountOut,
     AdminPlayerDetailOut,
@@ -113,9 +114,10 @@ def list_admins(db: DbSession):
     return admin_accounts.list_admins(db)
 
 
-@router.post("/admins", response_model=AdminAccountOut, status_code=status.HTTP_201_CREATED)
+@router.post("/admins", response_model=AdminAccountCreatedOut, status_code=status.HTTP_201_CREATED)
 def create_admin(data: AdminAccountIn, user: AdminUser, db: DbSession):
-    """Nouvel admin avec un mot de passe provisoire, à remplacer à sa première connexion."""
+    """Nouvel admin. Le serveur génère son mot de passe provisoire et le renvoie cette seule fois
+    (`temporaryPassword`) ; l'admin le remplace à sa première connexion."""
     return admin_accounts.create_admin(db, user, data)
 
 

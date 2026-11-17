@@ -47,6 +47,7 @@ import type {
   AdminCreatureUpdate,
   AdminAccount,
   AdminAccountInput,
+  AdminAccountCreated,
   AdminPlayerDetail,
   AdminPlayerPage,
   AdminPlayerQuery,
@@ -149,8 +150,8 @@ export interface AdminApi extends AuthApi {
   /** Par l'admin qui a fait la demande, tant qu'elle est en attente. */
   cancelDeletionRequest(requestId: string): Promise<DeletionRequest>
   listAdmins(): Promise<AdminAccount[]>
-  /** Nouvel admin avec un mot de passe provisoire, à remplacer à sa première connexion. */
-  createAdmin(body: AdminAccountInput): Promise<AdminAccount>
+  /** Nouvel admin ; le serveur génère son mot de passe provisoire et le renvoie cette seule fois. */
+  createAdmin(body: AdminAccountInput): Promise<AdminAccountCreated>
   /** Jamais son propre compte ; ses demandes en attente sont annulées. */
   deactivateAdmin(adminId: string): Promise<AdminAccount>
 }

@@ -84,6 +84,7 @@ export type DeletionRequestPage = Schemas['DeletionRequestPage']
 export type DeletionRequestInput = Schemas['DeletionRequestInput']
 export type AdminAccount = Schemas['AdminAccount']
 export type AdminAccountInput = Schemas['AdminAccountInput']
+export type AdminAccountCreated = Schemas['AdminAccountCreated']
 
 export type AdminPlayerSort = 'pseudo' | 'createdAt' | 'lastLoginAt' | 'logins' | 'totalCards'
 

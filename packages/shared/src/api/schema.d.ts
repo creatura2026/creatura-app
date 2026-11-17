@@ -1084,7 +1084,9 @@ export interface components {
         AdminAccountInput: {
             pseudo: string;
             login: string;
-            /** @description Mot de passe provisoire, à remplacer par le nouvel admin à sa première connexion */
+        };
+        AdminAccountCreated: components["schemas"]["AdminAccount"] & {
+            /** @description Mot de passe provisoire généré par le serveur, renvoyé cette seule fois */
             temporaryPassword: string;
         };
     };
