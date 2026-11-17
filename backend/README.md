@@ -203,6 +203,7 @@ sauf indication contraire.
 |            | `GET /admin/deletion-requests?status=&toValidate=` · `POST /admin/deletion-requests` | AS-71 |
 |            | `POST /admin/deletion-requests/{requestId}/approve` · `/reject` · `/cancel` | AS-71 |
 |            | `GET /admin/admins` · `POST /admin/admins` · `POST /admin/admins/{adminId}/deactivate` | AS-71 |
+|            | `POST /admin/players/{playerId}/password-reset` (lien 5 min, usage unique) · `POST /auth/password-reset` (sans jeton) | AS-75 |
 | Santé      | `GET /health` (sans jeton, pour l'ALB)                                    | —            |
 
 **Listes** : paginées (`page` à partir de 1, `pageSize` de 1 à 100, 20 par défaut). Réponse :

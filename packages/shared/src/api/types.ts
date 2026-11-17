@@ -86,6 +86,10 @@ export type AdminAccount = Schemas['AdminAccount']
 export type AdminAccountInput = Schemas['AdminAccountInput']
 export type AdminAccountCreated = Schemas['AdminAccountCreated']
 
+/** Lien de réinitialisation du mot de passe (AS-75). */
+export type PasswordResetLink = Schemas['PasswordResetLink']
+export type PasswordResetRequest = Schemas['PasswordResetRequest']
+
 export type AdminPlayerSort = 'pseudo' | 'createdAt' | 'lastLoginAt' | 'logins' | 'totalCards'
 
 export interface AdminPlayersQuery {

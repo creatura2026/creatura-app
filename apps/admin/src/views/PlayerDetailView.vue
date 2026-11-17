@@ -11,6 +11,7 @@ import { formatDateTime, formatDay } from '@creatura/shared/format'
 import BarChart from '@/components/BarChart.vue'
 import DeletionRequestDialog from '@/components/DeletionRequestDialog.vue'
 import KpiTile from '@/components/KpiTile.vue'
+import PasswordResetLinkPanel from '@/components/PasswordResetLinkPanel.vue'
 import PeriodPicker from '@/components/PeriodPicker.vue'
 import { useAdminPlayer } from '@/api/queries'
 import { usePeriod } from '@/usePeriod'
@@ -89,6 +90,8 @@ const dialogOpen = ref(false)
           />
           <KpiTile label="Cartes possédées" :value="data.player.totalCards" tone="bg-mint" />
         </div>
+
+        <PasswordResetLinkPanel :player-id="data.player.id" :pseudo="data.player.pseudo" />
 
         <PeriodPicker />
 

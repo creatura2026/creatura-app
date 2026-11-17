@@ -215,6 +215,23 @@ export function createMockPlayerApi({
       saveDb()
     },
 
+    /** AS-75, mode simulé : seul le jeton « demo-lien » est valable (compte Dresseur). */
+    async resetPassword(body) {
+      await delay()
+      const user = loadDb().users.find((u) => u.login === 'demo')
+      if (body.token !== 'demo-lien' || !user)
+        throw problem(
+          'RESET_LINK_INVALID',
+          "Ce lien n'est plus valable. Demandez-en un nouveau à un administrateur.",
+        )
+      if (body.newPassword.length < 12) {
+        const message = 'Le mot de passe doit contenir au moins 12 caractères.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'newPassword', message }] })
+      }
+      user.password = body.newPassword
+      saveDb()
+    },
+
     async logout() {
       await delay(50, 120)
       const token = getToken()

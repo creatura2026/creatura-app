@@ -23,6 +23,7 @@ const TITLES: Record<ErrorCode, string> = {
   PASSWORD_CHANGE_REQUIRED: 'Mot de passe à changer',
   PLAYER_ALREADY_REQUESTED: 'Suppression déjà demandée',
   REQUEST_NOT_PENDING: 'Demande close',
+  RESET_LINK_INVALID: 'Lien de réinitialisation invalide',
   INTERNAL_ERROR: 'Erreur interne',
 }
 
@@ -48,6 +49,7 @@ const STATUS: Record<ErrorCode, number> = {
   PASSWORD_CHANGE_REQUIRED: 403,
   PLAYER_ALREADY_REQUESTED: 409,
   REQUEST_NOT_PENDING: 409,
+  RESET_LINK_INVALID: 400,
   INTERNAL_ERROR: 500,
 }
 

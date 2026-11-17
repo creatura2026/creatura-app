@@ -207,3 +207,8 @@ export function useDeactivateAdmin() {
       ]),
   })
 }
+
+/** AS-75 : lien de réinitialisation du mot de passe d'un joueur (5 minutes, usage unique). */
+export function useCreatePasswordResetLink() {
+  return useMutation({ mutationFn: (playerId: string) => api.createPasswordResetLink(playerId) })
+}
