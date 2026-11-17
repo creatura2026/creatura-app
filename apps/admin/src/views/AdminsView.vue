@@ -107,7 +107,7 @@ function status(a: AdminAccount): string {
 <template>
   <section>
     <PageHeader
-      eyebrow="AS-71 · Comptes du dashboard"
+      eyebrow="Comptes du dashboard"
       title="Administrateurs"
       subtitle="Un admin valide les demandes de suppression de joueurs des autres admins."
     />

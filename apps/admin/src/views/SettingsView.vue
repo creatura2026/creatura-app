@@ -131,8 +131,14 @@ const fan = computed(() =>
               ou une légendaire par booster.
             </p>
             <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <label v-for="r in RARITY_FIELDS" :key="r.code" class="text-sm font-semibold">
-                {{ r.label }}
+              <label
+                v-for="r in RARITY_FIELDS"
+                :key="r.code"
+                class="flex flex-col text-sm font-semibold"
+              >
+                <!-- flex-1 : le libellé occupe la place restante, les champs s'alignent même
+                     quand un libellé passe sur deux lignes (« Peu commune »). -->
+                <span class="flex-1">{{ r.label }}</span>
                 <input
                   v-model.number="weights[r.code]"
                   type="number"
@@ -141,7 +147,7 @@ const fan = computed(() =>
                   step="1"
                   class="mt-1 w-full border-2 border-ink bg-white px-2 py-1.5 font-pixel text-lg tabular-nums"
                 />
-                <span class="text-xs font-normal">
+                <span class="mt-1 text-xs font-normal">
                   {{
                     weightTotal ? Math.round(((weights[r.code] || 0) * 1000) / weightTotal) / 10 : 0
                   }}

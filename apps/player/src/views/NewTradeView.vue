@@ -236,7 +236,7 @@ watch(mode, (m) => {
         <div>
           <button
             type="button"
-            class="mb-3 inline-flex min-h-10 cursor-pointer items-center gap-2 font-semibold"
+            class="mb-4 flex min-h-10 w-fit cursor-pointer items-center gap-2 font-semibold"
             @click="chooseCard(null)"
           >
             <PixelIcon name="arrow-left" :size="18" /> Choisir une autre carte

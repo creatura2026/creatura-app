@@ -59,7 +59,7 @@ const dialogOpen = ref(false)
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
       <div v-if="data" class="flex flex-col gap-6" :class="isFetching ? 'opacity-70' : ''">
         <PageHeader
-          eyebrow="AS-71 · Fiche joueur"
+          eyebrow="Fiche joueur"
           :title="data.player.pseudo"
           :subtitle="`Identifiant : ${data.player.login} · inscrit le ${formatDateTime(data.player.createdAt)}`"
         >
