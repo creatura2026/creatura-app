@@ -72,6 +72,46 @@ export type AdminCreature = Schemas['AdminCreature']
 export type AdminCreatureInput = Schemas['AdminCreatureInput']
 export type RarityChangeInput = Schemas['RarityChangeInput']
 
+/** Joueurs, demandes de suppression et comptes admin (AS-71). */
+export type Granularity = Schemas['Granularity']
+export type AdminSummary = Schemas['AdminSummary']
+export type AdminPlayer = Schemas['AdminPlayer']
+export type AdminPlayerPage = Schemas['AdminPlayerPage']
+export type AdminPlayerDetail = Schemas['AdminPlayerDetail']
+export type DeletionRequestStatus = Schemas['DeletionRequestStatus']
+export type DeletionRequest = Schemas['DeletionRequest']
+export type DeletionRequestPage = Schemas['DeletionRequestPage']
+export type DeletionRequestInput = Schemas['DeletionRequestInput']
+export type AdminAccount = Schemas['AdminAccount']
+export type AdminAccountInput = Schemas['AdminAccountInput']
+
+export type AdminPlayerSort = 'pseudo' | 'createdAt' | 'lastLoginAt' | 'logins' | 'totalCards'
+
+export interface AdminPlayersQuery {
+  from?: string
+  to?: string
+  /** Partie du pseudonyme */
+  search?: string
+  sort?: AdminPlayerSort
+  order?: 'asc' | 'desc'
+  page?: number
+  pageSize?: number
+}
+
+export interface AdminPlayerQuery {
+  from?: string
+  to?: string
+  granularity?: Granularity
+}
+
+export interface DeletionRequestsQuery {
+  status?: DeletionRequestStatus
+  /** Seulement les demandes dont l'admin connecté est le validateur */
+  toValidate?: boolean
+  page?: number
+  pageSize?: number
+}
+
 /** Erreur levée par les clients API (réelle ou simulée), porteuse du Problem Details du serveur. */
 export class ApiError extends Error {
   readonly problem: Problem

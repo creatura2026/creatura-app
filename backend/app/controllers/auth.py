@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.controllers import booster, collection
 from app.dependencies import user_from_token
-from app.errors import Unauthorized, field_error, from_integrity_error
+from app.errors import Forbidden, Unauthorized, field_error, from_integrity_error
 from app.models import Role, Utilisateur
 from app.schemas.auth import AuthTokensOut, MeOut, RegisterIn, UserOut
 from app.security import (
@@ -56,6 +56,13 @@ def login(db: Session, login_: str, password: str) -> AuthTokensOut:
     if user is None or not verify_password(password, user.mot_de_passe_hash):
         # Le message ne dit pas lequel des deux est faux.
         raise Unauthorized("Identifiant ou mot de passe incorrect.", "INVALID_CREDENTIALS")
+    if user.desactive_le is not None:
+        # Dit seulement après un mot de passe correct : on ne révèle rien à un inconnu.
+        raise Forbidden("Ce compte administrateur a été désactivé.", "ACCOUNT_DISABLED")
+    # Une connexion par login réussi (le renouvellement du jeton ne compte pas) ;
+    # la fonction efface aussi les connexions de plus de 13 mois.
+    db.execute(select(func.creatura_enregistrer_connexion(user.id)))
+    db.commit()
     return _tokens(user)
 
 

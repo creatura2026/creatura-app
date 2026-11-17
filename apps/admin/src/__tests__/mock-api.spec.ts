@@ -118,4 +118,71 @@ describe('Réglage des boosters (simulé)', () => {
       isApiError(e, 'FORBIDDEN'),
     )
   })
+
+  it('supprime des joueurs seulement après validation par l’admin choisi (AS-71)', async () => {
+    let token: string | null = null
+    const api = createMockAdminApi(() => token)
+    const as = async (account: keyof typeof DEMO_ACCOUNTS) => {
+      token = (await api.login(DEMO_ACCOUNTS[account])).accessToken
+    }
+    await as('admin')
+    const admins = await api.listAdmins()
+    const me = admins.find((a) => a.pseudo === 'Admin')!
+    const noa = admins.find((a) => a.pseudo === 'Noa')!
+    const player = (await api.listAdminPlayers({ search: 'Lina' })).items[0]!
+
+    await expect(
+      api.createDeletionRequest({ playerIds: [player.id], validatorId: me.id }),
+    ).rejects.toSatisfy((e) => isApiError(e, 'VALIDATION_ERROR'))
+    const request = await api.createDeletionRequest({ playerIds: [player.id], validatorId: noa.id })
+    expect(request.status).toBe('PENDING')
+    await expect(
+      api.createDeletionRequest({ playerIds: [player.id], validatorId: noa.id }),
+    ).rejects.toSatisfy((e) => isApiError(e, 'PLAYER_ALREADY_REQUESTED'))
+    await expect(api.approveDeletionRequest(request.id)).rejects.toSatisfy((e) =>
+      isApiError(e, 'FORBIDDEN'),
+    )
+
+    await as('admin2')
+    expect((await api.listDeletionRequests({ toValidate: true })).items).toHaveLength(1)
+    const done = await api.approveDeletionRequest(request.id)
+    expect(done.status).toBe('APPROVED')
+    expect(done.players).toEqual([])
+    expect((await api.listAdminPlayers({ search: player.pseudo })).items).toEqual([])
+  })
+
+  it('oblige un admin créé depuis le dashboard à changer son mot de passe (AS-71)', async () => {
+    let token: string | null = null
+    const api = createMockAdminApi(() => token)
+    token = (await api.login(DEMO_ACCOUNTS.admin)).accessToken
+    const created = await api.createAdmin({
+      pseudo: 'Lou',
+      login: 'lou',
+      temporaryPassword: 'provisoire-1234',
+    })
+    expect(created.mustChangePassword).toBe(true)
+
+    const tokens = await api.login({ login: 'lou', password: 'provisoire-1234' })
+    token = tokens.accessToken
+    expect(tokens.user.mustChangePassword).toBe(true)
+    await expect(api.getAdminStats()).rejects.toSatisfy((e) =>
+      isApiError(e, 'PASSWORD_CHANGE_REQUIRED'),
+    )
+    await api.changePassword({
+      currentPassword: 'provisoire-1234',
+      newPassword: 'nouveau-mot-de-passe',
+    })
+    await expect(api.getAdminStats()).resolves.toBeTruthy()
+
+    token = (await api.login(DEMO_ACCOUNTS.admin)).accessToken
+    // Admin, Noa et Lou actifs : en désactiver un en laisse deux, le minimum.
+    await api.deactivateAdmin(created.id)
+    const noa = (await api.listAdmins()).find((a) => a.pseudo === 'Noa')!
+    await expect(api.deactivateAdmin(noa.id)).rejects.toSatisfy((e) =>
+      isApiError(e, 'VALIDATION_ERROR'),
+    )
+    await expect(
+      api.login({ login: 'lou', password: 'nouveau-mot-de-passe' }),
+    ).rejects.toSatisfy((e) => isApiError(e, 'ACCOUNT_DISABLED'))
+  })
 })

@@ -355,5 +355,15 @@ export function createHttpAdminApi(session: SessionStore): AdminApi {
       form.append('file', file, filename ? `${filename}.png` : file.name)
       return http.putForm(`/admin/creatures/${id(creatureId)}/sprite`, form)
     },
+    listAdminPlayers: (query) => http.get('/admin/players', query),
+    getAdminPlayer: (playerId, query) => http.get(`/admin/players/${id(playerId)}`, query),
+    listDeletionRequests: (query) => http.get('/admin/deletion-requests', query),
+    createDeletionRequest: (body) => http.post('/admin/deletion-requests', body),
+    approveDeletionRequest: (requestId) => http.post(`/admin/deletion-requests/${id(requestId)}/approve`),
+    rejectDeletionRequest: (requestId) => http.post(`/admin/deletion-requests/${id(requestId)}/reject`),
+    cancelDeletionRequest: (requestId) => http.post(`/admin/deletion-requests/${id(requestId)}/cancel`),
+    listAdmins: () => http.get('/admin/admins'),
+    createAdmin: (body) => http.post('/admin/admins', body),
+    deactivateAdmin: (adminId) => http.post(`/admin/admins/${id(adminId)}/deactivate`),
   }
 }

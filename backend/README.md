@@ -186,7 +186,7 @@ sauf indication contraire.
 |------------|---------------------------------------------------------------------------|--------------|
 | Comptes    | `POST /auth/register` · `POST /auth/login` · `POST /auth/refresh` (sans jeton) | UC-01, UC-02 |
 |            | `POST /auth/logout` · `GET /me` (profil, progression, booster disponible)  | UC-02        |
-|            | `PUT /me/password` (actuel + nouveau) · `DELETE /me` (mot de passe pour confirmer) | Compte |
+|            | `PUT /me/password` (actuel + nouveau ; obligatoire d'abord pour un admin au mot de passe provisoire, AS-71) · `DELETE /me` (mot de passe pour confirmer) | Compte |
 | Catalogue  | `GET /creatures?search=&family=NATURE&rarity=RARE&page=&pageSize=` · `GET /creatures/{creatureId}` | UC-05 |
 |            | `GET /families` · `GET /rarities` (avec `dropRate`, de 0 à 1)              | Filtres      |
 | Booster    | `GET /me/boosters/today` · `POST /me/boosters`                            | UC-03, UC-04 |
@@ -199,6 +199,10 @@ sauf indication contraire.
 | Admin      | `GET /admin/stats?from=&to=` · `GET /admin/trades?from=&to=&status=&playerId=` | UC-12, UC-13 |
 |            | `GET /admin/rarity-distribution?from=&to=`                                | UC-14        |
 |            | `GET /admin/settings/booster` · `PUT /admin/settings/booster`             | Réglages     |
+| Joueurs et admins | `GET /admin/players?from=&to=&search=&sort=&order=` · `GET /admin/players/{playerId}?granularity=DAY\|MONTH` | AS-71 |
+|            | `GET /admin/deletion-requests?status=&toValidate=` · `POST /admin/deletion-requests` | AS-71 |
+|            | `POST /admin/deletion-requests/{requestId}/approve` · `/reject` · `/cancel` | AS-71 |
+|            | `GET /admin/admins` · `POST /admin/admins` · `POST /admin/admins/{adminId}/deactivate` | AS-71 |
 | Santé      | `GET /health` (sans jeton, pour l'ALB)                                    | —            |
 
 **Listes** : paginées (`page` à partir de 1, `pageSize` de 1 à 100, 20 par défaut). Réponse :

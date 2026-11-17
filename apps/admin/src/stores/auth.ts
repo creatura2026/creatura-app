@@ -8,6 +8,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(session.read()?.user ?? null)
   const isAuthenticated = computed(() => user.value !== null)
   const isAdmin = computed(() => user.value?.role === 'ADMIN')
+  /** Admin créé depuis le dashboard : remplace d'abord son mot de passe provisoire (AS-71). */
+  const mustChangePassword = computed(() => user.value?.mustChangePassword === true)
+  /** Admin créé depuis le dashboard : remplace d'abord son mot de passe provisoire (AS-71). */
+  const mustChangePassword = computed(() => user.value?.mustChangePassword === true)
 
   async function login(credentials: LoginRequest) {
     const tokens = await api.login(credentials)
@@ -26,7 +30,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   /** Nouveau mot de passe : cette session reçoit de nouveaux jetons, les autres sont fermées. */
   async function changePassword(body: PasswordChangeRequest) {
-    session.write(await api.changePassword(body))
+    const tokens = await api.changePassword(body)
+    session.write(tokens)
+    user.value = tokens.user // mustChangePassword repasse à faux (AS-71)
   }
 
   /** Refusé (LAST_ADMIN) s'il ne reste aucun autre administrateur. */
@@ -44,6 +50,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     isAuthenticated,
     isAdmin,
+    mustChangePassword,
     login,
     logout,
     changePassword,
