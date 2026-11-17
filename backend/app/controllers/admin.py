@@ -9,9 +9,11 @@ Toute modification (réglages des boosters, nouvelle carte, rareté d'une carte)
 prochain minuit, heure de Paris (`app.controllers.planning`).
 """
 
+import re
 import uuid
 from datetime import date, timedelta
 
+import boto3
 from sqlalchemy import Date, cast, func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -34,6 +36,8 @@ from app.schemas.admin import (
 )
 from app.schemas.base import PageParams, PageResult
 from app.schemas.catalog import RARETE_OF, RarityCode, RaritySummaryOut
+
+_SPRITE_KEY_RE = re.compile(r"^sprites/[a-z0-9_-]+\.png$")
 
 DEFAULT_PERIOD_DAYS = 30
 MAX_PERIOD_DAYS = 366
@@ -249,6 +253,45 @@ def schedule_rarity_change(db: Session, creature_id: str, data: RarityChangeIn) 
 def cancel_rarity_change(db: Session, creature_id: str) -> Creature:
     creature = get_creature(db, creature_id)
     creature.rarete_suivante = creature.stock_suivant = creature.changement_le = None
+    db.commit()
+    db.refresh(creature)
+    return creature
+
+
+# ── Upload de sprite ──────────────────────────────────────────────────────
+
+
+def upload_sprite(db: Session, creature_id: str, filename: str, data: bytes) -> Creature:
+    """Upload un PNG sur S3 sous sprites/<filename>, invalide CloudFront, met à jour creature.image."""
+    settings = get_settings()
+    if not settings.sprites_bucket or not settings.cloudfront_distribution_id:
+        raise BadRequest("L'upload de sprites n'est pas configuré sur ce serveur.")
+
+    if not _SPRITE_KEY_RE.match(f"sprites/{filename}"):
+        raise field_error("VALIDATION_ERROR", "file", "Le nom de fichier doit être en snake_case minuscules, extension .png.")
+
+    creature = get_creature(db, creature_id)
+    key = f"sprites/{filename}"
+
+    s3 = boto3.client("s3", region_name=settings.aws_region or "eu-north-1")
+    s3.put_object(
+        Bucket=settings.sprites_bucket,
+        Key=key,
+        Body=data,
+        ContentType="image/png",
+        CacheControl="public, max-age=31536000, immutable",
+    )
+
+    cf = boto3.client("cloudfront", region_name="us-east-1")
+    cf.create_invalidation(
+        DistributionId=settings.cloudfront_distribution_id,
+        InvalidationBatch={
+            "Paths": {"Quantity": 1, "Items": [f"/{key}"]},
+            "CallerReference": f"{creature_id}-{filename}",
+        },
+    )
+
+    creature.image = key
     db.commit()
     db.refresh(creature)
     return creature

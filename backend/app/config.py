@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     # (sprites/moss_puff.png) y est concaténée.
     image_base_url: str = "https://creatura.creasmaloud.dev"
 
+    # Upload de sprites par les admins via l'API : bucket S3 et distribution CloudFront.
+    # Sur EKS, le rôle Pod Identity du back porte les permissions (eks/rds.tf).
+    # Vide = fonctionnalité désactivée (dev local sans AWS).
+    sprites_bucket: str = ""
+    cloudfront_distribution_id: str = ""
+
     # Compte administrateur créé au démarrage s'il n'existe pas (mot de passe haché par le back).
     admin_login: str | None = None
     admin_password: str | None = None

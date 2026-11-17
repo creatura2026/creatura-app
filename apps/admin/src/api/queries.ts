@@ -85,3 +85,11 @@ export function useCancelRarityChange() {
     onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
   })
 }
+
+export function useUploadSprite() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => api.uploadSprite(id, file),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
+  })
+}
