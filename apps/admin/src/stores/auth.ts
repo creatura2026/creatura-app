@@ -10,9 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.role === 'ADMIN')
   /** Admin créé depuis le dashboard : remplace d'abord son mot de passe provisoire (AS-71). */
   const mustChangePassword = computed(() => user.value?.mustChangePassword === true)
-  /** Admin créé depuis le dashboard : remplace d'abord son mot de passe provisoire (AS-71). */
-  const mustChangePassword = computed(() => user.value?.mustChangePassword === true)
-
+  
   async function login(credentials: LoginRequest) {
     const tokens = await api.login(credentials)
     session.write(tokens)
