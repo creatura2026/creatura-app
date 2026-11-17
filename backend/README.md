@@ -186,6 +186,7 @@ sauf indication contraire.
 |------------|---------------------------------------------------------------------------|--------------|
 | Comptes    | `POST /auth/register` · `POST /auth/login` · `POST /auth/refresh` (sans jeton) | UC-01, UC-02 |
 |            | `POST /auth/logout` · `GET /me` (profil, progression, booster disponible)  | UC-02        |
+|            | `PUT /me/password` (actuel + nouveau) · `DELETE /me` (mot de passe pour confirmer) | Compte |
 | Catalogue  | `GET /creatures?search=&family=NATURE&rarity=RARE&page=&pageSize=` · `GET /creatures/{creatureId}` | UC-05 |
 |            | `GET /families` · `GET /rarities` (avec `dropRate`, de 0 à 1)              | Filtres      |
 | Booster    | `GET /me/boosters/today` · `POST /me/boosters`                            | UC-03, UC-04 |
@@ -239,6 +240,7 @@ refusée renvoie `error` à son auteur seulement ; une action acceptée diffuse 
 | `TRADE_NOT_PENDING` | 409 | Échange déjà conclu, refusé ou annulé (salle fermée) |
 | `CARDS_UNAVAILABLE` | 409 | Carte posée plus disponible au moment de conclure (retirée du tapis), ou stock épuisé |
 | `CARDS_NOT_OWNED` / `TRADE_WITH_SELF` | 422 | Carte posée non possédée / échange avec soi-même |
+| `LAST_ADMIN` | 409 | Suppression du compte du dernier administrateur |
 | `INTERNAL_ERROR` | 500 | Erreur inattendue |
 
 Si une contrainte de la base refuse malgré tout une écriture, son nom est traduit selon le
@@ -277,6 +279,13 @@ de `creatura-api.openapi.yaml`) :
   sorties du stock depuis le lancement, quelle que soit la période.
 - **Pas de table de sessions** : `POST /auth/logout` répond 204 et le client oublie ses jetons,
   mais ils restent valides jusqu'à expiration ; `POST /auth/refresh` ne révoque pas l'ancien jeton.
+  Exception : changer son mot de passe ferme les autres sessions (`utilisateur.jetons_depuis` :
+  les jetons émis avant sont refusés).
+- **Suppression du compte** (`DELETE /me`) : la ligne `utilisateur` est anonymisée, pas effacée
+  (les échanges des autres joueurs la référencent) : pseudo « Joueur supprimé #… », identifiant
+  libéré, mot de passe inutilisable, `supprime_le`. Collection effacée (légendaires rendues au
+  stock), échanges en cours abandonnés, historique des boosters gardé pour les statistiques.
+  Un administrateur ne peut supprimer son compte que s'il en reste un autre (`LAST_ADMIN`).
 - **Expiration des sessions** (`SESSION_IDLE_MINUTES`, 20 par défaut) : sans action de
   l'utilisateur (clic, touche, défilement, retour sur l'onglet) pendant ce temps, il est
   déconnecté. Le front l'applique à la seconde, tous onglets confondus, avec un avertissement

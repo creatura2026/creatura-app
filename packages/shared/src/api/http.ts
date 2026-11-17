@@ -132,7 +132,7 @@ export function createHttpClient(session: SessionStore, baseUrl: string = API_BA
     post: <T>(path: string, body?: unknown, auth = true) =>
       request<T>('POST', path, { body, auth }),
     put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
-    del: <T>(path: string) => request<T>('DELETE', path, {}),
+    del: <T>(path: string, body?: unknown) => request<T>('DELETE', path, { body }),
     /** Envoie un FormData (multipart) sans Content-Type, laissé au navigateur. */
     async putForm<T>(path: string, form: FormData): Promise<T> {
       const headers: Record<string, string> = { Accept: 'application/json' }
@@ -300,6 +300,12 @@ function authApi(http: HttpClient): AuthApi {
     async keepAlive() {
       await http.refresh()
     },
+    async changePassword(body) {
+      const tokens = await http.put<AuthTokens>('/me/password', body)
+      http.session.write(tokens)
+      return tokens
+    },
+    deleteAccount: (body) => http.del('/me', body),
   }
 }
 

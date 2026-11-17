@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { LoginRequest, User } from '@creatura/shared/api/types'
+import type { LoginRequest, PasswordChangeRequest, User } from '@creatura/shared/api/types'
 
 import { api, session } from '@/api'
 
@@ -24,10 +24,30 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /** Nouveau mot de passe : cette session reçoit de nouveaux jetons, les autres sont fermées. */
+  async function changePassword(body: PasswordChangeRequest) {
+    session.write(await api.changePassword(body))
+  }
+
+  /** Refusé (LAST_ADMIN) s'il ne reste aucun autre administrateur. */
+  async function deleteAccount(password: string) {
+    await api.deleteAccount({ password })
+    clearSession()
+  }
+
   function clearSession() {
     session.write(null)
     user.value = null
   }
 
-  return { user, isAuthenticated, isAdmin, login, logout, clearSession }
+  return {
+    user,
+    isAuthenticated,
+    isAdmin,
+    login,
+    logout,
+    changePassword,
+    deleteAccount,
+    clearSession,
+  }
 })

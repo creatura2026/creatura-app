@@ -22,6 +22,8 @@ export type PageMeta = Schemas['PageMeta']
 
 export type RegisterRequest = Schemas['RegisterRequest']
 export type LoginRequest = Schemas['LoginRequest']
+export type PasswordChangeRequest = Schemas['PasswordChangeRequest']
+export type AccountDeleteRequest = Schemas['AccountDeleteRequest']
 export type AuthTokens = Schemas['AuthTokens']
 export type Role = Schemas['Role']
 export type User = Schemas['User']

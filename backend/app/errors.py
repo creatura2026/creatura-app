@@ -22,6 +22,7 @@ ERROR_CODES: dict[str, tuple[int, str]] = {
     "CARDS_UNAVAILABLE": (409, "Cartes indisponibles"),
     "CARDS_NOT_OWNED": (422, "Cartes non possédées"),
     "TRADE_WITH_SELF": (422, "Échange avec soi-même"),
+    "LAST_ADMIN": (409, "Dernier administrateur"),
     "RATE_LIMITED": (429, "Trop de tentatives"),
     "INTERNAL_ERROR": (500, "Erreur interne"),
 }

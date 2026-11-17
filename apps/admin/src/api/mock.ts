@@ -276,6 +276,44 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
     // Mode simulé : les jetons n'expirent pas, rien à renouveler.
     async keepAlive() {},
 
+    async changePassword(body) {
+      await delay()
+      const account = current()
+      if (account.password !== body.currentPassword) {
+        throw problem('VALIDATION_ERROR', 'Mot de passe incorrect.', {
+          errors: [{ field: 'currentPassword', message: 'Mot de passe incorrect.' }],
+        })
+      }
+      account.password = body.newPassword
+      return {
+        accessToken: getToken() ?? `mock-admin.${account.id}`,
+        refreshToken: `refresh.${account.id}`,
+        tokenType: 'Bearer',
+        expiresIn: 900,
+        sessionIdleSeconds: 1200,
+        user: toUser(account),
+      }
+    },
+
+    async deleteAccount(body) {
+      await delay()
+      const account = current()
+      if (account.password !== body.password) {
+        throw problem('VALIDATION_ERROR', 'Mot de passe incorrect.', {
+          errors: [{ field: 'password', message: 'Mot de passe incorrect.' }],
+        })
+      }
+      const otherAdmins = ACCOUNTS.filter((a) => a.role === 'ADMIN' && a.id !== account.id)
+      if (account.role === 'ADMIN' && otherAdmins.length === 0) {
+        throw problem(
+          'LAST_ADMIN',
+          'Vous êtes le dernier administrateur : nommez-en un autre avant de supprimer votre compte.',
+        )
+      }
+      ACCOUNTS.splice(ACCOUNTS.indexOf(account), 1)
+      for (const [token, a] of sessions) if (a.id === account.id) sessions.delete(token)
+    },
+
     async getMe() {
       await delay(80, 160)
       const account = current()

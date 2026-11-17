@@ -544,7 +544,7 @@ export interface components {
             boosterId?: string;
         };
         /** @enum {string} */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "RATE_LIMITED" | "INTERNAL_ERROR";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "LAST_ADMIN" | "RATE_LIMITED" | "INTERNAL_ERROR";
         PageMeta: {
             page: number;
             pageSize: number;
@@ -568,6 +568,19 @@ export interface components {
         LoginRequest: {
             login: string;
             /** Format: password */
+            password: string;
+        };
+        PasswordChangeRequest: {
+            /** Format: password */
+            currentPassword: string;
+            /** Format: password */
+            newPassword: string;
+        };
+        AccountDeleteRequest: {
+            /**
+             * Format: password
+             * @description Mot de passe actuel, pour confirmer
+             */
             password: string;
         };
         RefreshRequest: {

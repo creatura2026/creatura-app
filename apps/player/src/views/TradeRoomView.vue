@@ -20,7 +20,7 @@ import TradeMat from '@/components/TradeMat.vue'
 import TradeChat from '@/components/TradeChat.vue'
 import TradeCardPicker from '@/components/TradeCardPicker.vue'
 import { useLeaveTrade } from '@/api/queries'
-import { seatsOf } from '@/composables/tradeSeats'
+import { abandonedByMe, seatsOf } from '@/composables/tradeSeats'
 import { useTradeRoom } from '@/composables/useTradeRoom'
 import { useAuthStore } from '@/stores/auth'
 
@@ -43,10 +43,24 @@ const room = useTradeRoom(() => props.id, {
       swapped.value = next.status === 'ACCEPTED'
       return
     }
-    if (previous.status === 'PENDING' && next.status === 'ACCEPTED') void celebrate()
-    else if (previous.status === 'PENDING' && next.status !== 'PENDING') {
+    if (previous.status !== 'PENDING' || next.status === 'PENDING') {
+      noticeChanges(previous, next)
+      return
+    }
+    if (next.status === 'ACCEPTED') {
+      void celebrate()
+      return
+    }
+    // Fin sans conclusion : abandon par l'un des deux joueurs, ou échec.
+    const byMe = abandonedByMe(next, meId.value)
+    if (byMe === null) {
+      toast('L’échange n’a pas pu aboutir. Aucune carte n’a bougé.', 'info')
+    } else if (!byMe) {
       toast(`${seatsOf(next, meId.value).theirs.player.pseudo} a abandonné l’échange.`, 'info')
-    } else noticeChanges(previous, next)
+    } else if (!leavingHere) {
+      // Abandonné depuis un autre onglet ou appareil (ici, le bouton affiche déjà son message).
+      toast('Vous avez abandonné l’échange.', 'info')
+    }
   },
   onError: (problem) => {
     if (!room.connected.value) refused.value = problem
@@ -79,7 +93,9 @@ const status = computed(() => {
       return 'Échange conclu : les cartes ont changé de collection.'
     case 'REFUSED':
     case 'CANCELLED':
-      return 'Échange abandonné. Aucune carte n’a bougé.'
+      return abandonedByMe(trade.value, meId.value)
+        ? 'Vous avez abandonné l’échange. Aucune carte n’a bougé.'
+        : `${partner.value} a abandonné l’échange. Aucune carte n’a bougé.`
     case 'FAILED':
       return 'L’échange n’a pas pu aboutir. Aucune carte n’a bougé.'
   }
@@ -172,14 +188,18 @@ async function celebrate() {
 
 const leave = useLeaveTrade()
 const confirmLeave = ref(false)
+/** Abandon lancé depuis cet onglet : son message est affiché ici, pas celui de la salle. */
+let leavingHere = false
 
 async function abandon() {
   if (!trade.value || !seats.value) return
+  leavingHere = true // avant la requête : la salle peut annoncer la fin avant sa réponse
   try {
     await leave.mutateAsync({ id: trade.value.id, asProposer: seats.value.iAmProposer })
-    toast('Échange abandonné. Aucune carte n’a bougé.', 'info')
+    toast('Vous avez abandonné l’échange. Aucune carte n’a bougé.', 'info')
     await router.push({ name: 'trades' })
   } catch (e) {
+    leavingHere = false
     toast(errorMessage(e), 'error')
   } finally {
     confirmLeave.value = false

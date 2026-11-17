@@ -42,6 +42,12 @@ const router = createRouter({
           meta: { title: 'Statistiques' },
         },
         {
+          path: 'mon-compte',
+          name: 'account',
+          component: () => import('@/views/AccountView.vue'),
+          meta: { title: 'Mon compte' },
+        },
+        {
           path: 'echanges',
           name: 'trades',
           component: () => import('@/views/TradesView.vue'),

@@ -25,8 +25,11 @@ def user_from_token(db: Session, token: str, kind: str) -> Utilisateur:
     except (KeyError, ValueError):
         raise Unauthorized("Votre session est invalide, reconnectez-vous.")
     user = db.get(Utilisateur, user_id)
-    if user is None:
+    if user is None or user.supprime_le is not None:
         raise Unauthorized("Compte introuvable, reconnectez-vous.")
+    # Mot de passe changé depuis : les sessions ouvertes avant sont fermées (iat en secondes).
+    if user.jetons_depuis is not None and payload.get("iat", 0) < int(user.jetons_depuis.timestamp()):
+        raise Unauthorized("Votre session a été fermée, reconnectez-vous.")
     return user
 
 
