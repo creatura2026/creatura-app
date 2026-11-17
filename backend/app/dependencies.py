@@ -30,6 +30,8 @@ def user_from_token(db: Session, token: str, kind: str) -> Utilisateur:
     # Mot de passe changé depuis : les sessions ouvertes avant sont fermées (iat en secondes).
     if user.jetons_depuis is not None and payload.get("iat", 0) < int(user.jetons_depuis.timestamp()):
         raise Unauthorized("Votre session a été fermée, reconnectez-vous.")
+    if user.desactive_le is not None:  # admin désactivé : ses jetons ne servent plus
+        raise Unauthorized("Ce compte a été désactivé.", "UNAUTHENTICATED")
     return user
 
 
@@ -48,6 +50,10 @@ CurrentUser = Annotated[Utilisateur, Depends(get_current_user)]
 def require_admin(user: CurrentUser) -> Utilisateur:
     if user.role != Role.ADMIN:
         raise Forbidden("Accès réservé aux administrateurs.")
+    if user.mot_de_passe_provisoire:
+        # Admin créé depuis le dashboard : il remplace d'abord le mot de passe choisi par son
+        # créateur (PUT /me/password, autorisé avec ce mot de passe provisoire).
+        raise Forbidden("Changez votre mot de passe provisoire pour continuer.", "PASSWORD_CHANGE_REQUIRED")
     return user
 
 

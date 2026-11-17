@@ -38,6 +38,10 @@ info:
     | `CARDS_NOT_OWNED` | 422 | Cartes posées sur le tapis que le joueur ne possède pas (ou pas en quantité suffisante) |
     | `TRADE_WITH_SELF` | 422 | Échange proposé à soi-même |
     | `RATE_LIMITED` | 429 | Trop de tentatives ; réessayer après le délai `Retry-After` |
+    | `ACCOUNT_DISABLED` | 403 | Compte administrateur désactivé par un autre admin (après un mot de passe correct) |
+    | `PASSWORD_CHANGE_REQUIRED` | 403 | Admin créé depuis le dashboard : changer d'abord le mot de passe provisoire (`PUT /me/password`) |
+    | `PLAYER_ALREADY_REQUESTED` | 409 | Un des joueurs fait déjà l'objet d'une demande de suppression en attente |
+    | `REQUEST_NOT_PENDING` | 409 | Demande de suppression déjà validée, refusée, annulée ou expirée |
     | `INTERNAL_ERROR` | 500 | Erreur inattendue du serveur |
 
     ## Écarts connus de la V1
@@ -102,6 +106,10 @@ tags:
     description: Salle d'échange en temps réel, abandon et historique (UC-09, UC-10, UC-11)
   - name: Administration
     description: Dashboard et réglages, réservés au rôle ADMIN (UC-12, UC-13, UC-14)
+  - name: Joueurs et admins
+    description: |
+      Suivi des joueurs, suppression de joueurs validée par un deuxième admin, création et désactivation
+      des comptes admin (AS-71). Réservé au rôle ADMIN.
 
 paths:
   /health:
@@ -281,6 +289,10 @@ paths:
         Le mot de passe actuel est demandé (`VALIDATION_ERROR` sur `currentPassword` s'il est
         faux). Le nouveau suit les règles de l'inscription et doit différer de l'actuel. Les autres
         sessions sont fermées ; celle-ci reçoit de nouveaux jetons.
+
+        AS-71 : un admin créé depuis le dashboard doit le faire avant d'accéder au dashboard (son
+        mot de passe provisoire comme mot de passe actuel). Toute route `/admin/*` lui répond
+        `403 PASSWORD_CHANGE_REQUIRED` tant que `user.mustChangePassword` est vrai.
       operationId: changePassword
       requestBody:
         required: true
@@ -935,6 +947,231 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /admin/players:
+    get:
+      tags: [Joueurs et admins]
+      summary: Lister les joueurs avec leurs connexions et leurs cartes (AS-71)
+      description: |
+        Une ligne par joueur : dernière connexion, connexions sur la période (`from`, `to`), cartes possédées et
+        demande de suppression en attente. Une connexion = un login réussi ; le renouvellement du jeton ne compte pas.
+        L'historique des connexions est gardé 13 mois.
+      operationId: listAdminPlayers
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: search
+          in: query
+          description: Partie du pseudonyme, sans tenir compte des majuscules ni des accents
+          schema: {type: string, maxLength: 30}
+        - name: sort
+          in: query
+          schema: {type: string, enum: [pseudo, createdAt, lastLoginAt, logins, totalCards], default: pseudo}
+        - name: order
+          in: query
+          schema: {type: string, enum: [asc, desc], default: asc}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Joueurs
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminPlayerPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  /admin/players/{playerId}:
+    get:
+      tags: [Joueurs et admins]
+      summary: Fiche d'un joueur (AS-71)
+      description: Cartes par rareté et par famille, connexions par jour ou par mois sur la période.
+      operationId: getAdminPlayer
+      parameters:
+        - $ref: '#/components/parameters/PlayerId'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: granularity
+          in: query
+          schema: {$ref: '#/components/schemas/Granularity'}
+      responses:
+        '200':
+          description: Fiche du joueur
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminPlayerDetail'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /admin/deletion-requests:
+    get:
+      tags: [Joueurs et admins]
+      summary: Lister les demandes de suppression (AS-71)
+      description: Toutes les demandes, journal compris, de la plus récente à la plus ancienne. Une demande en attente depuis plus de 7 jours expire.
+      operationId: listDeletionRequests
+      parameters:
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/DeletionRequestStatus'}
+        - name: toValidate
+          in: query
+          description: Seulement les demandes dont l'admin connecté est le validateur
+          schema: {type: boolean, default: false}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Demandes
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequestPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Joueurs et admins]
+      summary: Demander la suppression de joueurs (AS-71)
+      description: |
+        Seul l'admin choisi (`validatorId`, un autre admin actif) pourra valider ou refuser. Un joueur ne peut être
+        que dans une seule demande en attente (`409 PLAYER_ALREADY_REQUESTED`). Seuls des comptes joueurs peuvent
+        être supprimés.
+      operationId: createDeletionRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeletionRequestInput'}
+      responses:
+        '201':
+          description: Demande en attente
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/deletion-requests/{requestId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [Joueurs et admins]
+      summary: Valider une demande de suppression (AS-71)
+      description: |
+        Réservé au validateur choisi. Les joueurs sont supprimés tout de suite : compte, collection, connexions,
+        boosters, messages et échanges en attente. Leurs légendaires retournent dans le stock. Leurs échanges
+        terminés restent pour l'autre joueur, avec « Joueur supprimé » à leur place.
+      operationId: approveDeletionRequest
+      responses:
+        '200':
+          description: Demande validée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/deletion-requests/{requestId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [Joueurs et admins]
+      summary: Refuser une demande de suppression (AS-71)
+      description: Réservé au validateur choisi. Personne n'est supprimé.
+      operationId: rejectDeletionRequest
+      responses:
+        '200':
+          description: Demande refusée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/deletion-requests/{requestId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [Joueurs et admins]
+      summary: Annuler sa demande de suppression (AS-71)
+      description: Réservé à l'admin qui a fait la demande, tant qu'elle est en attente.
+      operationId: cancelDeletionRequest
+      responses:
+        '200':
+          description: Demande annulée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/admins:
+    get:
+      tags: [Joueurs et admins]
+      summary: Lister les comptes admin (AS-71)
+      description: Actifs d'abord. Sert aussi à choisir le validateur d'une demande de suppression.
+      operationId: listAdmins
+      responses:
+        '200':
+          description: Comptes admin
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/AdminAccount'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Joueurs et admins]
+      summary: Créer un compte admin (AS-71)
+      description: |
+        Le nouvel admin reçoit un mot de passe provisoire. À sa première connexion, `user.mustChangePassword` est vrai :
+        il doit le remplacer (`PUT /me/password`) avant d'accéder au dashboard.
+      operationId: createAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminAccountInput'}
+      responses:
+        '201':
+          description: Compte admin créé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAccount'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/admins/{adminId}/deactivate:
+    parameters:
+      - {name: adminId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Joueurs et admins]
+      summary: Désactiver un autre compte admin (AS-71)
+      description: |
+        Jamais son propre compte (400), et jamais s'il resterait moins de deux admins actifs (400) : une demande
+        de suppression a besoin d'un demandeur et d'un validateur. L'admin désactivé ne peut plus se connecter (`403 ACCOUNT_DISABLED`),
+        ses jetons sont refusés et ses demandes de suppression en attente (faites ou à valider) sont annulées.
+      operationId: deactivateAdmin
+      responses:
+        '200':
+          description: Compte désactivé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAccount'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
 components:
   securitySchemes:
     bearerAuth:
@@ -1012,6 +1249,14 @@ components:
       schema:
         type: string
         format: uuid
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      description: Identifiant d'une demande de suppression
+      schema:
+        type: string
+        format: uuid
     TradeId:
       name: tradeId
       in: path
@@ -1021,6 +1266,12 @@ components:
         format: uuid
 
   responses:
+    Conflict:
+      description: Conflit avec l'état actuel (voir `code`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     BadRequest:
       description: Requête invalide (`VALIDATION_ERROR`)
       content:
@@ -1129,6 +1380,10 @@ components:
         - TRADE_WITH_SELF
         - LAST_ADMIN
         - RATE_LIMITED
+        - ACCOUNT_DISABLED
+        - PASSWORD_CHANGE_REQUIRED
+        - PLAYER_ALREADY_REQUESTED
+        - REQUEST_NOT_PENDING
         - INTERNAL_ERROR
 
     PageMeta:
@@ -1259,7 +1514,7 @@ components:
 
     User:
       type: object
-      required: [id, pseudo, role, createdAt]
+      required: [id, pseudo, role, createdAt, mustChangePassword]
       properties:
         id:
           type: string
@@ -1271,6 +1526,9 @@ components:
         createdAt:
           type: string
           format: date-time
+        mustChangePassword:
+          type: boolean
+          description: Admin créé depuis le dashboard qui n'a pas encore remplacé son mot de passe provisoire (`PUT /me/password`). Toujours faux pour un joueur.
 
     Me:
       allOf:
@@ -1469,6 +1727,7 @@ components:
     PlayerSummary:
       type: object
       required: [id, pseudo]
+      description: Un joueur supprimé (AS-71) apparaît dans les échanges terminés avec l'identifiant `00000000-0000-0000-0000-000000000000` et le pseudo « Joueur supprimé ».
       properties:
         id:
           type: string
@@ -1962,3 +2221,236 @@ components:
                 minimum: 0
                 maximum: 1
                 description: Part réellement observée sur la période
+
+    Granularity:
+      type: string
+      enum: [DAY, MONTH]
+      default: DAY
+
+    AdminSummary:
+      type: object
+      required: [id, pseudo]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+
+    AdminPlayer:
+      type: object
+      required: [id, pseudo, login, createdAt, lastLoginAt, loginsInPeriod, totalCards, pendingDeletionRequestId]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        login:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+          description: null si aucune connexion depuis 13 mois
+        loginsInPeriod:
+          type: integer
+          minimum: 0
+        totalCards:
+          type: integer
+          minimum: 0
+          description: Exemplaires possédés, doublons compris
+        pendingDeletionRequestId:
+          type: [string, 'null']
+          format: uuid
+          description: Demande de suppression en attente qui concerne ce joueur
+
+    AdminPlayerPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items, period]
+          properties:
+            period:
+              $ref: '#/components/schemas/Period'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminPlayer'
+
+    CardCount:
+      type: object
+      required: [cards, distinctCreatures]
+      properties:
+        cards:
+          type: integer
+          minimum: 0
+          description: Exemplaires, doublons compris
+        distinctCreatures:
+          type: integer
+          minimum: 0
+
+    AdminPlayerDetail:
+      type: object
+      required: [player, cardsByRarity, cardsByFamily, logins]
+      properties:
+        player:
+          $ref: '#/components/schemas/AdminPlayer'
+        cardsByRarity:
+          type: array
+          description: Les quatre raretés, de la plus commune à la plus rare, 0 compris
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CardCount'
+              - type: object
+                required: [rarity]
+                properties:
+                  rarity:
+                    $ref: '#/components/schemas/RaritySummary'
+        cardsByFamily:
+          type: array
+          description: Les quatre familles, 0 compris
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CardCount'
+              - type: object
+                required: [family]
+                properties:
+                  family:
+                    $ref: '#/components/schemas/Family'
+        logins:
+          type: object
+          required: [granularity, points]
+          properties:
+            granularity:
+              $ref: '#/components/schemas/Granularity'
+            points:
+              type: array
+              description: Un point par jour (DAY) ou par mois (MONTH, date du 1er du mois) de la période, 0 compris
+              items:
+                $ref: '#/components/schemas/DailyCount'
+
+    DeletionRequestStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED]
+
+    DeletionRequest:
+      type: object
+      required: [id, status, requestedBy, validator, reason, accountCount, players, createdAt, expiresAt, decidedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/DeletionRequestStatus'
+        requestedBy:
+          $ref: '#/components/schemas/AdminSummary'
+        validator:
+          $ref: '#/components/schemas/AdminSummary'
+        reason:
+          type: [string, 'null']
+        accountCount:
+          type: integer
+          minimum: 1
+        players:
+          type: array
+          description: Vide une fois la demande validée (les joueurs supprimés ne sont pas gardés dans le journal)
+          items:
+            $ref: '#/components/schemas/PlayerSummary'
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: 7 jours après la création
+        decidedAt:
+          type: [string, 'null']
+          format: date-time
+
+    DeletionRequestPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/DeletionRequest'
+
+    DeletionRequestInput:
+      type: object
+      additionalProperties: false
+      required: [playerIds, validatorId]
+      properties:
+        playerIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        validatorId:
+          type: string
+          format: uuid
+          description: Autre admin actif, seul à pouvoir valider ou refuser
+        reason:
+          type: [string, 'null']
+          maxLength: 500
+
+    AdminAccount:
+      type: object
+      required: [id, pseudo, login, createdAt, createdBy, lastLoginAt, mustChangePassword, active, deactivatedAt, deactivatedBy]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        login:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          description: null pour le premier admin, créé au démarrage du serveur
+          oneOf:
+            - $ref: '#/components/schemas/AdminSummary'
+            - type: 'null'
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+        mustChangePassword:
+          type: boolean
+        active:
+          type: boolean
+        deactivatedAt:
+          type: [string, 'null']
+          format: date-time
+        deactivatedBy:
+          oneOf:
+            - $ref: '#/components/schemas/AdminSummary'
+            - type: 'null'
+
+    AdminAccountInput:
+      type: object
+      additionalProperties: false
+      required: [pseudo, login, temporaryPassword]
+      properties:
+        pseudo:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: '^[A-Za-z0-9_-]+$'
+        login:
+          type: string
+          minLength: 3
+          maxLength: 50
+        temporaryPassword:
+          type: string
+          minLength: 12
+          maxLength: 128
+          description: Mot de passe provisoire, à remplacer par le nouvel admin à sa première connexion

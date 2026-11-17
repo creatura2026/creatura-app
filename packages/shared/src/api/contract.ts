@@ -40,6 +40,16 @@ import type {
   AdminCreature,
   AdminCreatureInput,
   RarityChangeInput,
+  AdminAccount,
+  AdminAccountInput,
+  AdminPlayerDetail,
+  AdminPlayerPage,
+  AdminPlayerQuery,
+  AdminPlayersQuery,
+  DeletionRequest,
+  DeletionRequestInput,
+  DeletionRequestPage,
+  DeletionRequestsQuery,
 } from './types'
 
 export interface AuthApi {
@@ -110,4 +120,21 @@ export interface AdminApi extends AuthApi {
    * du fichier choisi est utilisé. Doit être en snake_case minuscules (validé côté serveur).
    */
   uploadSprite(creatureId: string, file: File, filename?: string): Promise<AdminCreature>
+
+  // ── Joueurs et admins (AS-71) ──
+  listAdminPlayers(query?: AdminPlayersQuery): Promise<AdminPlayerPage>
+  getAdminPlayer(playerId: string, query?: AdminPlayerQuery): Promise<AdminPlayerDetail>
+  listDeletionRequests(query?: DeletionRequestsQuery): Promise<DeletionRequestPage>
+  /** Seul l'admin choisi (`validatorId`) pourra valider ou refuser. */
+  createDeletionRequest(body: DeletionRequestInput): Promise<DeletionRequest>
+  /** Par le validateur : les joueurs sont supprimés tout de suite. */
+  approveDeletionRequest(requestId: string): Promise<DeletionRequest>
+  rejectDeletionRequest(requestId: string): Promise<DeletionRequest>
+  /** Par l'admin qui a fait la demande, tant qu'elle est en attente. */
+  cancelDeletionRequest(requestId: string): Promise<DeletionRequest>
+  listAdmins(): Promise<AdminAccount[]>
+  /** Nouvel admin avec un mot de passe provisoire, à remplacer à sa première connexion. */
+  createAdmin(body: AdminAccountInput): Promise<AdminAccount>
+  /** Jamais son propre compte ; ses demandes en attente sont annulées. */
+  deactivateAdmin(adminId: string): Promise<AdminAccount>
 }

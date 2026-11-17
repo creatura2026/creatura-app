@@ -544,7 +544,7 @@ export interface components {
             boosterId?: string;
         };
         /** @enum {string} */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "LAST_ADMIN" | "RATE_LIMITED" | "INTERNAL_ERROR";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "LAST_ADMIN" | "RATE_LIMITED" | "ACCOUNT_DISABLED" | "PASSWORD_CHANGE_REQUIRED" | "PLAYER_ALREADY_REQUESTED" | "REQUEST_NOT_PENDING" | "INTERNAL_ERROR";
         PageMeta: {
             page: number;
             pageSize: number;
@@ -617,6 +617,8 @@ export interface components {
             role: components["schemas"]["Role"];
             /** Format: date-time */
             createdAt: string;
+            /** @description Admin créé depuis le dashboard qui n'a pas encore remplacé son mot de passe provisoire (`PUT /me/password`). Toujours faux pour un joueur. */
+            mustChangePassword: boolean;
         };
         Me: components["schemas"]["User"] & {
             progress: components["schemas"]["CollectionProgress"];
@@ -974,6 +976,116 @@ export interface components {
                 /** @description Part réellement observée sur la période */
                 observedRate: number;
             }[];
+        };
+        /** @enum {string} */
+        Granularity: "DAY" | "MONTH";
+        AdminSummary: {
+            /** Format: uuid */
+            id: string;
+            pseudo: string;
+        };
+        AdminPlayer: {
+            /** Format: uuid */
+            id: string;
+            pseudo: string;
+            login: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description null si aucune connexion depuis 13 mois
+             */
+            lastLoginAt: string | null;
+            loginsInPeriod: number;
+            /** @description Exemplaires possédés, doublons compris */
+            totalCards: number;
+            /**
+             * Format: uuid
+             * @description Demande de suppression en attente qui concerne ce joueur
+             */
+            pendingDeletionRequestId: string | null;
+        };
+        AdminPlayerPage: components["schemas"]["PageMeta"] & {
+            period: components["schemas"]["Period"];
+            items: components["schemas"]["AdminPlayer"][];
+        };
+        CardCount: {
+            /** @description Exemplaires, doublons compris */
+            cards: number;
+            distinctCreatures: number;
+        };
+        AdminPlayerDetail: {
+            player: components["schemas"]["AdminPlayer"];
+            /** @description Les quatre raretés, de la plus commune à la plus rare, 0 compris */
+            cardsByRarity: (components["schemas"]["CardCount"] & {
+                rarity: components["schemas"]["RaritySummary"];
+            })[];
+            /** @description Les quatre familles, 0 compris */
+            cardsByFamily: (components["schemas"]["CardCount"] & {
+                family: components["schemas"]["Family"];
+            })[];
+            logins: {
+                granularity: components["schemas"]["Granularity"];
+                /** @description Un point par jour (DAY) ou par mois (MONTH, date du 1er du mois) de la période, 0 compris */
+                points: components["schemas"]["DailyCount"][];
+            };
+        };
+        /** @enum {string} */
+        DeletionRequestStatus: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+        DeletionRequest: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DeletionRequestStatus"];
+            requestedBy: components["schemas"]["AdminSummary"];
+            validator: components["schemas"]["AdminSummary"];
+            reason: string | null;
+            accountCount: number;
+            /** @description Vide une fois la demande validée (les joueurs supprimés ne sont pas gardés dans le journal) */
+            players: components["schemas"]["PlayerSummary"][];
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description 7 jours après la création
+             */
+            expiresAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+        };
+        DeletionRequestPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["DeletionRequest"][];
+        };
+        DeletionRequestInput: {
+            playerIds: string[];
+            /**
+             * Format: uuid
+             * @description Autre admin actif, seul à pouvoir valider ou refuser
+             */
+            validatorId: string;
+            reason?: string | null;
+        };
+        AdminAccount: {
+            /** Format: uuid */
+            id: string;
+            pseudo: string;
+            login: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description null pour le premier admin, créé au démarrage du serveur */
+            createdBy: components["schemas"]["AdminSummary"] | null;
+            /** Format: date-time */
+            lastLoginAt: string | null;
+            mustChangePassword: boolean;
+            active: boolean;
+            /** Format: date-time */
+            deactivatedAt: string | null;
+            deactivatedBy: components["schemas"]["AdminSummary"] | null;
+        };
+        AdminAccountInput: {
+            pseudo: string;
+            login: string;
+            /** @description Mot de passe provisoire, à remplacer par le nouvel admin à sa première connexion */
+            temporaryPassword: string;
         };
     };
     responses: {

@@ -32,7 +32,8 @@ def test_register_and_login(client):
     r = register(client)
     assert r.status_code == 201
     body = r.json()
-    assert set(body) == {"id", "pseudo", "role", "createdAt"}
+    assert set(body) == {"id", "pseudo", "role", "createdAt", "mustChangePassword"}
+    assert body["mustChangePassword"] is False
     assert body["pseudo"] == "Lina" and body["role"] == "PLAYER"
 
     # Le mot de passe est stocké en bcrypt.

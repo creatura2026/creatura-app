@@ -8,6 +8,7 @@ const USER = {
   pseudo: 'Alice',
   role: 'PLAYER',
   createdAt: '2026-11-10T08:00:00Z',
+  mustChangePassword: false,
 } as const
 
 function memorySession(accessToken = 'access-1'): SessionStore & { current: Session | null } {

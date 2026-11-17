@@ -1,4 +1,4 @@
-"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_ à 08_).
+"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_ à 10_).
 
 Le schéma est la source de vérité : le back ne crée ni ne modifie aucune table
 (pas de `create_all`). Les noms suivent la base : français, snake_case, sans accents.
@@ -9,7 +9,7 @@ import enum
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, SmallInteger, String, Text, Uuid
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, SmallInteger, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -76,6 +76,11 @@ class Utilisateur(Base):
         """Pseudo affiché aux joueurs : « Joueur supprimé » pour un compte supprimé (le suffixe
         stocké en base ne sert qu'à garder les pseudos uniques)."""
         return "Joueur supprimé" if self.supprime_le is not None else self.pseudo
+    # Comptes admin (10_evolution_joueurs_admin.sql)
+    cree_par: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
+    mot_de_passe_provisoire: Mapped[bool] = mapped_column(Boolean, default=False)
+    desactive_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    desactive_par: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
 
 
 class Creature(Base):
@@ -113,8 +118,9 @@ class Echange(Base):
     __tablename__ = "echange"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    proposeur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
-    destinataire_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    # NULL : joueur supprimé, l'échange terminé reste pour l'autre joueur (10_evolution_…)
+    proposeur_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
+    destinataire_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
     statut: Mapped[Statut] = mapped_column(_varchar_enum(Statut, 12), default=Statut.EN_ATTENTE)
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     decide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -124,8 +130,8 @@ class Echange(Base):
     destinataire_pret: Mapped[bool] = mapped_column(Boolean, default=False)
     creature_cherchee_id: Mapped[int | None] = mapped_column(ForeignKey("creature.id"))
 
-    proposeur: Mapped[Utilisateur] = relationship(foreign_keys=[proposeur_id], lazy="joined")
-    destinataire: Mapped[Utilisateur] = relationship(foreign_keys=[destinataire_id], lazy="joined")
+    proposeur: Mapped[Utilisateur | None] = relationship(foreign_keys=[proposeur_id], lazy="joined")
+    destinataire: Mapped[Utilisateur | None] = relationship(foreign_keys=[destinataire_id], lazy="joined")
     creature_cherchee: Mapped["Creature | None"] = relationship(lazy="joined")
     # Ordre de pose sur le tapis : pas de date dans echange_ligne, on garde l'ordre du catalogue.
     lignes: Mapped[list["EchangeLigne"]] = relationship(
@@ -204,3 +210,56 @@ class BoosterCarte(Base):
     creature_id: Mapped[int] = mapped_column(ForeignKey("creature.id"))
     rarete: Mapped[Rarete] = mapped_column(_varchar_enum(Rarete, 20))
     motif: Mapped[MotifTirage] = mapped_column(_varchar_enum(MotifTirage, 30))
+
+
+# ── Joueurs et administrateurs dans le dashboard (10_evolution_joueurs_admin.sql) ──
+
+
+class Connexion(Base):
+    """Une ligne par connexion réussie (login), gardée 13 mois."""
+
+    __tablename__ = "connexion"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    utilisateur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class StatutDemande(str, enum.Enum):
+    EN_ATTENTE = "EN_ATTENTE"
+    VALIDEE = "VALIDEE"
+    REFUSEE = "REFUSEE"
+    ANNULEE = "ANNULEE"
+    EXPIREE = "EXPIREE"
+
+
+class DemandeSuppressionJoueur(Base):
+    __tablename__ = "demande_suppression_joueur"
+
+    demande_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("demande_suppression.id"), primary_key=True)
+    utilisateur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"), primary_key=True)
+
+    joueur: Mapped[Utilisateur] = relationship(lazy="joined")
+
+
+class DemandeSuppression(Base):
+    """Suppression de joueurs demandée par un admin, validée ou refusée par l'admin choisi.
+
+    Créée, traitée et annulée par les fonctions SQL creatura_*_demande : le back ne l'écrit pas
+    directement.
+    """
+
+    __tablename__ = "demande_suppression"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    demande_par: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    valideur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    motif: Mapped[str | None] = mapped_column(String(500))
+    statut: Mapped[StatutDemande] = mapped_column(_varchar_enum(StatutDemande, 10))
+    nombre_comptes: Mapped[int] = mapped_column(Integer)
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    traite_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    demandeur: Mapped[Utilisateur] = relationship(foreign_keys=[demande_par], lazy="joined")
+    valideur: Mapped[Utilisateur] = relationship(foreign_keys=[valideur_id], lazy="joined")
+    joueurs: Mapped[list[DemandeSuppressionJoueur]] = relationship(lazy="selectin")

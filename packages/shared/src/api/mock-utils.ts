@@ -16,6 +16,10 @@ const TITLES: Record<ErrorCode, string> = {
   TRADE_WITH_SELF: 'Échange avec soi-même',
   LAST_ADMIN: 'Dernier administrateur',
   RATE_LIMITED: 'Trop de tentatives',
+  ACCOUNT_DISABLED: 'Compte désactivé',
+  PASSWORD_CHANGE_REQUIRED: 'Mot de passe à changer',
+  PLAYER_ALREADY_REQUESTED: 'Suppression déjà demandée',
+  REQUEST_NOT_PENDING: 'Demande close',
   INTERNAL_ERROR: 'Erreur interne',
 }
 
@@ -34,6 +38,10 @@ const STATUS: Record<ErrorCode, number> = {
   TRADE_WITH_SELF: 422,
   LAST_ADMIN: 409,
   RATE_LIMITED: 429,
+  ACCOUNT_DISABLED: 403,
+  PASSWORD_CHANGE_REQUIRED: 403,
+  PLAYER_ALREADY_REQUESTED: 409,
+  REQUEST_NOT_PENDING: 409,
   INTERNAL_ERROR: 500,
 }
 

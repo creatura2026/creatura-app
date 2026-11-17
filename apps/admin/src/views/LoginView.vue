@@ -46,6 +46,7 @@ const onSubmit = handleSubmit(async (values) => {
   try {
     const user = await auth.login(values)
     if (user.role !== 'ADMIN') return router.replace({ name: 'forbidden' })
+    if (user.mustChangePassword) return router.replace({ name: 'change-password' })
     const redirect =
       typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
         ? route.query.redirect
@@ -101,6 +102,9 @@ const onSubmit = handleSubmit(async (values) => {
           <div class="mt-2 flex flex-wrap gap-2">
             <button type="button" class="chip" @click="setValues(DEMO_ACCOUNTS.admin)">
               Administrateur
+            </button>
+            <button type="button" class="chip" @click="setValues(DEMO_ACCOUNTS.admin2)">
+              2e administrateur
             </button>
             <button type="button" class="chip" @click="setValues(DEMO_ACCOUNTS.player)">
               Joueur (refusé)

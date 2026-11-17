@@ -6,6 +6,7 @@ import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import PixelIcon, { type IconName } from '@creatura/shared/ui/PixelIcon.vue'
 
 import { USE_MOCK_API } from '@/api'
+import { useRequestsToValidate } from '@/api/queries'
 import { useAuthStore } from '@/stores/auth'
 
 const NAV: { name: string; label: string; uc: string; icon: IconName }[] = [
@@ -14,6 +15,8 @@ const NAV: { name: string; label: string; uc: string; icon: IconName }[] = [
   { name: 'rarities', label: 'Raretés', uc: 'UC-14', icon: 'gem' },
   { name: 'creatures', label: 'Cartes', uc: '', icon: 'collection' },
   { name: 'settings', label: 'Réglages booster', uc: '', icon: 'booster' },
+  { name: 'players', label: 'Joueurs', uc: '', icon: 'user' },
+  { name: 'admins', label: 'Administrateurs', uc: '', icon: 'lock' },
 ]
 
 const auth = useAuthStore()
@@ -21,6 +24,8 @@ const route = useRoute()
 const router = useRouter()
 const queryClient = useQueryClient()
 const menuOpen = ref(false)
+/** Demandes de suppression qui attendent ma décision (AS-71). */
+const toValidate = useRequestsToValidate()
 
 watch(
   () => route.fullPath,
@@ -87,7 +92,14 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
         >
           <PixelIcon :name="item.icon" :size="20" />
           <span class="flex-1">{{ item.label }}</span>
-          <span class="text-xs opacity-70">{{ item.uc }}</span>
+          <span
+            v-if="item.name === 'players' && toValidate.data.value?.totalItems"
+            class="border-2 border-current bg-sun px-1.5 text-xs font-bold text-ink"
+            :aria-label="`${toValidate.data.value.totalItems} demande(s) de suppression à valider`"
+          >
+            {{ toValidate.data.value.totalItems }}
+          </span>
+          <span v-else class="text-xs opacity-70">{{ item.uc }}</span>
         </RouterLink>
       </nav>
       <div class="border-t-2 border-cream/20 p-4">

@@ -20,7 +20,16 @@ from sqlalchemy.orm import Session
 from app import bus
 from app.controllers.auth import _tokens
 from app.errors import Conflict, field_error
-from app.models import Collection, Creature, Echange, Role, Statut, Utilisateur
+from app.models import (
+    Collection,
+    Creature,
+    DemandeSuppression,
+    Echange,
+    Role,
+    Statut,
+    StatutDemande,
+    Utilisateur,
+)
 from app.schemas.auth import AuthTokensOut
 from app.security import hash_password, verify_password
 
@@ -39,6 +48,7 @@ def change_password(db: Session, me: Utilisateur, current: str, new: str) -> Aut
     if verify_password(new, me.mot_de_passe_hash):
         raise field_error("VALIDATION_ERROR", "newPassword", "Le nouveau mot de passe doit être différent de l'actuel.")
     me.mot_de_passe_hash = hash_password(new)
+    me.mot_de_passe_provisoire = False  # admin créé depuis le dashboard (AS-71) : il a choisi le sien
     # Jetons émis avant cette seconde : refusés (dependencies.user_from_token). Les nouveaux
     # jetons de cette session ont un `iat` égal ou postérieur : ils restent valides.
     me.jetons_depuis = func.date_trunc("second", func.now())
@@ -54,9 +64,14 @@ def delete_account(db: Session, me: Utilisateur, password: str) -> list[uuid.UUI
     if me.role == Role.ADMIN:
         # Verrou sur les comptes admin : deux admins qui se suppriment en même temps ne peuvent
         # pas laisser le jeu sans administrateur.
+        # Un admin désactivé par un autre admin (AS-71) ne compte pas : il ne peut plus se connecter.
         admins = db.scalars(
             select(Utilisateur.id)
-            .where(Utilisateur.role == Role.ADMIN, Utilisateur.supprime_le.is_(None))
+            .where(
+                Utilisateur.role == Role.ADMIN,
+                Utilisateur.supprime_le.is_(None),
+                Utilisateur.desactive_le.is_(None),
+            )
             .with_for_update()
         ).all()
         if len([a for a in admins if a != me.id]) == 0:
@@ -64,6 +79,16 @@ def delete_account(db: Session, me: Utilisateur, password: str) -> list[uuid.UUI
                 "Vous êtes le dernier administrateur : nommez-en un autre avant de supprimer votre compte.",
                 "LAST_ADMIN",
             )
+
+        # Ses demandes de suppression de joueurs en attente (faites ou à valider) sont annulées.
+        db.execute(
+            update(DemandeSuppression)
+            .where(
+                DemandeSuppression.statut == StatutDemande.EN_ATTENTE,
+                or_(DemandeSuppression.demande_par == me.id, DemandeSuppression.valideur_id == me.id),
+            )
+            .values(statut=StatutDemande.ANNULEE, traite_le=func.now())
+        )
 
     # Échanges en cours : abandonnés, comme s'il avait quitté chaque salle.
     pending = db.scalars(

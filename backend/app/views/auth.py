@@ -69,3 +69,4 @@ async def delete_account(data: AccountDeleteIn, user: CurrentUser, db: DbSession
 def me(user: CurrentUser, db: DbSession):
     """Profil du joueur connecté, progression de sa collection et disponibilité du booster."""
     return auth.me(db, user)
+

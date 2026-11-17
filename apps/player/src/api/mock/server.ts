@@ -44,6 +44,7 @@ const toUser = (u: MockUser): User => ({
   pseudo: u.pseudo,
   role: u.role,
   createdAt: u.createdAt,
+  mustChangePassword: false,
 })
 
 function progressOf(userId: string): CollectionProgress {
