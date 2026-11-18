@@ -180,9 +180,15 @@ export interface ListMyGiftsQuery {
   pageSize?: number
 }
 
-/** Mise à jour d'une carte par l'admin (immédiate) ; champs omis inchangés. */
+/**
+ * Mise à jour d'une carte par l'admin ; champs omis inchangés.
+ * Nom, description, famille et rareté s'appliquent tout de suite ; le nombre d'exemplaires
+ * d'une édition limitée (légendaire) est différé au prochain minuit et ne peut qu'augmenter.
+ */
 export interface AdminCreatureUpdate {
   name?: string
   description?: string
   family?: string
+  rarity?: string
+  stock?: number | null
 }

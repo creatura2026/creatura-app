@@ -1067,8 +1067,11 @@ paths:
     patch:
       tags: [Administration]
       operationId: updateCreature
-      summary: Modifier le nom, la description et/ou la famille d'une carte (immédiat)
-      description: Les champs omis restent inchangés. La rareté passe par `/rarity` (prochain minuit), l'image par `/sprite`.
+      summary: Modifier une carte (nom, description, famille, rareté immédiats ; stock à minuit)
+      description: |
+        Nom, description, famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une
+        édition limitée (légendaire) est différé au prochain minuit et ne peut qu'augmenter : il est
+        immédiat seulement quand la carte devient légendaire. Champs omis inchangés ; l'image par `/sprite`.
       security: [{bearerAuth: []}]
       requestBody:
         required: true
@@ -1088,31 +1091,10 @@ paths:
   /admin/creatures/{creatureId}/rarity:
     parameters:
       - {name: creatureId, in: path, required: true, schema: {type: string}}
-    put:
-      tags: [Administration]
-      operationId: scheduleRarityChange
-      summary: Change la rareté d'une carte au prochain minuit
-      description: Les exemplaires déjà possédés restent dans les collections. Vers légendaire, `stock` nouveaux exemplaires sont à tirer ; une légendaire qui change de rareté devient illimitée.
-      security: [{bearerAuth: []}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/RarityChangeInput'}
-      responses:
-        '200':
-          description: Changement prévu (`scheduledChange`)
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/AdminCreature'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
     delete:
       tags: [Administration]
       operationId: cancelRarityChange
-      summary: Annule le changement de rareté prévu
+      summary: Annule la hausse d'exemplaires prévue au prochain minuit
       security: [{bearerAuth: []}]
       responses:
         '200':
@@ -2352,12 +2334,13 @@ components:
             stockRemaining: {type: [integer, 'null']}
             availableFrom: {type: string, format: date, description: Jour où la carte devient visible et tirable}
             scheduledChange:
+              description: Hausse d'exemplaires d'une édition limitée prévue au prochain minuit, sinon null
               oneOf:
                 - type: object
                   required: [rarity, stock, effectiveFrom]
                   properties:
                     rarity: {$ref: '#/components/schemas/RaritySummary'}
-                    stock: {type: [integer, 'null']}
+                    stock: {type: [integer, 'null'], description: Nouveau total d'exemplaires visé}
                     effectiveFrom: {type: string, format: date}
                 - type: 'null'
 
@@ -2412,22 +2395,20 @@ components:
           properties:
             items: {type: array, items: {$ref: '#/components/schemas/Gift'}}
 
-    RarityChangeInput:
-      type: object
-      required: [rarity]
-      additionalProperties: false
-      properties:
-        rarity: {type: string, enum: [COMMON, UNCOMMON, RARE, LEGENDARY]}
-        stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Exemplaires à tirer, obligatoire vers légendaire}
-
     AdminCreatureUpdate:
       type: object
       additionalProperties: false
-      description: Modification immédiate d'une carte ; chaque champ est facultatif (omis = inchangé).
+      description: >-
+        Modification d'une carte ; chaque champ est facultatif (omis = inchangé). Nom, description,
+        famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une édition limitée
+        est immédiat quand la carte devient légendaire, puis différé au prochain minuit et en hausse
+        seulement (une baisse est refusée).
       properties:
         name: {type: string, minLength: 2, maxLength: 50}
         description: {type: string, maxLength: 500}
         family: {type: string, enum: [NATURE, CRISTAL, BRUME, LUEUR]}
+        rarity: {type: string, enum: [COMMON, UNCOMMON, RARE, LEGENDARY]}
+        stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Total d'exemplaires de l'édition limitée (légendaire)}
 
     RarityWeights:
       type: object

@@ -43,7 +43,6 @@ import type {
   User,
   AdminCreature,
   AdminCreatureInput,
-  RarityChangeInput,
   AdminCreatureUpdate,
   AdminAccount,
   AdminAccountInput,
@@ -130,10 +129,13 @@ export interface AdminApi extends AuthApi {
   listAdminCreatures(): Promise<AdminCreature[]>
   /** Nouvelle carte, visible et tirable au prochain minuit. */
   createAdminCreature(body: AdminCreatureInput): Promise<AdminCreature>
-  /** Nom, description et/ou famille d'une carte existante, tout de suite (champs omis inchangés). */
+  /**
+   * Met à jour une carte existante. Nom, description, famille et rareté s'appliquent tout de suite ;
+   * le nombre d'exemplaires d'une édition limitée est différé au prochain minuit et ne peut
+   * qu'augmenter (champs omis inchangés).
+   */
   updateCreature(creatureId: string, body: AdminCreatureUpdate): Promise<AdminCreature>
-  /** Nouvelle rareté d'une carte, appliquée au prochain minuit. */
-  scheduleRarityChange(creatureId: string, body: RarityChangeInput): Promise<AdminCreature>
+  /** Annule la hausse d'exemplaires prévue au prochain minuit. */
   cancelRarityChange(creatureId: string): Promise<AdminCreature>
   /**
    * Upload un sprite PNG pour une carte et met à jour creature.image.
