@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import imgLogin from '@/assets/guide-images/Admin_login_Page.png'
 import imgDashboard from '@/assets/guide-images/Admin_Dashboard_Page.png'
 import imgCartesList from '@/assets/guide-images/Liste_Des_Cartes.png'
@@ -11,7 +12,13 @@ import imgSuppression from '@/assets/guide-images/Demande_suppression.png'
 import imgAdminList from '@/assets/guide-images/admin_list.png'
 import imgBooster from '@/assets/guide-images/modif_booster.png'
 
+import { api } from '@/api'
 import { useRoute } from 'vue-router'
+
+// Valide la session au chargement : un token expiré → 401 → refresh échoue → UNAUTHENTICATED
+// → le gestionnaire global (main.ts queryCache.onError) efface la session et redirige vers login.
+useQuery({ queryKey: ['me'], queryFn: () => api.getMe() })
+
 const route = useRoute()
 const anchor = (id: string) => ({ hash: '#' + id, query: route.query })
 </script>
