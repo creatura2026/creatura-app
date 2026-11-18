@@ -43,6 +43,12 @@ const router = createRouter({
       meta: { guestOnly: true, title: 'Créer un compte' },
     },
     {
+      path: '/guide',
+      name: 'guide',
+      component: () => import('@/views/GuideView.vue'),
+      meta: { title: 'Guide du joueur' },
+    },
+    {
       path: '/',
       component: AppShell,
       meta: { requiresAuth: true },
