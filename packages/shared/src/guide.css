@@ -16,7 +16,7 @@
 .guide h2 {
   font-size: 1.5rem;
   font-weight: 800;
-  border-left: 5px solid var(--guide-accent, var(--color-ink, #1a1a2e));
+  border-left: 5px solid var(--guide-accent, #6366f1);
   padding-left: 0.75rem;
   margin-bottom: 1.25rem;
   scroll-margin-top: 1.5rem;
