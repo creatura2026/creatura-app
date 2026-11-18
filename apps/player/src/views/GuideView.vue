@@ -22,7 +22,7 @@
       <p>Si vous n'avez pas encore de compte, rendez-vous sur la page d'accueil publique du site.
         Vous y trouverez deux boutons : <strong>Créer un compte</strong> et <strong>J'ai déjà un compte</strong>.</p>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/01-accueil-public.png'" alt="Page d'accueil publique de Créatura" />
+        <img :src="'/guide-images/01-accueil-public.png'" alt="Page d'accueil publique de Créatura" />
         <figcaption>Page d'accueil — boutons de création de compte et de connexion</figcaption>
       </figure>
       <p>Cliquez sur <strong>Créer un compte</strong>, puis remplissez le formulaire :</p>
@@ -33,7 +33,7 @@
         <li>Cliquez sur <strong>Créer mon compte</strong> pour valider.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/02-inscription.png'" alt="Formulaire d'inscription" />
+        <img :src="'/guide-images/02-inscription.png'" alt="Formulaire d'inscription" />
         <figcaption>Formulaire d'inscription — remplissez tous les champs puis validez</figcaption>
       </figure>
       <div class="tip mint">
@@ -52,7 +52,7 @@
         <li>Cliquez sur <strong>Se connecter</strong>.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/03-connexion.png'" alt="Page de connexion" />
+        <img :src="'/guide-images/03-connexion.png'" alt="Page de connexion" />
         <figcaption>Page de connexion — entrez vos identifiants puis validez</figcaption>
       </figure>
       <div class="tip butter">
@@ -71,7 +71,7 @@
         <li><strong>Catalogue</strong> — accès rapide à toutes les cartes.</li>
       </ul>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/04-accueil.png'" alt="Tableau de bord" />
+        <img :src="'/guide-images/04-accueil.png'" alt="Tableau de bord" />
         <figcaption>Tableau de bord après connexion</figcaption>
       </figure>
     </section>
@@ -87,7 +87,7 @@
         <li>Une fois toutes les cartes affichées, elles sont ajoutées à votre collection.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/05-booster.png'" alt="Page booster quotidien" />
+        <img :src="'/guide-images/05-booster.png'" alt="Page booster quotidien" />
         <figcaption>Page booster — ouverture du booster du jour</figcaption>
       </figure>
       <div class="tip sky">
@@ -106,14 +106,14 @@
         <li><strong>Rareté</strong> — Commune, Peu commune, Rare, Très rare, Légendaire.</li>
       </ul>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/06-catalogue.png'" alt="Catalogue des créatures" />
+        <img :src="'/guide-images/06-catalogue.png'" alt="Catalogue des créatures" />
         <figcaption>Catalogue — cartes non possédées en gris, possédées en couleur</figcaption>
       </figure>
       <h3>Détail d'une créature</h3>
       <p>Cliquez sur une carte pour voir sa fiche : image, famille, rareté, description, et la liste des
         joueurs qui la possèdent (utile pour proposer un échange).</p>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/07-creature-detail.png'" alt="Fiche détail d'une créature" />
+        <img :src="'/guide-images/07-creature-detail.png'" alt="Fiche détail d'une créature" />
         <figcaption>Fiche détail d'une créature</figcaption>
       </figure>
     </section>
@@ -122,7 +122,7 @@
       <h2>6. Ma collection</h2>
       <p>La collection regroupe toutes les cartes que vous avez obtenues, y compris les doublons.</p>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/08-collection.png'" alt="Ma collection" />
+        <img :src="'/guide-images/08-collection.png'" alt="Ma collection" />
         <figcaption>Ma collection — progression et cartes possédées</figcaption>
       </figure>
       <ul>
@@ -142,7 +142,7 @@
       <p>Depuis <span class="nav-pill">Échanges</span>, retrouvez tous vos échanges actifs.
         Ceux qui <strong>attendent votre réponse</strong> apparaissent en premier.</p>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/09-echanges-liste.png'" alt="Liste des échanges en cours" />
+        <img :src="'/guide-images/09-echanges-liste.png'" alt="Liste des échanges en cours" />
         <figcaption>Liste des échanges en cours</figcaption>
       </figure>
       <h3>Ouvrir un nouvel échange — par joueur</h3>
@@ -153,7 +153,7 @@
         <li>Cliquez sur <strong>Échanger avec [pseudo]</strong> pour ouvrir la salle.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/10-nouvel-echange-joueur.png'" alt="Ouvrir un échange par joueur" />
+        <img :src="'/guide-images/10-nouvel-echange-joueur.png'" alt="Ouvrir un échange par joueur" />
         <figcaption>Mode « Par joueur » — cartes du joueur cible</figcaption>
       </figure>
       <h3>Ouvrir un nouvel échange — par carte</h3>
@@ -163,7 +163,7 @@
         <li>Cliquez sur <strong>Échanger avec [pseudo]</strong> pour lancer la salle d'échange.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/11-nouvel-echange-carte.png'" alt="Ouvrir un échange par carte" />
+        <img :src="'/guide-images/11-nouvel-echange-carte.png'" alt="Ouvrir un échange par carte" />
         <figcaption>Mode « Par carte » — joueurs possédant la créature souhaitée</figcaption>
       </figure>
     </section>
@@ -178,7 +178,7 @@
         <li>Les cartes sont échangées instantanément et vos collections sont mises à jour.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/12-salle-echange.png'" alt="Salle d'échange" />
+        <img :src="'/guide-images/12-salle-echange.png'" alt="Salle d'échange" />
         <figcaption>Salle d'échange — chaque joueur pose sa carte avant de confirmer</figcaption>
       </figure>
       <div class="tip salmon">
@@ -198,7 +198,7 @@
         <li><strong>Se déconnecter</strong> — ferme votre session sur cet appareil uniquement.</li>
       </ul>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/13-profil.png'" alt="Page profil" />
+        <img :src="'/guide-images/13-profil.png'" alt="Page profil" />
         <figcaption>Page profil — informations, progression et déconnexion</figcaption>
       </figure>
     </section>
@@ -214,7 +214,7 @@
         <li>Cliquez sur <strong>Changer le mot de passe</strong>.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/14-securite-mdp.png'" alt="Formulaire de changement de mot de passe" />
+        <img :src="'/guide-images/14-securite-mdp.png'" alt="Formulaire de changement de mot de passe" />
         <figcaption>Section sécurité — formulaire de changement de mot de passe</figcaption>
       </figure>
       <div class="tip butter">
@@ -242,7 +242,7 @@
         L'installateur (<code>.exe</code>) est disponible dans la section
         <a href="/telechargements/">Téléchargements</a>.</p>
       <figure class="screenshot">
-        <img :src="'/guides/joueur/images/15-telechargement-windows.png'" alt="Téléchargement Windows" />
+        <img :src="'/guide-images/15-telechargement-windows.png'" alt="Téléchargement Windows" />
         <figcaption>Bouton de téléchargement Windows sur la page d'accueil</figcaption>
       </figure>
       <h3>Application Android</h3>
@@ -256,167 +256,6 @@
   </div>
 </template>
 
-<style scoped>
-.guide {
-  max-width: 860px;
-  font-size: 1rem;
-  line-height: 1.6;
-}
-
-.guide section {
-  margin-bottom: 3rem;
-}
-
-.guide h2 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  border-left: 5px solid var(--color-sun, #fcd34d);
-  padding-left: 0.75rem;
-  margin-bottom: 1.25rem;
-  scroll-margin-top: 1.5rem;
-}
-
-.guide h3 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin: 1.25rem 0 0.5rem;
-}
-
-.guide p {
-  margin-bottom: 0.75rem;
-}
-
-.guide ul,
-.guide ol {
-  padding-left: 1.4rem;
-  margin-bottom: 0.75rem;
-}
-
-.guide li {
-  margin: 0.3rem 0;
-}
-
-.toc {
-  border: 2px solid var(--color-ink, #1a1a2e);
-  background: var(--color-mist, #f1f5f9);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 2.5rem;
-}
-
-.toc h2 {
-  border: none;
-  padding: 0;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin-bottom: 0.75rem;
-}
-
-.toc ol {
-  padding-left: 1.25rem;
-}
-
-.toc li {
-  margin: 0.5rem 0;
-}
-
-.toc a {
-  color: var(--color-ink, #1a1a2e);
-  font-weight: 600;
-  text-underline-offset: 3px;
-}
-
-.steps {
-  counter-reset: step;
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.steps li {
-  counter-increment: step;
-  display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
-  align-items: flex-start;
-  margin: 0;
-}
-
-.steps li::before {
-  content: counter(step);
-  font-family: 'Courier New', monospace;
-  font-weight: 900;
-  font-size: 0.85rem;
-  background: var(--color-ink, #1a1a2e);
-  color: #faf8f2;
-  min-width: 2rem;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.tip {
-  border: 2px solid var(--color-ink, #1a1a2e);
-  padding: 0.9rem 1.1rem;
-  margin: 1rem 0;
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-}
-
-.tip.mint   { background: #c8f0d8; }
-.tip.butter { background: #fde68a; }
-.tip.salmon { background: #fecaca; }
-.tip.sky    { background: #bae6fd; }
-
-.tip-icon {
-  font-size: 1.25rem;
-  flex-shrink: 0;
-  line-height: 1.6;
-}
-
-.tip p {
-  margin: 0;
-}
-
-.screenshot {
-  border: 2px dashed var(--color-ink, #1a1a2e);
-  background: #f1f5f9;
-  padding: 1.25rem;
-  text-align: center;
-  margin: 1.25rem 0;
-}
-
-.screenshot img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
-  border: 2px solid var(--color-ink, #1a1a2e);
-}
-
-.screenshot figcaption {
-  margin-top: 0.5rem;
-  font-style: italic;
-  font-size: 0.875rem;
-  color: #64748b;
-}
-
-.nav-pill {
-  display: inline-block;
-  border: 2px solid var(--color-ink, #1a1a2e);
-  background: var(--color-ink, #1a1a2e);
-  color: #faf8f2;
-  font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
-  padding: 0.15rem 0.55rem;
-  letter-spacing: 0.05em;
-  vertical-align: middle;
-}
+<style>
+.guide { --guide-accent: var(--color-sun, #fcd34d); }
 </style>
