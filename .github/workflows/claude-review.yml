@@ -1,0 +1,86 @@
+# =============================================================================
+# CREATURA - Revue automatique des pull requests par Claude (agent IA)
+#
+# À chaque ouverture ou mise à jour d'une PR, l'action officielle
+# `anthropics/claude-code-action` lance Claude qui relit le diff et publie sa
+# revue directement sur la PR : un commentaire de synthèse (`gh pr comment`) et
+# des commentaires en ligne sur les lignes concernées.
+#
+# Authentification : abonnement Claude (Pro/Max), via un jeton OAuth — pas de
+# clé API ni de coût facturé à part.
+#
+# Prérequis (une seule fois) :
+#   1. Générer le jeton depuis un poste connecté à ton compte Claude :
+#        claude setup-token
+#      (copie le jeton affiché). `claude /install-github-app` fait aussi tout
+#      l'assistant et pose le secret pour toi.
+#   2. L'enregistrer comme secret du dépôt :
+#        Settings → Secrets and variables → Actions → New repository secret
+#        Nom : CLAUDE_CODE_OAUTH_TOKEN — valeur : le jeton généré.
+#   Aucun accès AWS n'est utilisé ici (voir docs/ci-cd.md).
+#
+# Les PR issues d'un fork n'ont pas accès aux secrets : la revue y est ignorée.
+# =============================================================================
+name: Revue IA des PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Claude lit le code et écrit sur la PR (commentaires) ; rien d'autre.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  # Une nouvelle version de la PR annule la revue en cours.
+  group: revue-ia-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  revue:
+    name: Revue de la PR par Claude
+    runs-on: ubuntu-latest
+    # On saute les brouillons et les PR venues d'un fork (pas de secret dispo).
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Revue Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Abonnement Claude (jeton OAuth via `claude setup-token`), pas de clé API.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Dépôt : ${{ github.repository }}
+            PR numéro : ${{ github.event.pull_request.number }}
+
+            Tu es un relecteur de code pour le projet Créatura (monorepo pnpm :
+            `apps/player` + `apps/admin` en Vue 3 / TanStack Query, `packages/shared`,
+            `backend` en FastAPI, `db/init` en SQL). La branche de la PR est déjà
+            récupérée dans le répertoire courant.
+
+            Relis le diff de la PR et rédige une revue EN FRANÇAIS, concise et utile.
+            Concentre-toi sur :
+              - les bugs et cas limites (logique, états d'erreur, concurrence) ;
+              - la sécurité (authz/authn, injection, fuite de données, secrets) ;
+              - la cohérence contrat-first : `creatura-api.openapi.yaml` ↔
+                `packages/shared/src/api` (`schema.d.ts` est édité à la main, jamais
+                régénéré) ↔ back ↔ mocks ;
+              - les migrations `db/init/NN_*.sql` (idempotentes, rejouées à chaque
+                lancement) et l'invariante de stock des légendaires ;
+              - la performance et la lisibilité, sans réécrire le style.
+            Signale ce qui est bloquant en priorité ; ne te disperse pas sur les
+            détails cosmétiques. Si la PR est saine, dis-le clairement.
+
+            Publie uniquement sur GitHub (ne rends pas la revue sous forme de message) :
+              - `gh pr comment` pour la synthèse générale ;
+              - `mcp__github_inline_comment__create_inline_comment` (avec
+                `confirmed: true`) pour chaque remarque liée à des lignes précises.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

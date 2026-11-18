@@ -9,7 +9,6 @@ import type {
   DeletionRequestInput,
   DeletionRequestsQuery,
   Period,
-  RarityChangeInput,
   AdminCreatureUpdate,
   UpdateBoosterSettingsRequest,
 } from '@creatura/shared/api/types'
@@ -82,15 +81,6 @@ export function useUpdateCreature() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: AdminCreatureUpdate }) =>
       api.updateCreature(id, body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
-  })
-}
-
-export function useScheduleRarityChange() {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: RarityChangeInput }) =>
-      api.scheduleRarityChange(id, body),
     onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
   })
 }

@@ -23,7 +23,6 @@ import {
   useAdminCreatures,
   useCancelRarityChange,
   useCreateCreature,
-  useScheduleRarityChange,
   useUpdateCreature,
   useUploadSprite,
 } from '@/api/queries'
@@ -51,7 +50,6 @@ const RARITY_SHORT: Record<string, string> = {
 const { data: creatures, isPending, error, refetch } = useAdminCreatures()
 const create = useCreateCreature()
 const update = useUpdateCreature()
-const schedule = useScheduleRarityChange()
 const cancel = useCancelRarityChange()
 const uploadSprite = useUploadSprite()
 
@@ -202,12 +200,19 @@ function startEdit(c: AdminCreature) {
   edit.name = c.name
   edit.description = c.description ?? ''
   edit.family = c.family.code
-  // On repart du changement prévu s'il y en a un, sinon de la rareté actuelle.
-  edit.rarity = c.scheduledChange?.rarity.code ?? c.rarity.code
+  // La rareté est désormais immédiate ; on repart de la rareté actuelle. Le stock part de la hausse
+  // prévue s'il y en a une, sinon du stock actuel.
+  edit.rarity = c.rarity.code
   edit.stock = c.scheduledChange?.stock ?? c.stockTotal ?? 50
   setEditFile(null)
   if (editInput.value) editInput.value.value = ''
 }
+
+/** Stock minimum saisissable : une édition limitée existante ne peut qu'augmenter. */
+const editStockMin = computed(() => {
+  const c = shown.value.find((x) => x.id === editing.value)
+  return c && c.rarity.code === 'LEGENDARY' ? (c.stockTotal ?? 1) : 1
+})
 
 function closeEdit() {
   editing.value = null
@@ -221,30 +226,29 @@ function onEditFile(event: Event) {
 async function saveEdit(c: AdminCreature) {
   saving.value = true
   try {
-    // 1. Attributs immédiats (nom, description, famille) : on n'envoie que ce qui change.
+    // Un seul PATCH : nom, description, famille et rareté s'appliquent tout de suite ; une hausse
+    // du nombre d'exemplaires est différée au prochain minuit (le back ne garde que ce qui change).
     const body: AdminCreatureUpdate = {}
     if (edit.name.trim() !== c.name) body.name = edit.name.trim()
     if ((edit.description ?? '').trim() !== (c.description ?? '')) body.description = edit.description
     if (edit.family !== c.family.code) body.family = edit.family
+
+    const currentStock = c.scheduledChange?.stock ?? c.stockTotal
+    if (edit.rarity !== c.rarity.code) {
+      body.rarity = edit.rarity
+      // Devient légendaire : stock initial (immédiat). Vers une illimitée : pas de stock.
+      if (edit.rarity === 'LEGENDARY') body.stock = edit.stock
+    } else if (edit.rarity === 'LEGENDARY' && edit.stock !== currentStock) {
+      body.stock = edit.stock // déjà légendaire : hausse programmée à minuit
+    }
     if (Object.keys(body).length) await update.mutateAsync({ id: c.id, body })
 
-    // 2. Nouvelle image : clé forcée au slug du nom (même clé que la créature).
+    // Nouvelle image : clé forcée au slug du nom (même clé que la créature).
     if (editFile.value) {
       if (!editKey.value) throw new Error('Le nom doit contenir des lettres ou des chiffres.')
       await uploadSprite.mutateAsync({ id: c.id, file: editFile.value, filename: editKey.value })
     }
 
-    // 3. Rareté et exemplaires, appliqués au prochain minuit (si changés).
-    const currentRarity = c.scheduledChange?.rarity.code ?? c.rarity.code
-    const currentStock = c.scheduledChange?.stock ?? c.stockTotal
-    const rarityChanged = edit.rarity !== currentRarity
-    const stockChanged = edit.rarity === 'LEGENDARY' && edit.stock !== currentStock
-    if (rarityChanged || stockChanged) {
-      await schedule.mutateAsync({
-        id: c.id,
-        body: { rarity: edit.rarity, stock: edit.rarity === 'LEGENDARY' ? edit.stock : null },
-      })
-    }
     toast(`${edit.name.trim() || c.name} mise à jour.`, 'success')
     closeEdit()
   } catch (e) {
@@ -450,7 +454,7 @@ watch(editing, (id) => {
                 <textarea v-model="edit.description" maxlength="500" rows="2" class="field" />
               </label>
               <label class="text-sm font-semibold">
-                Rareté (au prochain minuit)
+                Rareté
                 <select v-model="edit.rarity" class="field">
                   <option v-for="r in RARITIES" :key="r.code" :value="r.code">{{ r.label }}</option>
                 </select>
@@ -460,11 +464,14 @@ watch(editing, (id) => {
                 <input
                   v-model.number="edit.stock"
                   type="number"
-                  min="1"
+                  :min="editStockMin"
                   max="100000"
                   required
                   class="field"
                 />
+                <span class="mt-1 block text-xs font-normal text-ink/70">
+                  Une hausse prend effet au prochain minuit · le stock ne peut qu'augmenter.
+                </span>
               </label>
               <div v-else class="text-sm font-semibold">
                 Nombre d'exemplaires
@@ -519,7 +526,7 @@ watch(editing, (id) => {
                   class="btn btn-secondary"
                   @click="cancelChange(c)"
                 >
-                  Annuler le changement prévu
+                  Annuler la hausse prévue
                 </button>
               </div>
             </div>
