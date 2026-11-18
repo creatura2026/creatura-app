@@ -64,6 +64,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Réinitialiser son mot de passe avec un lien d'administrateur (AS-75)
+         * @description Sans jeton d'accès. `token` est le paramètre `jeton` du lien généré par un admin
+         *     (`POST /admin/players/{playerId}/password-reset`). Le lien vaut 5 minutes et ne sert qu'une fois.
+         *     Lien inconnu, expiré, déjà utilisé ou remplacé : `400 RESET_LINK_INVALID`, sans dire lequel.
+         *     Les sessions ouvertes du joueur sont fermées.
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -664,8 +687,10 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Modifier le nom, la description et/ou la famille d'une carte (immédiat)
-         * @description Les champs omis restent inchangés. La rareté passe par `/rarity` (prochain minuit), l'image par `/sprite`.
+         * Modifier une carte (nom, description, famille, rareté immédiats ; stock à minuit)
+         * @description Nom, description, famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une
+         *     édition limitée (légendaire) est différé au prochain minuit et ne peut qu'augmenter : il est
+         *     immédiat seulement quand la carte devient légendaire. Champs omis inchangés ; l'image par `/sprite`.
          */
         patch: operations["updateCreature"];
         trace?: never;
@@ -680,13 +705,9 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /**
-         * Change la rareté d'une carte au prochain minuit
-         * @description Les exemplaires déjà possédés restent dans les collections. Vers légendaire, `stock` nouveaux exemplaires sont à tirer ; une légendaire qui change de rareté devient illimitée.
-         */
-        put: operations["scheduleRarityChange"];
+        put?: never;
         post?: never;
-        /** Annule le changement de rareté prévu */
+        /** Annule la hausse d'exemplaires prévue au prochain minuit */
         delete: operations["cancelRarityChange"];
         options?: never;
         head?: never;
@@ -729,6 +750,28 @@ export interface paths {
         get: operations["getAdminPlayer"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/players/{playerId}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Générer un lien de réinitialisation du mot de passe d'un joueur (AS-75)
+         * @description Le lien (`{appli joueur}/reinitialiser?jeton=…`) vaut 5 minutes et ne sert qu'une fois. L'admin le copie et
+         *     l'envoie au joueur ; il n'est renvoyé qu'ici. Le lien précédent du joueur, s'il n'a pas servi, est annulé.
+         *     La base ne garde que l'empreinte SHA-256 du jeton. Joueurs uniquement (404 pour un admin).
+         */
+        post: operations["createPasswordResetLink"];
         delete?: never;
         options?: never;
         head?: never;
@@ -847,8 +890,10 @@ export interface paths {
         put?: never;
         /**
          * Créer un compte admin (AS-71)
-         * @description Le nouvel admin reçoit un mot de passe provisoire. À sa première connexion, `user.mustChangePassword` est vrai :
-         *     il doit le remplacer (`PUT /me/password`) avant d'accéder au dashboard.
+         * @description Le serveur génère un mot de passe provisoire (16 caractères en 4 groupes, ex. `k7mq-x2vd-9tfp-a4ne`) et le
+         *     renvoie cette seule fois dans `temporaryPassword` ; seul son hash est stocké. À sa première connexion,
+         *     `user.mustChangePassword` est vrai : le nouvel admin doit le remplacer (`PUT /me/password`) avant
+         *     d'accéder au dashboard.
          */
         post: operations["createAdmin"];
         delete?: never;
@@ -913,7 +958,7 @@ export interface components {
             boosterId?: string;
         };
         /** @enum {string} */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "GIFT_WITH_SELF" | "GIFT_NOT_PENDING" | "GIFT_ALREADY_PENDING" | "LAST_ADMIN" | "RATE_LIMITED" | "ACCOUNT_DISABLED" | "PASSWORD_CHANGE_REQUIRED" | "PLAYER_ALREADY_REQUESTED" | "REQUEST_NOT_PENDING" | "INTERNAL_ERROR";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "GIFT_WITH_SELF" | "GIFT_NOT_PENDING" | "GIFT_ALREADY_PENDING" | "LAST_ADMIN" | "RATE_LIMITED" | "ACCOUNT_DISABLED" | "PASSWORD_CHANGE_REQUIRED" | "PLAYER_ALREADY_REQUESTED" | "REQUEST_NOT_PENDING" | "RESET_LINK_INVALID" | "INTERNAL_ERROR";
         PageMeta: {
             page: number;
             pageSize: number;
@@ -1314,8 +1359,10 @@ export interface components {
              * @description Jour où la carte devient visible et tirable
              */
             availableFrom: string;
+            /** @description Hausse d'exemplaires d'une édition limitée prévue au prochain minuit, sinon null */
             scheduledChange: {
                 rarity: components["schemas"]["RaritySummary"];
+                /** @description Nouveau total d'exemplaires visé */
                 stock: number | null;
                 /** Format: date */
                 effectiveFrom: string;
@@ -1367,18 +1414,16 @@ export interface components {
         GiftPage: components["schemas"]["PageMeta"] & {
             items: components["schemas"]["Gift"][];
         };
-        RarityChangeInput: {
-            /** @enum {string} */
-            rarity: "COMMON" | "UNCOMMON" | "RARE" | "LEGENDARY";
-            /** @description Exemplaires à tirer */
-            stock?: number | null;
-        };
-        /** @description Modification immédiate d'une carte ; chaque champ est facultatif (omis = inchangé). */
+        /** @description Modification d'une carte ; chaque champ est facultatif (omis = inchangé). Nom, description, famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une édition limitée est immédiat quand la carte devient légendaire, puis différé au prochain minuit et en hausse seulement (une baisse est refusée). */
         AdminCreatureUpdate: {
             name?: string;
             description?: string;
             /** @enum {string} */
             family?: "NATURE" | "CRISTAL" | "BRUME" | "LUEUR";
+            /** @enum {string} */
+            rarity?: "COMMON" | "UNCOMMON" | "RARE" | "LEGENDARY";
+            /** @description Total d'exemplaires de l'édition limitée (légendaire) */
+            stock?: number | null;
         };
         /** @description Poids de tirage de chaque rareté (de 0 à 1000, 0 retire la rareté du tirage). Les quatre sont obligatoires ; commune et peu commune ne peuvent pas être toutes deux à 0. */
         RarityWeights: {
@@ -1513,8 +1558,24 @@ export interface components {
         AdminAccountInput: {
             pseudo: string;
             login: string;
-            /** @description Mot de passe provisoire, à remplacer par le nouvel admin à sa première connexion */
+        };
+        AdminAccountCreated: components["schemas"]["AdminAccount"] & {
+            /** @description Mot de passe provisoire généré par le serveur, renvoyé cette seule fois */
             temporaryPassword: string;
+        };
+        PasswordResetLink: {
+            /**
+             * Format: uri
+             * @description Lien à copier et envoyer au joueur ; il ne sera plus affiché
+             */
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        PasswordResetRequest: {
+            /** @description Jeton du lien (paramètre `jeton`) */
+            token: string;
+            newPassword: string;
         };
     };
     responses: {
@@ -1717,6 +1778,29 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Mot de passe changé */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
         };
     };
     refreshTokens: {
@@ -2753,36 +2837,6 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    scheduleRarityChange: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                creatureId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RarityChangeInput"];
-            };
-        };
-        responses: {
-            /** @description Changement prévu (`scheduledChange`) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminCreature"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
     cancelRarityChange: {
         parameters: {
             query?: never;
@@ -2871,6 +2925,31 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPasswordResetLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playerId: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lien généré */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetLink"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -3051,13 +3130,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Compte admin créé */
+            /** @description Compte admin créé, avec son mot de passe provisoire (affiché une seule fois) */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminAccount"];
+                    "application/json": components["schemas"]["AdminAccountCreated"];
                 };
             };
             400: components["responses"]["BadRequest"];

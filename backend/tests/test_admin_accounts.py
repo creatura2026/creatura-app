@@ -1,21 +1,20 @@
 """AS-71 : joueurs, demandes de suppression et comptes admin dans le dashboard."""
 
+import re
+
 from conftest import API, auth_headers, conclude_trade, give, login, problem, register_and_login
 
-TEMP_PASSWORD = "provisoire-1234"
 NEW_PASSWORD = "nouveau-mot-de-passe"
+TEMP_PASSWORD_FORMAT = r"^[a-z2-9]{4}(-[a-z2-9]{4}){3}$"
 
 
 def create_admin(client, headers, pseudo: str) -> dict:
     """Crée un admin depuis le dashboard, le connecte et remplace son mot de passe provisoire."""
-    r = client.post(
-        f"{API}/admin/admins",
-        json={"pseudo": pseudo, "login": pseudo.lower(), "temporaryPassword": TEMP_PASSWORD},
-        headers=headers,
-    )
+    r = client.post(f"{API}/admin/admins", json={"pseudo": pseudo, "login": pseudo.lower()}, headers=headers)
     assert r.status_code == 201, r.text
-    h = auth_headers(login(client, pseudo.lower(), TEMP_PASSWORD))
-    r = client.put(f"{API}/me/password", json={"currentPassword": TEMP_PASSWORD, "newPassword": NEW_PASSWORD}, headers=h)
+    temporary = r.json()["temporaryPassword"]
+    h = auth_headers(login(client, pseudo.lower(), temporary))
+    r = client.put(f"{API}/me/password", json={"currentPassword": temporary, "newPassword": NEW_PASSWORD}, headers=h)
     assert r.status_code == 200, r.text
     # Les jetons d'avant le changement sont révoqués : on garde ceux de la réponse.
     return {"id": r_id(client, headers, pseudo), "headers": auth_headers(r.json())}
@@ -95,31 +94,40 @@ def test_player_is_denied_new_admin_routes(client):
     h = register_and_login(client, "Lina")["headers"]
     for route in ("/admin/players", "/admin/deletion-requests", "/admin/admins"):
         problem(client.get(f"{API}{route}", headers=h), 403, "FORBIDDEN")
-    r = client.post(f"{API}/admin/admins", json={"pseudo": "Pirate", "login": "pirate", "temporaryPassword": TEMP_PASSWORD}, headers=h)
+    r = client.post(f"{API}/admin/admins", json={"pseudo": "Pirate", "login": "pirate"}, headers=h)
     problem(r, 403, "FORBIDDEN")
 
 
 # ── Comptes admin ────────────────────────────────────────────────────────────
 
 
-def test_create_admin_with_temporary_password(client, admin_headers):
-    r = client.post(
-        f"{API}/admin/admins", json={"pseudo": "Noa", "login": "noa", "temporaryPassword": TEMP_PASSWORD}, headers=admin_headers
-    )
+def test_create_admin_with_generated_temporary_password(client, admin_headers):
+    r = client.post(f"{API}/admin/admins", json={"pseudo": "Noa", "login": "noa"}, headers=admin_headers)
     assert r.status_code == 201, r.text
     created = r.json()
     assert created["createdBy"]["pseudo"] == "Admin" and created["mustChangePassword"] and created["active"]
+    temporary = created["temporaryPassword"]
+    assert re.fullmatch(TEMP_PASSWORD_FORMAT, temporary), temporary
+    # Renvoyé une seule fois : la liste des admins ne le donne jamais.
+    listed = client.get(f"{API}/admin/admins", headers=admin_headers).json()
+    assert all("temporaryPassword" not in a for a in listed)
+    # Le client ne peut pas imposer le mot de passe provisoire.
+    r = client.post(
+        f"{API}/admin/admins", json={"pseudo": "Lou", "login": "lou", "temporaryPassword": "choisi-a-la-main"}, headers=admin_headers
+    )
+    problem(r, 400, "VALIDATION_ERROR")
+    # Deux créations : deux mots de passe différents.
+    other = client.post(f"{API}/admin/admins", json={"pseudo": "Lou", "login": "lou"}, headers=admin_headers).json()
+    assert other["temporaryPassword"] != temporary
 
-    tokens = login(client, "noa", TEMP_PASSWORD)
+    tokens = login(client, "noa", temporary)
     assert tokens["user"]["role"] == "ADMIN" and tokens["user"]["mustChangePassword"] is True
     h = auth_headers(tokens)
     problem(client.get(f"{API}/admin/stats", headers=h), 403, "PASSWORD_CHANGE_REQUIRED")
 
     r = client.put(f"{API}/me/password", json={"currentPassword": "mauvais-mot-de-passe", "newPassword": NEW_PASSWORD}, headers=h)
     problem(r, 400, "VALIDATION_ERROR")
-    r = client.put(f"{API}/me/password", json={"currentPassword": TEMP_PASSWORD, "newPassword": TEMP_PASSWORD}, headers=h)
-    problem(r, 400, "VALIDATION_ERROR")
-    r = client.put(f"{API}/me/password", json={"currentPassword": TEMP_PASSWORD, "newPassword": NEW_PASSWORD}, headers=h)
+    r = client.put(f"{API}/me/password", json={"currentPassword": temporary, "newPassword": NEW_PASSWORD}, headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["user"]["mustChangePassword"] is False
     h = auth_headers(r.json())  # les anciens jetons sont révoqués
@@ -129,11 +137,9 @@ def test_create_admin_with_temporary_password(client, admin_headers):
     noa = next(a for a in client.get(f"{API}/admin/admins", headers=admin_headers).json() if a["pseudo"] == "Noa")
     assert noa["mustChangePassword"] is False and noa["lastLoginAt"] is not None
 
-    r = client.post(
-        f"{API}/admin/admins", json={"pseudo": "Noa2", "login": "noa", "temporaryPassword": TEMP_PASSWORD}, headers=admin_headers
-    )
+    r = client.post(f"{API}/admin/admins", json={"pseudo": "Noa2", "login": "noa"}, headers=admin_headers)
     problem(r, 409, "LOGIN_ALREADY_USED")
-    r = client.post(f"{API}/admin/admins", json={"pseudo": "Noa", "login": "x", "temporaryPassword": "court"}, headers=admin_headers)
+    r = client.post(f"{API}/admin/admins", json={"pseudo": "N", "login": "x"}, headers=admin_headers)
     problem(r, 400, "VALIDATION_ERROR")
 
 

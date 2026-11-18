@@ -43,10 +43,12 @@ import type {
   User,
   AdminCreature,
   AdminCreatureInput,
-  RarityChangeInput,
   AdminCreatureUpdate,
   AdminAccount,
   AdminAccountInput,
+  AdminAccountCreated,
+  PasswordResetLink,
+  PasswordResetRequest,
   AdminPlayerDetail,
   AdminPlayerPage,
   AdminPlayerQuery,
@@ -110,6 +112,8 @@ export interface PlayerApi extends AuthApi {
   refuseGift(giftId: string): Promise<Gift>
   /** Le donneur annule son don tant qu'il est en attente. */
   cancelGift(giftId: string): Promise<Gift>
+  /** AS-75 (sans session) : nouveau mot de passe avec le jeton d'un lien généré par un admin. */
+  resetPassword(body: PasswordResetRequest): Promise<void>
 }
 
 export interface AdminApi extends AuthApi {
@@ -125,10 +129,13 @@ export interface AdminApi extends AuthApi {
   listAdminCreatures(): Promise<AdminCreature[]>
   /** Nouvelle carte, visible et tirable au prochain minuit. */
   createAdminCreature(body: AdminCreatureInput): Promise<AdminCreature>
-  /** Nom, description et/ou famille d'une carte existante, tout de suite (champs omis inchangés). */
+  /**
+   * Met à jour une carte existante. Nom, description, famille et rareté s'appliquent tout de suite ;
+   * le nombre d'exemplaires d'une édition limitée est différé au prochain minuit et ne peut
+   * qu'augmenter (champs omis inchangés).
+   */
   updateCreature(creatureId: string, body: AdminCreatureUpdate): Promise<AdminCreature>
-  /** Nouvelle rareté d'une carte, appliquée au prochain minuit. */
-  scheduleRarityChange(creatureId: string, body: RarityChangeInput): Promise<AdminCreature>
+  /** Annule la hausse d'exemplaires prévue au prochain minuit. */
   cancelRarityChange(creatureId: string): Promise<AdminCreature>
   /**
    * Upload un sprite PNG pour une carte et met à jour creature.image.
@@ -149,8 +156,10 @@ export interface AdminApi extends AuthApi {
   /** Par l'admin qui a fait la demande, tant qu'elle est en attente. */
   cancelDeletionRequest(requestId: string): Promise<DeletionRequest>
   listAdmins(): Promise<AdminAccount[]>
-  /** Nouvel admin avec un mot de passe provisoire, à remplacer à sa première connexion. */
-  createAdmin(body: AdminAccountInput): Promise<AdminAccount>
+  /** Nouvel admin ; le serveur génère son mot de passe provisoire et le renvoie cette seule fois. */
+  createAdmin(body: AdminAccountInput): Promise<AdminAccountCreated>
   /** Jamais son propre compte ; ses demandes en attente sont annulées. */
   deactivateAdmin(adminId: string): Promise<AdminAccount>
+  /** AS-75 : lien de réinitialisation du mot de passe d'un joueur, 5 minutes, usage unique. */
+  createPasswordResetLink(playerId: string): Promise<PasswordResetLink>
 }

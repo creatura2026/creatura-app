@@ -4,19 +4,20 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import PixelIcon, { type IconName } from '@creatura/shared/ui/PixelIcon.vue'
+import SkipLink from '@creatura/shared/ui/SkipLink.vue'
 
 import { USE_MOCK_API } from '@/api'
 import { useRequestsToValidate } from '@/api/queries'
 import { useAuthStore } from '@/stores/auth'
 
-const NAV: { name: string; label: string; uc: string; icon: IconName }[] = [
-  { name: 'dashboard', label: 'Statistiques', uc: 'UC-12', icon: 'chart' },
-  { name: 'trades', label: 'Échanges', uc: 'UC-13', icon: 'trade' },
-  { name: 'rarities', label: 'Raretés', uc: 'UC-14', icon: 'gem' },
-  { name: 'creatures', label: 'Cartes', uc: '', icon: 'collection' },
-  { name: 'settings', label: 'Réglages booster', uc: '', icon: 'booster' },
-  { name: 'players', label: 'Joueurs', uc: '', icon: 'user' },
-  { name: 'admins', label: 'Administrateurs', uc: '', icon: 'lock' },
+const NAV: { name: string; label: string; icon: IconName }[] = [
+  { name: 'dashboard', label: 'Statistiques', icon: 'chart' },
+  { name: 'trades', label: 'Échanges', icon: 'trade' },
+  { name: 'rarities', label: 'Raretés', icon: 'gem' },
+  { name: 'creatures', label: 'Cartes', icon: 'collection' },
+  { name: 'settings', label: 'Réglages booster', icon: 'booster' },
+  { name: 'players', label: 'Joueurs', icon: 'user' },
+  { name: 'admins', label: 'Administrateurs', icon: 'lock' },
 ]
 
 const auth = useAuthStore()
@@ -46,6 +47,8 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
   <div
     class="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:bg-[linear-gradient(to_right,var(--color-ink)_16rem,transparent_16rem)]"
   >
+    <!-- Hors du flux (sr-only) : n'occupe aucune case de la grille -->
+    <SkipLink />
     <!-- Barre du haut (mobile / tablette) -->
     <header
       class="sticky top-0 z-30 flex h-14 items-center justify-between border-b-2 border-ink bg-ink px-4 text-cream lg:hidden"
@@ -101,7 +104,18 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
               {{ toValidate.data.value.totalItems }} demande(s) de suppression à valider
             </span>
           </span>
-          <span v-else class="text-xs opacity-70">{{ item.uc }}</span>
+        </RouterLink>
+
+        <div class="my-2 border-t border-cream/20" />
+
+        <RouterLink
+          :to="{ name: 'guide' }"
+          class="flex min-h-12 items-center gap-3 border-2 border-transparent px-3 font-semibold hover:border-cream/40"
+          exact-active-class="!border-cream bg-cream text-ink"
+          aria-label="Guide administrateur"
+        >
+          <PixelIcon name="help" :size="20" />
+          <span class="flex-1">Guide</span>
         </RouterLink>
       </nav>
       <div class="border-t-2 border-cream/20 p-4">
@@ -129,7 +143,11 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           >Données fictives</span
         >
       </div>
-      <main id="contenu" class="w-full max-w-7xl flex-1 px-4 py-6 sm:px-8 sm:py-8">
+      <main
+        id="contenu"
+        tabindex="-1"
+        class="w-full max-w-7xl flex-1 px-4 py-6 focus:shadow-none focus:outline-none sm:px-8 sm:py-8"
+      >
         <RouterView />
       </main>
     </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
+import SkipLink from '@creatura/shared/ui/SkipLink.vue'
 import { CREATURES } from '@creatura/shared/fixtures/catalog'
 
 const props = defineProps<{
@@ -13,6 +14,8 @@ const art = CREATURES.find((c) => c.name === (props.creature ?? 'Moussou'))!
 
 <template>
   <div class="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+    <!-- Hors du flux (sr-only) : n'occupe aucune case de la grille -->
+    <SkipLink />
     <!-- Colonne illustrée (grand écran) -->
     <aside class="relative hidden flex-col justify-between bg-ink p-10 text-cream lg:flex">
       <RouterLink to="/">
@@ -33,7 +36,11 @@ const art = CREATURES.find((c) => c.name === (props.creature ?? 'Moussou'))!
       <RouterLink to="/" class="self-start lg:hidden">
         <BrandMark /><span class="sr-only">, retour à l’accueil</span>
       </RouterLink>
-      <div class="mx-auto my-auto w-full max-w-md py-8">
+      <main
+        id="contenu"
+        tabindex="-1"
+        class="mx-auto my-auto w-full max-w-md py-8 focus:shadow-none focus:outline-none"
+      >
         <p class="eyebrow">{{ eyebrow }}</p>
         <h1 class="mt-2 mb-6 text-3xl font-bold sm:text-4xl">{{ title }}</h1>
         <div class="card-pixel p-5 sm:p-6" :class="tone === 'mint' ? 'bg-mint' : 'bg-sky'">
@@ -42,7 +49,7 @@ const art = CREATURES.find((c) => c.name === (props.creature ?? 'Moussou'))!
         <div class="mt-6 text-center text-sm">
           <slot name="footer" />
         </div>
-      </div>
+      </main>
     </div>
   </div>
 </template>

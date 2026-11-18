@@ -28,6 +28,8 @@ services:
       ADMIN_LOGIN: ${ADMIN_LOGIN-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD-admin}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # Base des liens de réinitialisation du mot de passe (AS-75) : l'appli joueur en local.
+      PLAYER_APP_URL: ${PLAYER_APP_URL:-http://localhost:5173}
     ports:
       - "127.0.0.1:8000:8000"
     networks:

@@ -149,8 +149,11 @@ export function signInAdmin(): Promise<Account> {
 export async function newAdmin(creator: Account): Promise<Account> {
   const pseudo = uniquePseudo('Adm')
   const login_ = pseudo.toLowerCase()
-  const temporaryPassword = 'provisoire-e2e-1234'
-  await creator.post('/admin/admins', { pseudo, login: login_, temporaryPassword })
+  // Le serveur génère le mot de passe provisoire et le renvoie une seule fois.
+  const { temporaryPassword } = await creator.post<{ temporaryPassword: string }>('/admin/admins', {
+    pseudo,
+    login: login_,
+  })
   const first = await signIn({ login: login_, password: temporaryPassword })
   await first.put('/me/password', { currentPassword: temporaryPassword, newPassword: PASSWORD })
   return signIn({ login: login_, password: PASSWORD })

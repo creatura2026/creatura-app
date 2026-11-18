@@ -23,7 +23,6 @@ import {
   useAdminCreatures,
   useCancelRarityChange,
   useCreateCreature,
-  useScheduleRarityChange,
   useUpdateCreature,
   useUploadSprite,
 } from '@/api/queries'
@@ -55,7 +54,6 @@ const RARITY_SHORT: Record<string, string> = {
 const { data: creatures, isPending, error, refetch } = useAdminCreatures()
 const create = useCreateCreature()
 const update = useUpdateCreature()
-const schedule = useScheduleRarityChange()
 const cancel = useCancelRarityChange()
 const uploadSprite = useUploadSprite()
 
@@ -205,14 +203,20 @@ function startEdit(c: AdminCreature) {
   editing.value = c.id
   edit.name = c.name
   edit.description = c.description ?? ''
-  // Codes renvoyés par le serveur : toujours parmi ceux du contrat.
   edit.family = c.family.code as FamilyCode
-  // On repart du changement prévu s'il y en a un, sinon de la rareté actuelle.
-  edit.rarity = (c.scheduledChange?.rarity.code ?? c.rarity.code) as RarityCode
+  // La rareté est désormais immédiate ; on repart de la rareté actuelle. Le stock part de la hausse
+  // prévue s'il y en a une, sinon du stock actuel.
+  edit.rarity = c.rarity.code as RarityCode
   edit.stock = c.scheduledChange?.stock ?? c.stockTotal ?? 50
   setEditFile(null)
   if (editInput.value) editInput.value.value = ''
 }
+
+/** Stock minimum saisissable : une édition limitée existante ne peut qu'augmenter. */
+const editStockMin = computed(() => {
+  const c = shown.value.find((x) => x.id === editing.value)
+  return c && c.rarity.code === 'LEGENDARY' ? (c.stockTotal ?? 1) : 1
+})
 
 function closeEdit() {
   editing.value = null
@@ -226,30 +230,29 @@ function onEditFile(event: Event) {
 async function saveEdit(c: AdminCreature) {
   saving.value = true
   try {
-    // 1. Attributs immédiats (nom, description, famille) : on n'envoie que ce qui change.
+    // Un seul PATCH : nom, description, famille et rareté s'appliquent tout de suite ; une hausse
+    // du nombre d'exemplaires est différée au prochain minuit (le back ne garde que ce qui change).
     const body: AdminCreatureUpdate = {}
     if (edit.name.trim() !== c.name) body.name = edit.name.trim()
     if ((edit.description ?? '').trim() !== (c.description ?? '')) body.description = edit.description
     if (edit.family !== c.family.code) body.family = edit.family
+
+    const currentStock = c.scheduledChange?.stock ?? c.stockTotal
+    if (edit.rarity !== c.rarity.code) {
+      body.rarity = edit.rarity
+      // Devient légendaire : stock initial (immédiat). Vers une illimitée : pas de stock.
+      if (edit.rarity === 'LEGENDARY') body.stock = edit.stock
+    } else if (edit.rarity === 'LEGENDARY' && edit.stock !== currentStock) {
+      body.stock = edit.stock // déjà légendaire : hausse programmée à minuit
+    }
     if (Object.keys(body).length) await update.mutateAsync({ id: c.id, body })
 
-    // 2. Nouvelle image : clé forcée au slug du nom (même clé que la créature).
+    // Nouvelle image : clé forcée au slug du nom (même clé que la créature).
     if (editFile.value) {
       if (!editKey.value) throw new Error('Le nom doit contenir des lettres ou des chiffres.')
       await uploadSprite.mutateAsync({ id: c.id, file: editFile.value, filename: editKey.value })
     }
 
-    // 3. Rareté et exemplaires, appliqués au prochain minuit (si changés).
-    const currentRarity = c.scheduledChange?.rarity.code ?? c.rarity.code
-    const currentStock = c.scheduledChange?.stock ?? c.stockTotal
-    const rarityChanged = edit.rarity !== currentRarity
-    const stockChanged = edit.rarity === 'LEGENDARY' && edit.stock !== currentStock
-    if (rarityChanged || stockChanged) {
-      await schedule.mutateAsync({
-        id: c.id,
-        body: { rarity: edit.rarity, stock: edit.rarity === 'LEGENDARY' ? edit.stock : null },
-      })
-    }
     toast(`${edit.name.trim() || c.name} mise à jour.`, 'success')
     closeEdit()
   } catch (e) {
@@ -325,6 +328,7 @@ watch(editing, (id) => {
           <!-- Dépose d'image : zone cliquable avec aperçu, clé CDN affichée. -->
           <div class="text-sm font-semibold sm:col-span-2">
             Image de la carte (PNG)
+            <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- le label contient le champ fichier ; le glisser-déposer n'en est qu'un raccourci -->
             <label
               class="dropzone mt-1"
               :class="{ 'dropzone--filled': newFile }"
@@ -384,7 +388,13 @@ watch(editing, (id) => {
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
       <div class="mt-6 flex items-center justify-between gap-3">
         <h2 class="font-sans text-lg font-bold">{{ creatures?.length ?? 0 }} cartes</h2>
-        <input v-model="search" type="search" placeholder="Rechercher" class="field max-w-60" />
+        <input
+          v-model="search"
+          type="search"
+          placeholder="Rechercher"
+          aria-label="Rechercher une carte"
+          class="field max-w-60"
+        />
       </div>
       <ul class="mt-3 grid gap-3">
         <li
@@ -448,7 +458,7 @@ watch(editing, (id) => {
                 <textarea v-model="edit.description" maxlength="500" rows="2" class="field" />
               </label>
               <label class="text-sm font-semibold">
-                Rareté (au prochain minuit)
+                Rareté
                 <select v-model="edit.rarity" class="field">
                   <option v-for="r in RARITIES" :key="r.code" :value="r.code">{{ r.label }}</option>
                 </select>
@@ -458,11 +468,14 @@ watch(editing, (id) => {
                 <input
                   v-model.number="edit.stock"
                   type="number"
-                  min="1"
+                  :min="editStockMin"
                   max="100000"
                   required
                   class="field"
                 />
+                <span class="mt-1 block text-xs font-normal text-ink/80">
+                  Une hausse prend effet au prochain minuit · le stock ne peut qu'augmenter.
+                </span>
               </label>
               <div v-else class="text-sm font-semibold">
                 Nombre d'exemplaires
@@ -473,6 +486,7 @@ watch(editing, (id) => {
 
               <div class="text-sm font-semibold sm:col-span-2">
                 Image de la carte (PNG)
+                <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- le label contient le champ fichier ; le glisser-déposer n'en est qu'un raccourci -->
                 <label
                   class="dropzone mt-1"
                   :class="{ 'dropzone--filled': editFile }"
@@ -516,7 +530,7 @@ watch(editing, (id) => {
                   class="btn btn-secondary"
                   @click="cancelChange(c)"
                 >
-                  Annuler le changement prévu
+                  Annuler la hausse prévue
                 </button>
               </div>
             </div>

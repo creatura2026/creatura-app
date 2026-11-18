@@ -415,7 +415,8 @@ jobs:
     name: Application Windows
     needs: frontend
     # Pas sur les PR : plusieurs minutes de runner Windows à chaque mise à jour.
-    if: github.event_name != 'pull_request'
+    # SKIP_NATIVE_APPS=true : passe aussi bien l'exe que l'APK (CI accélérée).
+    if: github.event_name != 'pull_request' && vars.SKIP_NATIVE_APPS != 'true'
     runs-on: windows-latest
     # Donne accès aux variables de l'environnement production (CUSTOM_DOMAIN).
     environment: production
@@ -607,7 +608,8 @@ jobs:
     # L'APK n'est construit et publié que si les tests de l'application ont réussi.
     needs: [frontend, e2e-mobile]
     # Pas sur les PR : plusieurs minutes de Gradle à chaque mise à jour.
-    if: github.event_name != 'pull_request'
+    # SKIP_NATIVE_APPS=true : passe aussi bien l'exe que l'APK (CI accélérée).
+    if: github.event_name != 'pull_request' && vars.SKIP_NATIVE_APPS != 'true'
     runs-on: ubuntu-latest
     # Donne accès aux variables et secrets de l'environnement production.
     environment: production

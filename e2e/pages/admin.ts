@@ -132,8 +132,10 @@ export class AdminsPage {
   readonly accounts: Locator
   readonly pseudo: Locator
   readonly login: Locator
-  readonly temporaryPassword: Locator
   readonly create: Locator
+  /** Mot de passe provisoire généré par le serveur, affiché une seule fois après la création. */
+  readonly createdPassword: Locator
+  readonly hideCreated: Locator
 
   constructor(readonly page: Page) {
     this.title = page.getByRole('heading', { name: 'Administrateurs', exact: true })
@@ -141,8 +143,9 @@ export class AdminsPage {
     const form = page.getByRole('form', { name: 'Créer un administrateur' })
     this.pseudo = form.getByLabel('Pseudonyme')
     this.login = form.getByLabel('Identifiant de connexion')
-    this.temporaryPassword = form.getByLabel('Mot de passe provisoire')
     this.create = form.getByRole('button', { name: 'Créer le compte' })
+    this.createdPassword = form.getByRole('status').locator('code')
+    this.hideCreated = form.getByRole('button', { name: /J.ai transmis le mot de passe/ })
   }
 
   account(pseudo: string): Locator {

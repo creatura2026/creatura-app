@@ -82,14 +82,25 @@ function onCreated() {
 }
 
 const toValidate = useRequestsToValidate()
+
+/** Rafraîchit la liste des joueurs et les demandes de suppression à la demande (bouton). */
+function refreshAll() {
+  refetch()
+  toValidate.refetch()
+  history.refetch()
+}
 const historyPage = ref(1)
 const history = useDeletionRequests(computed(() => ({ page: historyPage.value, pageSize: 10 })))
 </script>
 
 <template>
   <section>
-    <PageHeader eyebrow="AS-71 · Suivi des joueurs" title="Joueurs">
+    <PageHeader eyebrow="Suivi des joueurs" title="Joueurs">
       <template #actions>
+        <button type="button" class="btn btn-secondary" :disabled="isFetching" @click="refreshAll">
+          <PixelIcon name="refresh" :size="16" />
+          {{ isFetching ? 'Actualisation…' : 'Rafraîchir' }}
+        </button>
         <button
           type="button"
           class="btn btn-primary"
@@ -186,7 +197,6 @@ const history = useDeletionRequests(computed(() => ({ page: historyPage.value, p
                     }}</span>
                   </button>
                 </th>
-                <th scope="col" class="py-2 font-semibold">Statut</th>
               </tr>
             </thead>
             <tbody>
@@ -213,6 +223,12 @@ const history = useDeletionRequests(computed(() => ({ page: historyPage.value, p
                     {{ p.pseudo }}
                   </RouterLink>
                   <span class="block text-xs text-ink/80">{{ p.login }}</span>
+                  <span
+                    v-if="p.pendingDeletionRequestId"
+                    class="mt-1 inline-block border-2 border-ink bg-butter px-1.5 text-xs font-bold whitespace-nowrap"
+                  >
+                    Suppression demandée
+                  </span>
                 </td>
                 <td class="py-2.5 pr-3 whitespace-nowrap tabular-nums">
                   {{ formatDateTime(p.createdAt) }}
@@ -222,14 +238,6 @@ const history = useDeletionRequests(computed(() => ({ page: historyPage.value, p
                 </td>
                 <td class="py-2.5 pr-3 text-right tabular-nums">{{ p.loginsInPeriod }}</td>
                 <td class="py-2.5 pr-3 text-right tabular-nums">{{ p.totalCards }}</td>
-                <td class="py-2.5">
-                  <span
-                    v-if="p.pendingDeletionRequestId"
-                    class="border-2 border-ink bg-butter px-1.5 text-xs font-bold whitespace-nowrap"
-                  >
-                    Suppression demandée
-                  </span>
-                </td>
               </tr>
             </tbody>
           </table>

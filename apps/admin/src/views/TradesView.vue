@@ -65,7 +65,7 @@ function choosePlayer(p: PlayerSummary | null) {
 
 <template>
   <section>
-    <PageHeader eyebrow="UC-13 · Filtrer les échanges" title="Échanges" />
+    <PageHeader eyebrow="Filtrer les échanges" title="Échanges" />
     <PeriodPicker />
 
     <div class="card-pixel-sm mb-6 grid gap-4 bg-white px-4 py-3 md:grid-cols-2">

@@ -65,17 +65,17 @@ test('A-03, A-07 : un admin crée un compte ; le nouvel admin choisit son mot de
   await admin.shell.open('Administrateurs')
   await admins.pseudo.fill(pseudo)
   await admins.login.fill(pseudo.toLowerCase())
-  await admins.temporaryPassword.fill('provisoire-e2e-1234')
   await admins.create.click()
   await expect(admins.account(pseudo)).toContainText('par Admin')
+  const temporary = (await admins.createdPassword.textContent())!.trim()
 
   // Première connexion du nouvel admin, dans un autre navigateur.
   const login = new AdminLoginPage(page)
   await login.goto()
-  await login.signIn({ login: pseudo.toLowerCase(), password: 'provisoire-e2e-1234' })
+  await login.signIn({ login: pseudo.toLowerCase(), password: temporary })
   const change = new ChangePasswordPage(page)
   await expect(change.title).toBeVisible()
-  await change.form.change('provisoire-e2e-1234', 'definitif-e2e-123456')
+  await change.form.change(temporary, 'definitif-e2e-123456')
   await expect(new DashboardPage(page).title).toBeVisible()
 
   await signIn({ login: pseudo.toLowerCase(), password: 'definitif-e2e-123456' })

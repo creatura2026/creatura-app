@@ -25,6 +25,7 @@ export type IconName =
   | 'refresh'
   | 'sound'
   | 'sound-off'
+  | 'help'
 
 const SPEAKER = 'M3 9h4l5-5v16l-5-5H3z'
 const WAVES = 'M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11'
@@ -55,6 +56,7 @@ const PATHS: Record<IconName, string> = {
   sound: `${SPEAKER}${WAVES}`,
   // Même haut-parleur, barré en diagonale.
   'sound-off': `${SPEAKER}${WAVES}M2 2l20 20`,
+  help: 'M3 3h18v18H3zM12 17v1M12 13a3 3 0 1 0-3-3',
 }
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 22 })

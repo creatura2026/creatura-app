@@ -1,11 +1,12 @@
 # CREATURA
 
-Monorepo de l'application Créatura : le front (pnpm), l'API et la base.
+Jeu de cartes à collectionner : un booster par jour, une collection à compléter, des échanges et
+des dons entre joueurs, et un dashboard pour les administrateurs.
 
 | Dossier | Rôle |
 |---|---|
 | `apps/player` | PWA joueur, mobile d'abord (UC-01 à UC-11) |
-| `apps/admin` | Dashboard administrateur Web / Desktop (UC-12 à UC-14) |
+| `apps/admin` | Dashboard administrateur Web / Desktop (UC-12 à UC-14, AS-71) |
 | `apps/desktop` | Application Windows (.exe) : la PWA joueur dans Electron |
 | `apps/mobile` | Application Android (.apk) : la PWA joueur dans Capacitor |
 | `packages/shared` | Thème (couleurs et typographies du document de vision), composants, client HTTP, types générés depuis `creatura-api.openapi.yaml`, catalogue fictif |
@@ -13,6 +14,7 @@ Monorepo de l'application Créatura : le front (pnpm), l'API et la base.
 | `backend` | API REST (Python, FastAPI, SQLAlchemy) : [backend/README.md](backend/README.md) |
 | `db` | Base PostgreSQL 16 : schéma, catalogue, données de démo, tests SQL : [db/README.md](db/README.md) |
 | `docs` | [CI/CD](docs/ci-cd.md), [plan de tests](docs/tests/README.md) |
+| `creatura-api.openapi.yaml` | Contrat de l'API, source des types du front |
 
 ## Démarrer
 
@@ -64,8 +66,9 @@ pnpm desktop        # exe branché sur le backend AWS
 pnpm desktop:demo   # exe avec l'API simulée, aucun serveur nécessaire
 ```
 
-Les exe arrivent dans `apps/desktop/release/`, avec un `latest.json` : une fois publiés dans
+Les exe arrivent dans `apps/desktop/release/`, avec un `latest.json`. Une fois publiés dans
 `telechargements/` du bucket du front, la page d'accueil propose de télécharger cette version.
+L'exe est aussi construit par la CI.
 Version, publication, adresse du backend et dépannage : [apps/desktop/README.md](apps/desktop/README.md).
 
 ## Application Android (.apk)
@@ -78,8 +81,9 @@ pnpm mobile         # APK qui ouvre le site en ligne
 pnpm mobile:demo    # APK avec l'API simulée, aucun serveur nécessaire
 ```
 
-L'APK arrive dans `apps/mobile/release/`, avec un `android.json` lu par la page d'accueil, ouverte
-sur un téléphone. Signature, CI et dépannage : [apps/mobile/README.md](apps/mobile/README.md).
+L'APK arrive dans `apps/mobile/release/`, avec un `android.json` lu par la page d'accueil quand
+elle est ouverte sur un téléphone. L'APK est aussi construit par la CI.
+Signature, CI et dépannage : [apps/mobile/README.md](apps/mobile/README.md).
 
 ## API : vraie ou simulée
 

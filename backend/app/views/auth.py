@@ -3,7 +3,7 @@
 from fastapi import APIRouter, status
 from starlette.concurrency import run_in_threadpool
 
-from app.controllers import account, auth
+from app.controllers import account, auth, password_reset
 from app.dependencies import CurrentUser, DbSession
 from app.schemas.auth import (
     AccountDeleteIn,
@@ -15,6 +15,7 @@ from app.schemas.auth import (
     RegisterIn,
     UserOut,
 )
+from app.schemas.password_reset import PasswordResetIn
 from app.views.trades import notify_room
 
 router = APIRouter(tags=["Authentification"])
@@ -45,6 +46,14 @@ def logout(_: CurrentUser, data: RefreshIn | None = None):
     Le schéma n'a pas de table de sessions : le jeton de rafraîchissement envoyé n'est pas
     révoqué, il reste valide jusqu'à son expiration.
     """
+
+
+@router.post("/auth/password-reset", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(data: PasswordResetIn, db: DbSession):
+    """AS-75 (sans jeton d'accès) : nouveau mot de passe avec le jeton d'un lien généré par un
+    admin. Lien inconnu, expiré, déjà utilisé ou remplacé : 400 RESET_LINK_INVALID. Les sessions
+    ouvertes du joueur sont fermées."""
+    password_reset.reset_password(db, data.token, data.new_password)
 
 
 @router.put("/me/password", response_model=AuthTokensOut)

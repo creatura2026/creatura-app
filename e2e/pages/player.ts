@@ -82,7 +82,7 @@ export class BoosterPage {
     this.cards = page.getByRole('list', { name: 'Cartes du booster' }).getByRole('listitem')
     this.toCollection = page.getByRole('link', { name: 'Voir ma collection' })
     this.nextBooster = page.getByText(/Prochain booster dans /)
-    this.rates = page.getByRole('complementary').getByRole('listitem')
+    this.rates = page.getByRole('region', { name: 'Chance réelle par carte' }).getByRole('listitem')
   }
 
   async goto() {

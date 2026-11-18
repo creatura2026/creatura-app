@@ -103,6 +103,7 @@ erDiagram
 | Connexions (AS-71) | Table `connexion`, une ligne par login réussi, gardée 13 mois | Dernière connexion et connexions par jour ou par mois se calculent à la demande. Le renouvellement du jeton ne compte pas, sinon un joueur resté sur la page compterait une connexion toutes les 20 minutes. 13 mois : comparer un mois au même mois de l'année précédente. |
 | Suppression d'un joueur (AS-71) | Demande faite par un admin, validée par un autre admin qu'il choisit (`demande_suppression`) | Aucun admin ne supprime seul des comptes. Les règles sont dans des fonctions SQL, testées dans `tests/test_schema.sql`. |
 | Données d'un joueur supprimé (AS-71) | Tout ce qui n'appartient qu'à lui est effacé ; ses échanges terminés restent pour l'autre joueur, sans lien vers lui (`NULL`) | L'historique de l'autre joueur lui appartient aussi. Ses légendaires retournent dans le stock de l'édition limitée. |
+| Réinitialisation du mot de passe (AS-75) | Lien généré par un admin, 5 minutes, usage unique, seule l'empreinte SHA-256 du jeton est stockée | Le joueur n'a pas d'adresse e-mail dans la base : l'admin lui transmet le lien. Lire la table ne permet pas de reconstituer un lien valable. |
 | Comptes admin (AS-71) | Créés depuis le dashboard, mot de passe provisoire, désactivés (jamais supprimés) par un autre admin, toujours au moins deux actifs | Le premier admin reste créé au démarrage du back. Un admin désactivé garde son nom dans le journal des demandes. Avec moins de deux admins actifs, plus personne ne pourrait valider une suppression. |
 | Stats boosters (UC-12, UC-14) | Partielles pour l'instant | Conséquence de l'absence de table booster. Ajout possible plus tard sans rien casser. |
 
@@ -244,6 +245,22 @@ Joueurs d'une demande : `(demande_id, utilisateur_id)`, les deux en `ON DELETE C
 | `creatura_desactiver_admin(cible, admin)` | Désactive un admin (jamais soi-même, jamais s'il resterait moins de deux admins actifs) et annule ses demandes en attente |
 
 Chaque refus porte un nom (`ck_demande_suppression_…`, `ck_desactivation_…`), traduit en message par le back comme une contrainte de table.
+
+### reinitialisation_mdp (AS-75)
+Ajoutée par `init/12_evolution_reinitialisation_mdp.sql`. Un admin génère, depuis la fiche d'un joueur, un lien qu'il lui envoie.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| id | bigint | PK, identity | Identifiant |
+| utilisateur_id | uuid | NOT NULL, FK → utilisateur, ON DELETE CASCADE | Joueur concerné |
+| jeton_hash | char(64) | NOT NULL, UNIQUE, CHECK hexadécimal | Empreinte SHA-256 du jeton du lien ; le jeton lui-même n'est jamais stocké |
+| cree_par | uuid | NULL, FK → utilisateur, ON DELETE SET NULL | Admin qui a généré le lien |
+| cree_le | timestamptz | NOT NULL | Création |
+| expire_le | timestamptz | NOT NULL, défaut `now() + 5 minutes`, CHECK `> cree_le` | Fin de validité |
+| utilise_le | timestamptz | NULL | Le joueur a choisi son nouveau mot de passe |
+| annule_le | timestamptz | NULL ; CHECK : jamais avec `utilise_le` | Remplacé par un lien plus récent |
+
+Index unique partiel `(utilisateur_id) WHERE utilise_le IS NULL AND annule_le IS NULL` : un seul lien en cours par joueur.
 
 ## Règles vérifiées par les tests
 

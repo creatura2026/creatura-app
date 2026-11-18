@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     sprites_bucket: str = ""
     cloudfront_distribution_id: str = ""
 
+    # Adresse de l'appli joueur : base des liens de réinitialisation du mot de passe (AS-75),
+    # {player_app_url}/reinitialiser?jeton=…  En local : http://localhost:5173
+    player_app_url: str = "https://creatura.creasmaloud.dev"
+
     # Compte administrateur créé au démarrage s'il n'existe pas (mot de passe haché par le back).
     admin_login: str | None = None
     admin_password: str | None = None

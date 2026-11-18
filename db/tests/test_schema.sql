@@ -520,5 +520,39 @@ DO $$ BEGIN
     RAISE NOTICE 'OK  admin ayant supprimé son compte : plus actif';
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- reinitialisation_mdp (12_evolution_reinitialisation_mdp.sql)
+-- ---------------------------------------------------------------------------
+INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash, cree_par)
+VALUES ('00000000-0000-0000-0000-00000000000a', repeat('a', 64), '00000000-0000-0000-0000-0000000000a1');
+DO $$ BEGIN
+    ASSERT (SELECT expire_le - cree_le FROM reinitialisation_mdp WHERE jeton_hash = repeat('a', 64))
+           = interval '5 minutes', 'KO  lien valable 5 minutes par défaut';
+    RAISE NOTICE 'OK  lien de réinitialisation créé, valable 5 minutes';
+END $$;
+SELECT pg_temp.doit_echouer('un seul lien en cours par joueur',
+    $q$INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash)
+       VALUES ('00000000-0000-0000-0000-00000000000a', repeat('b', 64))$q$,
+    'uq_reinitialisation_mdp_en_cours');
+SELECT pg_temp.doit_echouer('empreinte qui n''est pas un SHA-256 refusée',
+    $q$UPDATE reinitialisation_mdp SET jeton_hash = 'jeton-en-clair' WHERE jeton_hash = repeat('a', 64)$q$,
+    'ck_reinitialisation_mdp_hash');
+SELECT pg_temp.doit_echouer('lien utilisé et annulé à la fois refusé',
+    $q$UPDATE reinitialisation_mdp SET utilise_le = now(), annule_le = now() WHERE jeton_hash = repeat('a', 64)$q$,
+    'ck_reinitialisation_mdp_fin');
+SELECT pg_temp.doit_echouer('expiration avant la création refusée',
+    $q$UPDATE reinitialisation_mdp SET expire_le = cree_le - interval '1 minute' WHERE jeton_hash = repeat('a', 64)$q$,
+    'ck_reinitialisation_mdp_expiration');
+DO $$ BEGIN
+    UPDATE reinitialisation_mdp SET annule_le = now() WHERE jeton_hash = repeat('a', 64);
+    INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash)
+    VALUES ('00000000-0000-0000-0000-00000000000a', repeat('b', 64));
+    RAISE NOTICE 'OK  nouveau lien accepté une fois le précédent annulé';
+END $$;
+SELECT pg_temp.doit_echouer('même jeton deux fois refusé',
+    $q$INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash, utilise_le)
+       VALUES ('00000000-0000-0000-0000-00000000000a', repeat('b', 64), now())$q$,
+    'uq_reinitialisation_mdp_jeton');
+
 ROLLBACK;
 \echo '>>> Tous les tests du schéma sont passés.'

@@ -70,7 +70,6 @@ export type ScheduledBoosterSettings = Schemas['ScheduledBoosterSettings']
 export type RarityWeights = Schemas['RarityWeights']
 export type AdminCreature = Schemas['AdminCreature']
 export type AdminCreatureInput = Schemas['AdminCreatureInput']
-export type RarityChangeInput = Schemas['RarityChangeInput']
 
 /** Joueurs, demandes de suppression et comptes admin (AS-71). */
 export type Granularity = Schemas['Granularity']
@@ -84,6 +83,11 @@ export type DeletionRequestPage = Schemas['DeletionRequestPage']
 export type DeletionRequestInput = Schemas['DeletionRequestInput']
 export type AdminAccount = Schemas['AdminAccount']
 export type AdminAccountInput = Schemas['AdminAccountInput']
+export type AdminAccountCreated = Schemas['AdminAccountCreated']
+
+/** Lien de réinitialisation du mot de passe (AS-75). */
+export type PasswordResetLink = Schemas['PasswordResetLink']
+export type PasswordResetRequest = Schemas['PasswordResetRequest']
 
 export type AdminPlayerSort = 'pseudo' | 'createdAt' | 'lastLoginAt' | 'logins' | 'totalCards'
 
@@ -175,9 +179,15 @@ export interface ListMyGiftsQuery {
   pageSize?: number
 }
 
-/** Mise à jour d'une carte par l'admin (immédiate) ; champs omis inchangés. */
+/**
+ * Mise à jour d'une carte par l'admin ; champs omis inchangés.
+ * Nom, description, famille et rareté s'appliquent tout de suite ; le nombre d'exemplaires
+ * d'une édition limitée (légendaire) est différé au prochain minuit et ne peut qu'augmenter.
+ */
 export interface AdminCreatureUpdate {
   name?: string
   description?: string
   family?: string
+  rarity?: string
+  stock?: number | null
 }

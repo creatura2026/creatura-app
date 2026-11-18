@@ -39,6 +39,7 @@ export default defineConfig({
       workbox: {
         // Illustrations et polices (sous-ensembles latins) disponibles hors ligne.
         globPatterns: ['**/*.{js,css,html,ico,svg}', 'assets/*.png', 'assets/*-latin-*.woff2'],
+        globIgnores: ['guide-images/**'],
         navigateFallback: '/index.html',
         // Le dashboard admin est servi sous /admin/ sur le même domaine : le service worker
         // du joueur ne doit pas répondre à sa place, ni à celle des fichiers à télécharger.

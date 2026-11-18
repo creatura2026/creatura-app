@@ -431,9 +431,18 @@ const remaining = computed(() =>
           </div>
         </div>
 
-        <aside class="flex flex-col gap-5">
+        <!--
+          Section de la page, pas une zone « aside » : elle serait imbriquée dans le main du
+          gabarit (RGAA 12.6). Taux calculés par le serveur (rarity_drop_rates).
+        -->
+        <section class="flex flex-col gap-5" aria-labelledby="booster-odds-title">
           <div class="card-pixel-sm bg-white p-4">
-            <p class="font-bold">Probabilités de tirage</p>
+            <h2 id="booster-odds-title" class="font-sans text-base font-bold">
+              Chance réelle par carte
+            </h2>
+            <p class="mt-0.5 text-sm">
+              Paquet de {{ cardsInPack }} carte{{ cardsInPack > 1 ? 's' : '' }}
+            </p>
             <ul class="mt-2 flex flex-col gap-1.5 text-sm">
               <li
                 v-for="r in rarities"
@@ -452,7 +461,7 @@ const remaining = computed(() =>
               </li>
             </ul>
           </div>
-        </aside>
+        </section>
       </div>
     </AsyncState>
 

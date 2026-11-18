@@ -105,6 +105,9 @@ export function useMyTrades(query: MaybeRefOrGetter<ListMyTradesQuery>) {
   return useQuery({
     queryKey: computed(() => keys.trades(toValue(query))),
     queryFn: () => api.listMyTrades(toValue(query)),
+    // Auto-refresh : la liste se met à jour seule (nouveaux échanges, changements d'état),
+    // tant que l'onglet est au premier plan.
+    refetchInterval: 15_000,
   })
 }
 
@@ -172,6 +175,8 @@ export function useMyGifts(query: MaybeRefOrGetter<ListMyGiftsQuery>) {
   return useQuery({
     queryKey: computed(() => keys.gifts(toValue(query))),
     queryFn: () => api.listMyGifts(toValue(query)),
+    // Auto-refresh : les dons reçus/envoyés apparaissent sans recharger la page.
+    refetchInterval: 15_000,
   })
 }
 

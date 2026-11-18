@@ -9,7 +9,6 @@ import type {
   DeletionRequestInput,
   DeletionRequestsQuery,
   Period,
-  RarityChangeInput,
   AdminCreatureUpdate,
   UpdateBoosterSettingsRequest,
 } from '@creatura/shared/api/types'
@@ -82,15 +81,6 @@ export function useUpdateCreature() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: AdminCreatureUpdate }) =>
       api.updateCreature(id, body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
-  })
-}
-
-export function useScheduleRarityChange() {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: RarityChangeInput }) =>
-      api.scheduleRarityChange(id, body),
     onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'creatures'] }),
   })
 }
@@ -206,4 +196,9 @@ export function useDeactivateAdmin() {
         client.invalidateQueries({ queryKey: ['admin', 'player-list'] }),
       ]),
   })
+}
+
+/** AS-75 : lien de réinitialisation du mot de passe d'un joueur (5 minutes, usage unique). */
+export function useCreatePasswordResetLink() {
+  return useMutation({ mutationFn: (playerId: string) => api.createPasswordResetLink(playerId) })
 }

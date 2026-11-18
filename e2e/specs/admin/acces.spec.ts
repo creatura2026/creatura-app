@@ -68,14 +68,15 @@ test.describe('comptes administrateur (A-03, A-07, A-12)', () => {
     changePasswordPage,
     dashboardPage,
   }) => {
-    const zoe = { login: 'zoe', password: 'provisoire-1234', pseudo: 'Zoe' }
-
     await signIn('admin')
     await shell.open('Administrateurs')
-    await adminsPage.pseudo.fill(zoe.pseudo)
-    await adminsPage.login.fill(zoe.login)
-    await adminsPage.temporaryPassword.fill(zoe.password)
+    await adminsPage.pseudo.fill('Zoe')
+    await adminsPage.login.fill('zoe')
     await adminsPage.create.click()
+
+    // Le serveur génère le mot de passe provisoire, affiché une seule fois.
+    await expect(adminsPage.createdPassword).toBeVisible()
+    const zoe = { login: 'zoe', password: (await adminsPage.createdPassword.textContent())!.trim(), pseudo: 'Zoe' }
 
     await expect(adminsPage.account('Zoe')).toContainText('Identifiant : zoe')
     await expect(adminsPage.account('Zoe')).toContainText('par Admin')
@@ -90,16 +91,17 @@ test.describe('comptes administrateur (A-03, A-07, A-12)', () => {
     await expect(dashboardPage.title).toBeVisible()
   })
 
-  test('un mot de passe provisoire trop court est refusé', async ({ page, signIn, shell, adminsPage }) => {
+  test('le mot de passe provisoire n’est affiché qu’une fois', async ({ signIn, shell, adminsPage }) => {
     await signIn('admin')
     await shell.open('Administrateurs')
     await adminsPage.pseudo.fill('Court')
     await adminsPage.login.fill('court')
-    await adminsPage.temporaryPassword.fill('abc')
     await adminsPage.create.click()
+    await expect(adminsPage.createdPassword).toHaveText(/^\S{12,}$/)
 
-    await expect(page.getByText(/12 caractères/).first()).toBeVisible()
-    await expect(adminsPage.account('Court')).toHaveCount(0)
+    await adminsPage.hideCreated.click()
+    await expect(adminsPage.createdPassword).toHaveCount(0)
+    await expect(adminsPage.account('Court')).toContainText('mot de passe provisoire')
   })
 
   test('un admin change son mot de passe depuis « Mon compte »', async ({

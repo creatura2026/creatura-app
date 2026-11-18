@@ -1,13 +1,19 @@
 <script setup lang="ts">
 /**
- * AS-71 · Comptes admin : création avec un mot de passe provisoire, désactivation par un autre
- * admin (jamais son propre compte). Un admin désactivé n'est jamais supprimé.
+ * AS-71 · Comptes admin : création avec un mot de passe provisoire généré par le serveur et affiché
+ * une seule fois, désactivation par un autre admin (jamais son propre compte). Un admin désactivé
+ * n'est jamais supprimé.
  */
 import { computed, ref } from 'vue'
 import { useForm } from 'vee-validate'
 import { z } from 'zod'
 import { toTypedSchema } from '@creatura/shared/forms'
-import { errorMessage, isApiError, type AdminAccount } from '@creatura/shared/api/types'
+import {
+  errorMessage,
+  isApiError,
+  type AdminAccount,
+  type AdminAccountCreated,
+} from '@creatura/shared/api/types'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import FormField from '@creatura/shared/ui/FormField.vue'
@@ -34,10 +40,6 @@ const schema = toTypedSchema(
       .trim()
       .min(3, '3 caractères minimum.')
       .max(50, '50 caractères maximum.'),
-    temporaryPassword: z
-      .string({ error: 'Choisissez un mot de passe provisoire.' })
-      .min(12, '12 caractères minimum.')
-      .max(128, '128 caractères maximum.'),
   }),
 )
 const { defineField, errors, handleSubmit, isSubmitting, resetForm, setFieldError } = useForm({
@@ -45,20 +47,28 @@ const { defineField, errors, handleSubmit, isSubmitting, resetForm, setFieldErro
 })
 const [pseudo, pseudoAttrs] = defineField('pseudo')
 const [login, loginAttrs] = defineField('login')
-const [temporaryPassword, passwordAttrs] = defineField('temporaryPassword')
 const create = useCreateAdmin()
 const formError = ref<string | null>(null)
+
+/** Compte qui vient d'être créé : son mot de passe provisoire n'est affiché qu'ici, une fois. */
+const created = ref<AdminAccountCreated | null>(null)
+const copied = ref(false)
+async function copyPassword() {
+  if (!created.value) return
+  try {
+    await navigator.clipboard.writeText(created.value.temporaryPassword)
+    copied.value = true
+  } catch {
+    toast('Copie impossible : sélectionnez le mot de passe et copiez-le à la main.', 'error')
+  }
+}
 
 const onCreate = handleSubmit(async (values) => {
   formError.value = null
   try {
-    const created = await create.mutateAsync(values)
+    created.value = await create.mutateAsync(values)
+    copied.value = false
     resetForm()
-    toast(
-      `Compte ${created.pseudo} créé. Transmettez-lui le mot de passe provisoire en privé : il le changera à sa première connexion.`,
-      'success',
-      7000,
-    )
   } catch (e) {
     const field = isApiError(e) ? e.problem.errors?.[0] : undefined
     if (field?.field === 'pseudo' || field?.field === 'login')
@@ -97,7 +107,7 @@ function status(a: AdminAccount): string {
 <template>
   <section>
     <PageHeader
-      eyebrow="AS-71 · Comptes du dashboard"
+      eyebrow="Comptes du dashboard"
       title="Administrateurs"
       subtitle="Un admin valide les demandes de suppression de joueurs des autres admins."
     />
@@ -174,6 +184,32 @@ function status(a: AdminAccount): string {
         @submit="onCreate"
       >
         <h2 id="create-admin-title" class="font-sans text-lg font-bold">Créer un administrateur</h2>
+        <div
+          v-if="created"
+          class="border-2 border-ink bg-butter px-3 py-3 text-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <p class="font-bold">Compte {{ created.pseudo }} créé</p>
+          <p class="mt-1">
+            Identifiant : <strong>{{ created.login }}</strong>
+          </p>
+          <p class="mt-1">Mot de passe provisoire :</p>
+          <p class="mt-1 flex flex-wrap items-center gap-2">
+            <code class="border-2 border-ink bg-white px-2 py-1 font-mono text-base select-all">{{
+              created.temporaryPassword
+            }}</code>
+            <button type="button" class="btn btn-secondary min-h-10 px-3" @click="copyPassword">
+              {{ copied ? 'Copié' : 'Copier' }}
+            </button>
+          </p>
+          <p class="mt-2 font-semibold text-brick">
+            Notez-le maintenant et transmettez-le en privé : il ne sera plus affiché.
+          </p>
+          <button type="button" class="mt-2 underline underline-offset-2" @click="created = null">
+            J’ai transmis le mot de passe, masquer
+          </button>
+        </div>
         <p
           v-if="formError"
           class="border-2 border-brick bg-salmon px-3 py-2 text-sm font-medium"
@@ -194,15 +230,10 @@ function status(a: AdminAccount): string {
           autocomplete="off"
           :error="errors.login"
         />
-        <FormField
-          v-model="temporaryPassword"
-          v-bind="passwordAttrs"
-          type="password"
-          label="Mot de passe provisoire"
-          hint="12 caractères minimum. Le nouvel admin le remplacera à sa première connexion."
-          autocomplete="new-password"
-          :error="errors.temporaryPassword"
-        />
+        <p class="text-sm text-ink/80">
+          Le mot de passe provisoire est généré automatiquement. Le nouvel admin le remplacera à sa
+          première connexion.
+        </p>
         <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
           {{ isSubmitting ? 'Création…' : 'Créer le compte' }}
         </button>

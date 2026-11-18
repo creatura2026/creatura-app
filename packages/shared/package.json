@@ -6,6 +6,7 @@
   "description": "Thème, composants et types partagés entre la PWA joueur et le dashboard admin",
   "exports": {
     "./theme.css": "./src/theme.css",
+    "./guide.css": "./src/guide.css",
     "./ui/*": "./src/ui/*",
     "./assets/*": "./src/assets/*",
     "./*": "./src/*.ts"

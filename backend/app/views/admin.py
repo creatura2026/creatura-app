@@ -15,7 +15,6 @@ from app.schemas.admin import (
     AdminStatsOut,
     BoosterSettingsIn,
     BoosterSettingsOut,
-    RarityChangeIn,
     RarityDistributionOut,
 )
 from app.schemas.base import Page
@@ -84,19 +83,14 @@ def create_creature(data: AdminCreatureIn, db: DbSession):
 
 @router.patch("/creatures/{creatureId}", response_model=AdminCreatureOut)
 def update_creature(creatureId: str, data: AdminCreatureUpdateIn, db: DbSession):  # noqa: N803 (nom du contrat)
-    """Nom, description et/ou famille d'une carte existante, tout de suite (champs omis inchangés)."""
+    """Nom, description, famille et rareté d'une carte, tout de suite ; la hausse d'exemplaires
+    d'une édition limitée est différée au prochain minuit (champs omis inchangés)."""
     return AdminCreatureOut.of(admin.update_creature(db, creatureId, data))
-
-
-@router.put("/creatures/{creatureId}/rarity", response_model=AdminCreatureOut)
-def schedule_rarity_change(creatureId: str, data: RarityChangeIn, db: DbSession):  # noqa: N803 (nom du contrat)
-    """Nouvelle rareté d'une carte existante, appliquée au prochain minuit."""
-    return AdminCreatureOut.of(admin.schedule_rarity_change(db, creatureId, data))
 
 
 @router.delete("/creatures/{creatureId}/rarity", response_model=AdminCreatureOut)
 def cancel_rarity_change(creatureId: str, db: DbSession):  # noqa: N803 (nom du contrat)
-    """Annule le changement de rareté prévu."""
+    """Annule la hausse d'exemplaires prévue au prochain minuit."""
     return AdminCreatureOut.of(admin.cancel_rarity_change(db, creatureId))
 
 

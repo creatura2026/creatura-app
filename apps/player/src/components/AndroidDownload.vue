@@ -99,6 +99,7 @@ onBeforeUnmount(() => observer?.disconnect())
         class="phone-scene mx-auto w-full max-w-[10.5rem] lg:order-2"
         :class="{ 'is-open': opened }"
         aria-hidden="true"
+        inert
       >
         <div class="phone border-4 border-ink bg-ink p-2 shadow-pixel">
           <div class="flex items-center justify-between px-2 pb-1.5 text-cream">
