@@ -10,6 +10,8 @@
     "test:mock:all": "playwright test --project=player-mock* --project=admin-mock* --project=player-mobile*",
     "test:stack": "playwright test -c playwright.stack.config.ts",
     "test:stack:ui": "playwright test -c playwright.stack.config.ts --ui",
+    "test:desktop": "playwright test -c playwright.stack.config.ts --project=stack-desktop",
+    "test:exe": "playwright test -c playwright.exe.config.ts",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
     "type-check": "tsc --noEmit",

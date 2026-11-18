@@ -327,9 +327,13 @@ jobs:
         if: steps.browsers.outputs.cache-hit == 'true'
         run: pnpm --filter e2e exec playwright install-deps chromium
 
+      # L'application Windows (Electron) est testée ici aussi, sous Linux : il lui faut un écran.
+      - name: Écran virtuel pour Electron
+        run: sudo apt-get install -y --no-install-recommends xvfb
+
       # Démarre la stack (stack/global-setup.ts), construit les apps, lance les tests.
       - name: Tests
-        run: pnpm --filter e2e run test:stack
+        run: xvfb-run -a pnpm --filter e2e run test:stack
 
       - name: Journaux de la stack
         if: failure()
@@ -420,6 +424,23 @@ jobs:
             pnpm desktop:demo
           fi
           test -f apps/desktop/release/latest.json
+
+      # L'exe construit démarre, sert le site qu'il embarque et lit l'adresse du backend dans
+      # l'ordre prévu (e2e/specs-desktop/exe). En cas d'échec, l'exe n'est ni publié ni ajouté à
+      # la Release (les étapes suivantes sont sautées).
+      - name: Tests de l'exe
+        run: pnpm --filter e2e run test:exe
+
+      - name: Rapport des tests de l'exe
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-exe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/reports/
+            e2e/test-results-exe/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Publier l'exe
         uses: actions/upload-artifact@v4

@@ -9,6 +9,7 @@
  *
  * Projets :
  *  - stack-player, stack-realtime, stack-admin : en parallèle, chaque test crée ses joueurs ;
+ *  - stack-desktop : l'application Windows (Electron) branchée sur la stack, un test à la fois ;
  *  - stack-serial : APRÈS les autres et un test à la fois, car ces tests touchent toute la stack :
  *    réglages communs (cartes par booster), passage de minuit simulé, redémarrage de l'API.
  */
@@ -55,10 +56,12 @@ export default defineConfig({
     { name: 'stack-player', testDir: './specs-stack/player', use: { ...chrome, baseURL: PLAYER_URL } },
     { name: 'stack-realtime', testDir: './specs-stack/realtime', use: { ...chrome, baseURL: PLAYER_URL } },
     { name: 'stack-admin', testDir: './specs-stack/admin', use: { ...chrome, baseURL: ADMIN_URL } },
+    // Application Windows (Electron, non empaquetée) branchée sur la stack.
+    { name: 'stack-desktop', testDir: './specs-desktop/app', use: { ...chrome, baseURL: PLAYER_URL } },
     {
       name: 'stack-serial',
       testDir: './specs-stack/serial',
-      dependencies: ['stack-player', 'stack-realtime', 'stack-admin'],
+      dependencies: ['stack-player', 'stack-realtime', 'stack-admin', 'stack-desktop'],
       fullyParallel: false,
       use: { ...chrome, baseURL: PLAYER_URL },
     },

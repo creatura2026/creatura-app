@@ -92,6 +92,7 @@ test('P-16 : changer son mot de passe déconnecte ses autres sessions', async ({
   const elsewhere = await openPlayer(account)
   // Le serveur révoque les jetons émis AVANT le changement, à la seconde près : une session ouverte
   // dans la même seconde survivrait. On laisse passer cette seconde.
+  // eslint-disable-next-line playwright/no-wait-for-timeout -- seconde de révocation du serveur
   await here.page.waitForTimeout(1_100)
 
   await here.profile.goto()

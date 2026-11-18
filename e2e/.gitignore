@@ -1,6 +1,8 @@
 node_modules/
 test-results/
 test-results-stack/
+test-results-exe/
+.desktop-apps/
 playwright-report/
 playwright-report-stack/
 reports/

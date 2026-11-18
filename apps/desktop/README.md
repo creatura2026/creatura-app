@@ -188,6 +188,9 @@ Autres choix :
   perdre.
 - **Pas de service worker** : l'exe contient déjà tous les fichiers, et un cache pourrait afficher
   l'ancienne version après une mise à jour.
+- **Dossier des données** : `%APPDATA%\Creatura` (`Creatura Demo` pour la démo). La variable
+  `CREATURA_USER_DATA` en désigne un autre : les tests de bout en bout (`e2e/specs-desktop`) s'en
+  servent pour ne jamais toucher aux données de l'utilisateur.
 - **Désinstallation complète** : l'installeur efface aussi `%APPDATA%\Creatura` (session, données
   locales), à partir de la version 0.1.1. Une réinstallation repart d'une app déconnectée.
 - **Une seule instance** : relancer l'exe remet la fenêtre ouverte au premier plan.

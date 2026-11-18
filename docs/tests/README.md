@@ -120,7 +120,10 @@ e2e/                          paquet pnpm dédié aux tests de bout en bout
     realtime/                 salle d'échange : vrai WebSocket, deux navigateurs
     serial/                   tests qui touchent toute la stack (minuit, redémarrage de l'API)
   stack/                      démarrage de la stack, client de l'API, SQL, WebSocket
-  (à venir) specs-desktop/    application Electron ; mobile/ : flows Maestro pour l'APK
+  specs-desktop/              application Windows : app/ (Electron sur la stack), exe/ (exe construit)
+  desktop/                    préparation et lancement de l'application Electron
+  playwright.exe.config.ts    tests de l'exe empaqueté (Windows)
+  (à venir) mobile/           flows Maestro pour l'APK
 ```
 
 Les 3 tests qui étaient dans `apps/player/e2e` et `apps/admin/e2e` ont été déplacés dans
@@ -136,7 +139,8 @@ Projets Playwright :
 | `player-mobile`, `player-mobile-ios` | API simulée | Pixel 7 (Chromium), iPhone 14 (WebKit) | `player/` (étiquette `@mobile`) | en place |
 | `stack-player`, `stack-admin`, `stack-realtime` | stack réelle | Chromium | `specs-stack/player/`, `admin/`, `realtime/`, en parallèle | en place |
 | `stack-serial` | stack réelle | Chromium | `specs-stack/serial/`, après les autres, un test à la fois | en place |
-| `desktop` | stack réelle ou démo | Electron | `desktop/` | lot 4 |
+| `stack-desktop` | stack réelle et démo | Electron (non empaqueté) | `specs-desktop/app/`, un test à la fois | en place |
+| `playwright.exe.config.ts` | sans serveur | exe Windows construit | `specs-desktop/exe/` | en place |
 
 ## 4. Outils
 
@@ -171,7 +175,9 @@ Projets Playwright :
 | E2E admin (API simulée) | `e2e/specs/admin/` | 29 tests, 4 fichiers (dont 11 d'accessibilité) | oui |
 | E2E multi-navigateurs et mobile | mêmes specs, Firefox, WebKit, Pixel 7, iPhone 14 | 282 exécutions en tout | push |
 | E2E stack réelle | `e2e/specs-stack/` | 26 tests, 4 fichiers | push |
-| Exe, APK | — | 0 (construits, pas testés) | — |
+| Application Windows (Electron) | `e2e/specs-desktop/app/` | 7 tests | push (job `e2e-stack`, Linux) |
+| Exe Windows construit | `e2e/specs-desktop/exe/` | 2 tests | push (job `desktop`, Windows) |
+| APK | — | 0 (construit, pas testé) | — |
 
 Ce qui est déjà bien couvert côté back : comptes, booster, tirage, catalogue, collection,
 échanges (dont la salle WebSocket, la concurrence et le multi-répliques), dons, comptes admin,
@@ -186,10 +192,10 @@ Le workflow est [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (no
 | Déclencheur | Tests lancés | Autres étapes |
 |---|---|---|
 | Pull request | SQL (schéma, données), pytest, lint, type-check + build du front, Vitest, E2E sur l'API simulée (Chromium) | images Docker construites, pas publiées |
-| Push sur `develop` ou `main` | les mêmes, l'E2E simulé dans Firefox, WebKit, Pixel 7 et iPhone 14, et l'**E2E sur la stack réelle** (job `e2e-stack`) | images publiées sur GHCR si tous les tests sont verts (E2E compris) ; exe et APK **construits, pas testés** |
+| Push sur `develop` ou `main` | les mêmes, l'E2E simulé dans Firefox, WebKit, Pixel 7 et iPhone 14, l'**E2E sur la stack réelle** avec l'application Electron (job `e2e-stack`), et l'**exe construit** (job `desktop`) | images publiées sur GHCR si tous les tests sont verts (E2E compris) ; exe publié s'il passe ses tests ; APK **construit, pas testé** |
 | Tag `v*` | les mêmes | Release GitHub (exe, APK) |
 
-Pas encore de test de l'exe ou de l'APK. Les jobs exe et APK sont en
+Pas encore de test de l'APK. Les jobs exe et APK sont en
 `continue-on-error` : leur échec ne fait pas échouer la CI.
 
 ### Cible
@@ -384,25 +390,44 @@ L'exe n'est pas seulement le site dans une fenêtre. `apps/desktop/main.cjs` ajo
 - l'installeur NSIS et la version portable.
 
 **Outil :** Playwright pilote Electron (`_electron.launch`) : on garde les mêmes page objects que
-pour le site.
+pour le site. `e2e/desktop/app.ts` prépare des variantes de l'application dans
+`e2e/.desktop-apps/` : le vrai `main.cjs`, son `app-config.json` (démo, ou branchée sur la stack)
+et le site joueur construit pour elle. Les tests ne touchent donc ni à `apps/desktop/web` ni à la
+configuration du poste. Chaque lancement a son port (`CREATURA_PORT`) et son dossier de données
+(`CREATURA_USER_DATA`, ajouté à `main.cjs` pour les tests).
 
-| ID | Scénario | Où |
-|---|---|---|
-| D-01 | L'application démarre, la fenêtre affiche l'accueil | Linux (xvfb) et Windows |
-| D-02 | Version démo : connexion avec le compte de démonstration, ouverture d'un booster | Windows (exe construit) |
-| D-03 | Version branchée sur la stack réelle : connexion, booster → les appels passent par le proxy local | Linux (xvfb) + stack Docker |
-| D-04 | **Salle d'échange à travers le proxy** : un joueur dans l'app, l'autre dans le navigateur, échange conclu en temps réel | Linux (xvfb) + stack Docker |
-| D-05 | Priorité de la configuration : `CREATURA_API_URL` l'emporte sur `creatura.json`, qui l'emporte sur l'adresse du build | Linux |
-| D-06 | Backend injoignable : message clair, pas d'écran blanc | Linux |
-| D-07 | Un lien externe s'ouvre dans le navigateur du système, pas dans l'application | Linux |
+**Application non empaquetée, sur la stack réelle** (`e2e/specs-desktop/app`, projet
+`stack-desktop` de `playwright.stack.config.ts`, un test à la fois : l'app n'accepte qu'une
+instance) :
+
+| ID | Scénario |
+|---|---|
+| D-01 | L'application démarre et affiche l'accueil, servi par son serveur local ; ses données sont dans le dossier du test |
+| D-02 | Version démo, sans serveur : connexion de démonstration, booster ouvert |
+| D-03 | Branchée sur la stack : connexion, booster ; **toutes** les requêtes `/api` visent le serveur local, qui relaie vers l'API |
+| D-04 | **Salle d'échange à travers le proxy** : Alice dans l'app, Bob dans un navigateur, cartes vues en direct, échange conclu |
+| D-05, D-06 | `CREATURA_API_URL` l'emporte sur l'adresse du build ; un serveur injoignable donne un message clair (« Le serveur Créatura (…) ne répond pas »), pas un écran blanc |
+| D-07 | Un lien vers un autre site (navigation ou `window.open`) part dans le navigateur du système (`shell.openExternal`), l'app reste sur sa page |
+| D-08 | Le serveur local sert les routes de l'app, un `registerSW.js` vide (pas de service worker), et rien hors du site |
+
+**Exe empaqueté, sous Windows** (`e2e/specs-desktop/exe`, `playwright.exe.config.ts`) : l'exe
+produit par `pnpm desktop`, toujours lancé avec un backend éteint (127.0.0.1) pour ne jamais
+contacter le vrai serveur.
+
+| ID | Scénario |
+|---|---|
+| E-01 | L'exe démarre et sert le site qu'il embarque |
+| E-02 | `creatura.json` à côté de l'exe l'emporte sur l'adresse du build, et `CREATURA_API_URL` sur `creatura.json` (fichier remis en état après le test) |
 
 Pourquoi deux systèmes : un runner Windows de GitHub ne lance pas de conteneurs Linux, donc pas la
 stack. Le code de `main.cjs` est le même partout : les tests du proxy et du WebSocket tournent
-sous Linux (Electron + xvfb + stack Docker), et l'exe **réellement construit** est vérifié sous
-Windows par un smoke test en version démo (D-01, D-02).
+sous Linux (Electron sous `xvfb`, job `e2e-stack`), et l'exe **réellement construit** est vérifié
+sous Windows, dans le job `desktop`, juste après sa construction : s'il échoue, l'exe n'est ni
+publié ni ajouté à la Release.
 
-Installation, mise à jour et désinstallation (le dossier `%APPDATA%\Creatura` est bien effacé)
-restent en recette manuelle (§ 17).
+Non testé automatiquement : une adresse de backend invalide (Electron affiche une boîte de dialogue
+bloquante), l'installation, la mise à jour et la désinstallation (le dossier `%APPDATA%\Creatura`
+est bien effacé) : recette manuelle (§ 17).
 
 ## 11. Application Android (.apk)
 
@@ -517,7 +542,8 @@ pnpm --filter e2e test:stack           # stack réelle (Docker doit tourner) ; l
 E2E_KEEP_STACK=1 pnpm --filter e2e test:stack    # la garder après les tests…
 E2E_STACK=external pnpm --filter e2e test:stack  # … puis relancer sans la reconstruire
 pnpm --filter e2e test:stack:ui        # mode interactif sur la stack réelle
-# À venir : test:desktop (lot 4)
+pnpm --filter e2e test:desktop         # application Electron seule, sur la stack réelle
+pnpm desktop && pnpm --filter e2e test:exe   # exe Windows construit (Windows seulement)
 ```
 
 ## 16. Rapports, couverture et critères de réussite
@@ -567,7 +593,7 @@ pnpm --filter e2e test:stack:ui        # mode interactif sur la stack réelle
 | 1. Socle ✅ | paquet `e2e/`, configuration Playwright, fixtures, page objects, migration des 3 tests ; job `e2e-mock` ; lint en CI | E2E simulé en CI sur chaque PR |
 | 2. E2E simulé ✅ | P-01 à P-19, A-01 à A-12 en mode simulé ; projets mobile et multi-navigateurs ; axe-core | parcours écran couverts |
 | 3. Stack réelle ✅ | `e2e/compose.yaml`, fixtures API, `specs-stack/`, **WS-01 à WS-11**, X-01 à X-04, A-02 ; job `e2e-stack` | intégration réelle et temps réel couverts |
-| 4. Application Windows | D-01 à D-07 ; job `e2e-desktop` (Linux + Windows) | exe testé avant publication |
+| 4. Application Windows ✅ | D-01 à D-08 (Electron sur la stack, Linux), E-01 et E-02 (exe construit, Windows) ; jobs `e2e-stack` et `desktop` | exe testé avant publication |
 | 5. Application Android | M-01 à M-05 ; job `e2e-mobile` sur émulateur | APK testé avant publication |
 | 6. Compléments | unitaires manquants (§ 7), couverture et seuils, contrat OpenAPI, k6, sécurité de nuit | qualité mesurée |
 
@@ -586,7 +612,7 @@ pnpm --filter e2e test:stack:ui        # mode interactif sur la stack réelle
 | Dashboard admin (UC-12) | `admin/mock-api.spec.ts` | `test_admin.py` | A-04, A-11 |
 | Catalogue admin (UC-13) | `admin/mock-api.spec.ts` | `test_admin_catalog.py` | A-08, A-09, A-10, X-02 |
 | Joueurs et comptes admin (UC-14) | `admin/mock-api.spec.ts` | `test_admin_accounts.py` | A-01, A-03, A-05 à A-07, A-12, X-03 |
-| Téléchargement exe / APK | `useDesktopDownload.spec.ts`, `useAndroidDownload.spec.ts` | — | P-19, D-01 à D-07, M-01 à M-05 |
+| Téléchargement et applications exe / APK | `useDesktopDownload.spec.ts`, `useAndroidDownload.spec.ts` | — | P-19, D-01 à D-08, E-01, E-02, M-01 à M-05 |
 
 Les numéros d'UC ci-dessus suivent ceux du README racine et du contrat OpenAPI ; à corriger si le
 cahier des charges les découpe autrement.

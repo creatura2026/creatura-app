@@ -13,6 +13,7 @@
  *  4. http://localhost:8000.
  * CREATURA_PORT : port du serveur local (défaut 47321). Il doit rester le même d'un lancement à
  * l'autre : la session et les données locales sont rattachées à cette origine.
+ * CREATURA_USER_DATA : dossier des données de l'application (tests de bout en bout).
  */
 const { app, BrowserWindow, Menu, dialog, session, shell } = require('electron')
 const fs = require('node:fs')
@@ -38,7 +39,13 @@ const LOCAL = app.isPackaged ? readJson(path.join(EXE_DIR, 'creatura.json')) : {
 // efface à la désinstallation (deleteAppDataOnUninstall). Sans ce réglage, Electron prendrait le
 // « name » du package.json (« desktop »). La démo garde ses données à part : ses comptes simulés
 // ne se mélangent pas aux vrais.
-app.setPath('userData', path.join(app.getPath('appData'), BUILT.demo ? 'Creatura Demo' : 'Creatura'))
+// CREATURA_USER_DATA : autre dossier (tests de bout en bout : un dossier vide par test, sans
+// toucher aux données de l'utilisateur).
+app.setPath(
+  'userData',
+  process.env.CREATURA_USER_DATA ||
+    path.join(app.getPath('appData'), BUILT.demo ? 'Creatura Demo' : 'Creatura'),
+)
 
 const PORT = Number(process.env.CREATURA_PORT || 47321)
 const API_SETTING =
