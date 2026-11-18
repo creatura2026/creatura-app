@@ -669,21 +669,34 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
         const family = FAMILIES.find((f) => f.code === body.family)
         if (family) edit.family = family
       }
+      // Rareté : immédiate. Stock : initial immédiat quand la carte devient légendaire, sinon hausse à minuit.
+      if (body.rarity !== undefined) {
+        const rarity = RARITIES.find((r) => r.code === body.rarity) ?? RARITIES[0]!
+        if (rarity.code !== 'LEGENDARY') {
+          edit.rarity = { code: rarity.code, label: rarity.label }
+          edit.stockTotal = null
+          edit.stockRemaining = null
+          rarityChanges.delete(creatureId)
+        } else if (creature.rarity.code !== 'LEGENDARY') {
+          if (body.stock == null) {
+            const message = 'Une légendaire est une édition limitée : indiquez le nombre d’exemplaires.'
+            throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'stock', message }] })
+          }
+          edit.rarity = { code: rarity.code, label: rarity.label }
+          edit.stockTotal = body.stock
+          edit.stockRemaining = body.stock
+          rarityChanges.delete(creatureId)
+        } else if (body.stock != null) {
+          scheduleStockChange(creatureId, creature, body.stock)
+        }
+      } else if (body.stock != null) {
+        if (creature.rarity.code !== 'LEGENDARY') {
+          const message = 'Seule une légendaire (édition limitée) a un nombre d’exemplaires.'
+          throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'stock', message }] })
+        }
+        scheduleStockChange(creatureId, creature, body.stock)
+      }
       creatureEdits.set(creatureId, edit)
-      return clone(mockCreatures().find((c) => c.id === creatureId)!)
-    },
-
-    async scheduleRarityChange(creatureId, body) {
-      await delay()
-      admin()
-      const creature = mockCreatures().find((c) => c.id === creatureId)
-      if (!creature) throw problem('NOT_FOUND', "Cette créature n'existe pas.")
-      const rarity = RARITIES.find((r) => r.code === body.rarity) ?? RARITIES[0]!
-      rarityChanges.set(creatureId, {
-        rarity: { code: rarity.code, label: rarity.label },
-        stock: body.stock ?? null,
-        effectiveFrom: addDays(parisToday(), 1),
-      })
       return clone(mockCreatures().find((c) => c.id === creatureId)!)
     },
 
@@ -942,11 +955,28 @@ export function createMockAdminApi(getToken: () => string | null): AdminApi {
   }
 }
 
-// Cartes ajoutées et changements de rareté de la démo : en mémoire, perdus au rechargement.
+// Cartes ajoutées et hausses de stock programmées de la démo : en mémoire, perdues au rechargement.
 const addedCreatures: AdminCreature[] = []
 const rarityChanges = new Map<string, NonNullable<AdminCreature['scheduledChange']>>()
-// Modifications immédiates d'une carte (nom, description, famille) par l'admin.
-const creatureEdits = new Map<string, Partial<Pick<AdminCreature, 'name' | 'description' | 'family'>>>()
+// Modifications immédiates d'une carte (nom, description, famille, rareté et stock) par l'admin.
+const creatureEdits = new Map<
+  string,
+  Partial<Pick<AdminCreature, 'name' | 'description' | 'family' | 'rarity' | 'stockTotal' | 'stockRemaining'>>
+>()
+
+/** Programme (ou annule) une hausse de stock d'une édition limitée au prochain minuit. */
+function scheduleStockChange(creatureId: string, creature: AdminCreature, newTotal: number): void {
+  const current = creature.stockTotal ?? 0
+  if (newTotal < current) {
+    const message = 'Le nombre d’exemplaires ne peut qu’augmenter.'
+    throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'stock', message }] })
+  }
+  if (newTotal === current) {
+    rarityChanges.delete(creatureId) // pas de hausse : rien en attente
+    return
+  }
+  rarityChanges.set(creatureId, { rarity: creature.rarity, stock: newTotal, effectiveFrom: addDays(parisToday(), 1) })
+}
 
 function mockCreatures(): AdminCreature[] {
   const base: AdminCreature[] = CREATURES.map((c) => ({

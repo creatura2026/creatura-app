@@ -23,8 +23,19 @@ from app.controllers.booster import today
 from app.controllers.catalog import CATALOG_ORDER, parse_creature_id, paginate, rarity_drop_rates, rarity_weights
 from app.controllers.planning import next_midnight_day
 from app.errors import BadRequest, NotFound, field_error
-from app.models import BoosterCarte, Creature, Echange, Rarete, RareteTirage, Reglage, Role, Statut, Utilisateur
-from app.schemas.admin import AdminCreatureIn, AdminCreatureUpdateIn, RarityChangeIn
+from app.models import (
+    BoosterCarte,
+    Collection,
+    Creature,
+    Echange,
+    Rarete,
+    RareteTirage,
+    Reglage,
+    Role,
+    Statut,
+    Utilisateur,
+)
+from app.schemas.admin import AdminCreatureIn, AdminCreatureUpdateIn
 from app.schemas.admin import (
     AdminStatsOut,
     CompletedTrades,
@@ -231,7 +242,8 @@ def create_creature(db: Session, data: AdminCreatureIn) -> Creature:
 
 
 def update_creature(db: Session, creature_id: str, data: AdminCreatureUpdateIn) -> Creature:
-    """Met à jour le nom, la description et/ou la famille d'une carte (immédiat).
+    """Met à jour une carte. Nom, description, famille et rareté s'appliquent tout de suite ;
+    le nombre d'exemplaires d'une édition limitée est différé au prochain minuit (hausse seule).
 
     Seuls les champs fournis changent. Le nom déjà pris est refusé (uq_creature_nom).
     """
@@ -243,34 +255,75 @@ def update_creature(db: Session, creature_id: str, data: AdminCreatureUpdateIn) 
         creature.description = (data.description or "").strip() or None
     if "family" in provided and data.family is not None:
         creature.famille = data.family
+    if "rarity" in provided and data.rarity is not None:
+        _apply_rarity(db, creature, RARETE_OF[data.rarity], data.stock, "stock" in provided)
+    elif "stock" in provided and data.stock is not None:
+        # Rareté inchangée : on ne touche qu'au stock de l'édition limitée (hausse à minuit).
+        if creature.rarete != Rarete.LEGENDAIRE:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", "Seule une légendaire (édition limitée) a un nombre d'exemplaires."
+            )
+        _schedule_stock(db, creature, data.stock)
     db.commit()  # nom déjà pris : uq_creature_nom (app.main : gestionnaire IntegrityError)
     db.refresh(creature)
     return creature
 
 
-def schedule_rarity_change(db: Session, creature_id: str, data: RarityChangeIn) -> Creature:
-    """Nouvelle rareté (et stock si légendaire) appliquée au prochain minuit.
+def _apply_rarity(db: Session, creature: Creature, rarete: Rarete, stock: int | None, stock_given: bool) -> None:
+    """Change la rareté tout de suite. Vers une illimitée : stock effacé. Vers légendaire :
+    stock initial immédiat (obligatoire) si elle ne l'était pas ; si elle l'est déjà, une hausse
+    de stock est programmée au prochain minuit."""
+    if rarete != Rarete.LEGENDAIRE:
+        if stock_given and stock is not None:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", "Seule une légendaire (édition limitée) a un nombre d'exemplaires."
+            )
+        creature.rarete = rarete
+        creature.stock_total = creature.stock_restant = None
+        _clear_scheduled(creature)  # une illimitée n'a pas de changement de stock en attente
+        return
 
-    Les exemplaires déjà possédés restent dans les collections. Une carte qui devient légendaire
-    reçoit `stock` nouveaux exemplaires à tirer ; une légendaire qui change de rareté devient
-    illimitée.
-    """
-    creature = get_creature(db, creature_id)
-    rarete = RARETE_OF[data.rarity]
-    _check_stock(rarete, data.stock)
-    if rarete == creature.rarete and rarete != Rarete.LEGENDAIRE:
-        raise field_error("VALIDATION_ERROR", "rarity", "La carte a déjà cette rareté.")
-    creature.rarete_suivante = rarete
-    creature.stock_suivant = data.stock
+    # Devient (ou reste) légendaire. `stock` = taille totale de l'édition limitée.
+    if creature.rarete != Rarete.LEGENDAIRE:
+        if stock is None:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", "Une légendaire est une édition limitée : indiquez le nombre d'exemplaires."
+            )
+        # Les exemplaires déjà possédés comptent dans l'édition : total = stock, tirables = stock - détenus.
+        held = db.scalar(select(func.coalesce(func.sum(Collection.quantite), 0)).where(Collection.creature_id == creature.id)) or 0
+        if stock < held:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", f"{held} exemplaires sont déjà distribués : l'édition doit en compter au moins autant."
+            )
+        creature.rarete = Rarete.LEGENDAIRE
+        creature.stock_total = stock  # édition créée maintenant : stock immédiat
+        creature.stock_restant = stock - held
+        _clear_scheduled(creature)
+    elif stock_given and stock is not None:
+        _schedule_stock(db, creature, stock)  # déjà légendaire : seule une hausse, à minuit
+
+
+def _schedule_stock(db: Session, creature: Creature, new_total: int) -> None:
+    """Programme le nouveau total d'exemplaires au prochain minuit. Égal : annule l'attente ;
+    inférieur : refusé (le stock ne peut qu'augmenter)."""
+    current = creature.stock_total or 0
+    if new_total < current:
+        raise field_error("VALIDATION_ERROR", "stock", "Le nombre d'exemplaires ne peut qu'augmenter.")
+    if new_total == current:
+        _clear_scheduled(creature)  # pas de hausse : rien en attente
+        return
+    creature.stock_suivant = new_total
     creature.changement_le = next_midnight_day(db)
-    db.commit()
-    db.refresh(creature)
-    return creature
+
+
+def _clear_scheduled(creature: Creature) -> None:
+    creature.rarete_suivante = creature.stock_suivant = creature.changement_le = None
 
 
 def cancel_rarity_change(db: Session, creature_id: str) -> Creature:
+    """Annule la hausse de stock prévue au prochain minuit."""
     creature = get_creature(db, creature_id)
-    creature.rarete_suivante = creature.stock_suivant = creature.changement_le = None
+    _clear_scheduled(creature)
     db.commit()
     db.refresh(creature)
     return creature
