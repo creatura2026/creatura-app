@@ -222,7 +222,7 @@ const history = useDeletionRequests(computed(() => ({ page: historyPage.value, p
                   >
                     {{ p.pseudo }}
                   </RouterLink>
-                  <span class="block text-xs text-ink/70">{{ p.login }}</span>
+                  <span class="block text-xs text-ink/80">{{ p.login }}</span>
                   <span
                     v-if="p.pendingDeletionRequestId"
                     class="mt-1 inline-block border-2 border-ink bg-butter px-1.5 text-xs font-bold whitespace-nowrap"

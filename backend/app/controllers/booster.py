@@ -16,7 +16,7 @@
 import random
 import uuid
 from collections import Counter
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Date, cast, func, insert, select, update
@@ -52,7 +52,7 @@ def today(db: Session) -> date:
 def _next_midnight(day: date) -> datetime:
     """Prochain minuit (heure de Paris), exprimé en UTC."""
     local = datetime.combine(day + timedelta(days=1), time.min, tzinfo=ZoneInfo(get_settings().timezone))
-    return local.astimezone(timezone.utc)
+    return local.astimezone(UTC)
 
 
 def settings(db: Session) -> Reglage:
@@ -168,7 +168,7 @@ def _open_once(db: Session, user: Utilisateur) -> BoosterOut:
             BoosterCardOut(creature=CreatureSummaryOut.of(creature), is_new=creature.id not in owned)
         )
         owned.add(creature.id)  # un deuxième exemplaire du même booster n'est plus « nouveau »
-    return BoosterOut(id=booster_id, claim_date=day, opened_at=datetime.now(timezone.utc), cards=booster_cards)
+    return BoosterOut(id=booster_id, claim_date=day, opened_at=datetime.now(UTC), cards=booster_cards)
 
 
 def open_booster(db: Session, user: Utilisateur) -> BoosterOut:

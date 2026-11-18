@@ -43,16 +43,17 @@ defineEmits<{ reveal: [] }>()
         revealed ? 'rotate-y-180' : '',
         !revealed && interactive ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default',
       ]"
-      :aria-label="
-        revealed
-          ? card.creature.name
-          : interactive
-            ? `Retourner la carte ${index + 1}, rareté ${card.creature.rarity.label}`
-            : `Carte ${index + 1}, face cachée dans la pile`
-      "
       :disabled="revealed || !interactive"
       @click="$emit('reveal')"
     >
+      <!-- Nom de la carte face cachée ; une fois retournée, c'est celui de la créature -->
+      <span v-if="!revealed" class="sr-only">
+        {{
+          interactive
+            ? `Retourner la carte ${index + 1}, rareté ${card.creature.rarity.label}`
+            : `Carte ${index + 1}, face cachée dans la pile`
+        }}
+      </span>
       <!-- Dos de carte -->
       <span
         class="card-back card-pixel-sm rarity-frame absolute inset-0 flex flex-col items-center justify-center gap-2 border-ink bg-ink backface-hidden"
@@ -68,7 +69,10 @@ defineEmits<{ reveal: [] }>()
         <span class="font-pixel text-xs tracking-widest text-cream/80 uppercase">Toucher</span>
       </span>
       <!-- Face -->
-      <span class="absolute inset-0 rotate-y-180 backface-hidden">
+      <span
+        class="absolute inset-0 rotate-y-180 backface-hidden"
+        :aria-hidden="!revealed || undefined"
+      >
         <CreatureCard
           :creature="card.creature"
           :highlight="card.isNew"

@@ -137,3 +137,21 @@ def test_refresh_and_logout(client):
         f"{API}/auth/logout", json={"refreshToken": new_tokens["refreshToken"]}, headers=auth_headers(new_tokens)
     )
     assert r.status_code == 204
+
+
+def test_responses_forbid_content_sniffing(client):
+    """Toutes les réponses, erreurs comprises, interdisent au navigateur de deviner leur type."""
+    for response in (client.get(f"{API}/health"), client.get(f"{API}/me"), client.get(f"{API}/nulle-part")):
+        assert response.headers["x-content-type-options"] == "nosniff", response.url
+
+
+def test_responses_cannot_be_embedded_by_other_origins(client):
+    """Une autre origine ne peut pas charger les réponses comme ressource ; les appels CORS restent permis."""
+    origin = "http://localhost:5173"
+    for response in (client.get(f"{API}/health"), client.get(f"{API}/me"), client.get(f"{API}/nulle-part")):
+        assert response.headers["cross-origin-resource-policy"] == "same-origin", response.url
+    preflight = client.options(
+        f"{API}/auth/login", headers={"Origin": origin, "Access-Control-Request-Method": "POST"}
+    )
+    assert preflight.headers["access-control-allow-origin"] in (origin, "*")
+

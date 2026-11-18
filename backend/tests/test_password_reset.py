@@ -3,9 +3,9 @@
 from datetime import datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
+from conftest import API, PASSWORD, login, problem, register_and_login
 from sqlalchemy import text
 
-from conftest import API, PASSWORD, login, problem, register_and_login
 from app.database import SessionLocal
 
 NEW_PASSWORD = "nouveau-mot-de-passe"

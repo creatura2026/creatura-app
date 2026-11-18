@@ -76,7 +76,7 @@ watch(
       aria-live="polite"
       aria-relevant="additions"
     >
-      <li v-if="!messages.length" class="m-auto max-w-56 text-center text-sm text-ink/70">
+      <li v-if="!messages.length" class="m-auto max-w-56 text-center text-sm text-ink/80">
         Écrivez à {{ partner }} pour vous mettre d’accord.
       </li>
       <li

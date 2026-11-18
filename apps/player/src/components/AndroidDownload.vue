@@ -58,7 +58,7 @@ onBeforeUnmount(() => observer?.disconnect())
 
         <div v-if="!release" class="mt-7 flex flex-col items-start gap-3">
           <span
-            class="btn pointer-events-none bg-white/60 text-lg text-ink/70"
+            class="btn pointer-events-none bg-white/60 text-lg text-ink/80"
             aria-disabled="true"
           >
             <PixelIcon name="clock" :size="20" />

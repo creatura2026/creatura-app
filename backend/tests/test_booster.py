@@ -14,10 +14,10 @@ from conftest import (
     login,
     not_first_booster,
     only_creatures,
+    pass_midnight,
     problem,
     register_and_login,
     set_booster_size,
-    pass_midnight,
     set_stock,
     set_weights,
 )

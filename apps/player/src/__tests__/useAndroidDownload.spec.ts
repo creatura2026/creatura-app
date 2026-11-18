@@ -33,7 +33,7 @@ async function probeOffered() {
 }
 
 function serve(body: string, status = 200, type = 'application/json') {
-  const fetch = vi.fn(async () => new Response(body, { status, headers: { 'content-type': type } }))
+  const fetch = vi.fn<() => Promise<Response>>(async () => new Response(body, { status, headers: { 'content-type': type } }))
   vi.stubGlobal('fetch', fetch)
   return fetch
 }

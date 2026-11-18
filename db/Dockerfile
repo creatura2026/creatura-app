@@ -9,6 +9,9 @@
 # =============================================================================
 FROM postgres:16
 
+# Correctifs de sécurité Debian parus depuis la construction de l'image de base (scan Trivy de nuit).
+RUN apt-get update  && apt-get upgrade -y --no-install-recommends  && rm -rf /var/lib/apt/lists/*
+
 LABEL org.opencontainers.image.title="creatura-db" \
       org.opencontainers.image.description="PostgreSQL 16 initialisé avec le schéma CREATURA" \
       org.opencontainers.image.source="https://github.com/creatura2026/creatura-app"

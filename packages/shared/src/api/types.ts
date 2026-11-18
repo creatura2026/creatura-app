@@ -70,7 +70,6 @@ export type ScheduledBoosterSettings = Schemas['ScheduledBoosterSettings']
 export type RarityWeights = Schemas['RarityWeights']
 export type AdminCreature = Schemas['AdminCreature']
 export type AdminCreatureInput = Schemas['AdminCreatureInput']
-export type RarityChangeInput = Schemas['RarityChangeInput']
 
 /** Joueurs, demandes de suppression et comptes admin (AS-71). */
 export type Granularity = Schemas['Granularity']

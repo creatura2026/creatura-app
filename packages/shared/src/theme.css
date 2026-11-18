@@ -191,7 +191,7 @@
     @apply mb-1 block text-sm font-semibold;
   }
   .field-input {
-    @apply block min-h-11 w-full border-2 border-ink bg-white px-3 py-2 text-base text-ink placeholder:text-ink/50;
+    @apply block min-h-11 w-full border-2 border-ink bg-white px-3 py-2 text-base text-ink placeholder:text-ink/70;
   }
   .field-input[aria-invalid='true'] {
     @apply border-brick bg-salmon/20;

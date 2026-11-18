@@ -11,7 +11,7 @@
  */
 import { computed, reactive, ref, watch } from 'vue'
 import { errorMessage, type AdminCreature, type AdminCreatureUpdate } from '@creatura/shared/api/types'
-import type { CreatureSummary } from '@creatura/shared/api/types'
+import type { AdminCreatureInput, CreatureSummary } from '@creatura/shared/api/types'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
@@ -27,13 +27,17 @@ import {
   useUploadSprite,
 } from '@/api/queries'
 
-const FAMILIES = [
+/** Codes acceptés par le contrat (creatura-api.openapi.yaml). */
+type FamilyCode = AdminCreatureInput['family']
+type RarityCode = AdminCreatureInput['rarity']
+
+const FAMILIES: { code: FamilyCode; label: string }[] = [
   { code: 'NATURE', label: 'Nature' },
   { code: 'CRISTAL', label: 'Cristal' },
   { code: 'BRUME', label: 'Brume' },
   { code: 'LUEUR', label: 'Lueur' },
 ]
-const RARITIES = [
+const RARITIES: { code: RarityCode; label: string }[] = [
   { code: 'COMMON', label: 'Commune' },
   { code: 'UNCOMMON', label: 'Peu commune' },
   { code: 'RARE', label: 'Rare' },
@@ -95,9 +99,9 @@ function preview(opts: {
 const blank = () => ({
   name: '',
   description: '',
-  family: 'NATURE',
+  family: 'NATURE' as FamilyCode,
   // Par défaut une carte illimitée (exemplaires infinis) ; seule une légendaire a un stock.
-  rarity: 'COMMON',
+  rarity: 'COMMON' as RarityCode,
   stock: 50 as number | null,
 })
 const form = reactive(blank())
@@ -169,8 +173,8 @@ const editing = ref<string | null>(null)
 const edit = reactive({
   name: '',
   description: '',
-  family: 'NATURE',
-  rarity: 'COMMON',
+  family: 'NATURE' as FamilyCode,
+  rarity: 'COMMON' as RarityCode,
   stock: 50 as number | null,
 })
 const editFile = ref<File | null>(null)
@@ -199,10 +203,10 @@ function startEdit(c: AdminCreature) {
   editing.value = c.id
   edit.name = c.name
   edit.description = c.description ?? ''
-  edit.family = c.family.code
+  edit.family = c.family.code as FamilyCode
   // La rareté est désormais immédiate ; on repart de la rareté actuelle. Le stock part de la hausse
   // prévue s'il y en a une, sinon du stock actuel.
-  edit.rarity = c.rarity.code
+  edit.rarity = c.rarity.code as RarityCode
   edit.stock = c.scheduledChange?.stock ?? c.stockTotal ?? 50
   setEditFile(null)
   if (editInput.value) editInput.value.value = ''
@@ -345,7 +349,7 @@ watch(editing, (id) => {
                 <span v-if="spriteKey" class="block truncate text-xs">
                   Clé sur le CDN : <code>sprites/{{ spriteKey }}.png</code>
                 </span>
-                <span v-else class="block text-xs text-ink/70">La clé suit le nom de la carte.</span>
+                <span v-else class="block text-xs text-ink/80">La clé suit le nom de la carte.</span>
               </span>
               <input
                 ref="newFileInput"
@@ -469,7 +473,7 @@ watch(editing, (id) => {
                   required
                   class="field"
                 />
-                <span class="mt-1 block text-xs font-normal text-ink/70">
+                <span class="mt-1 block text-xs font-normal text-ink/80">
                   Une hausse prend effet au prochain minuit · le stock ne peut qu'augmenter.
                 </span>
               </label>

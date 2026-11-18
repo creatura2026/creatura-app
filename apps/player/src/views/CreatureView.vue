@@ -53,7 +53,7 @@ const isEgg = computed(() => creature.value?.imageUrl.startsWith('data:') ?? fal
             <h1 class="mt-1 text-4xl font-bold sm:text-5xl">{{ creature.name }}</h1>
           </div>
           <p class="text-lg">{{ creature.description }}</p>
-          <p v-if="isEgg" class="text-sm text-ink/70">Illustration à venir.</p>
+          <p v-if="isEgg" class="text-sm text-ink/80">Illustration à venir.</p>
 
           <dl class="grid grid-cols-2 gap-3">
             <div class="border-2 border-ink bg-cream p-3">

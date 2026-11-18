@@ -98,9 +98,11 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           <span
             v-if="item.name === 'players' && toValidate.data.value?.totalItems"
             class="border-2 border-current bg-sun px-1.5 text-xs font-bold text-ink"
-            :aria-label="`${toValidate.data.value.totalItems} demande(s) de suppression à valider`"
           >
-            {{ toValidate.data.value.totalItems }}
+            <span aria-hidden="true">{{ toValidate.data.value.totalItems }}</span>
+            <span class="sr-only">
+              {{ toValidate.data.value.totalItems }} demande(s) de suppression à valider
+            </span>
           </span>
         </RouterLink>
 

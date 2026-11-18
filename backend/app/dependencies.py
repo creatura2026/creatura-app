@@ -23,7 +23,7 @@ def user_from_token(db: Session, token: str, kind: str) -> Utilisateur:
     try:
         user_id = uuid.UUID(payload["sub"])
     except (KeyError, ValueError):
-        raise Unauthorized("Votre session est invalide, reconnectez-vous.")
+        raise Unauthorized("Votre session est invalide, reconnectez-vous.") from None
     user = db.get(Utilisateur, user_id)
     if user is None or user.supprime_le is not None:
         raise Unauthorized("Compte introuvable, reconnectez-vous.")
@@ -77,8 +77,13 @@ def apply_scheduled_changes(db: DbSession) -> None:
     apply_due(db)
 
 
+# Borne haute de `page` : au-delà, l'OFFSET SQL déborde (erreur 500 trouvée par Schemathesis avec
+# page=2**63). 100 000 pages de 100 éléments suffisent largement.
+MAX_PAGE = 100_000
+
+
 def page_params(
-    page: int = Query(1, ge=1, description="Numéro de page, à partir de 1"),
+    page: int = Query(1, ge=1, le=MAX_PAGE, description="Numéro de page, à partir de 1"),
     page_size: int = Query(20, ge=1, le=100, alias="pageSize", description="Nombre d'éléments par page"),
 ) -> PageParams:
     return PageParams(page=page, page_size=page_size)

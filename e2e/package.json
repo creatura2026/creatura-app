@@ -1,0 +1,35 @@
+{
+  "name": "e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tests de bout en bout de Créatura (Playwright) : voir docs/tests/README.md",
+  "scripts": {
+    "test": "playwright test",
+    "test:mock": "playwright test --project=player-mock --project=admin-mock",
+    "test:mock:all": "playwright test --project=player-mock* --project=admin-mock* --project=player-mobile*",
+    "test:stack": "playwright test -c playwright.stack.config.ts",
+    "test:stack:ui": "playwright test -c playwright.stack.config.ts --ui",
+    "test:desktop": "playwright test -c playwright.stack.config.ts --project=stack-desktop",
+    "test:exe": "playwright test -c playwright.exe.config.ts",
+    "build:android": "node android/build-apks.ts",
+    "test:android": "playwright test -c playwright.android.config.ts",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint . --fix --cache"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.14.0",
+    "eslint-plugin-playwright": "^2.12.2",
+    "jiti": "^2.7.0",
+    "typescript": "~6.0.0",
+    "typescript-eslint": "^8.72.1"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  }
+}

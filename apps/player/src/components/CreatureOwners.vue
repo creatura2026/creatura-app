@@ -34,7 +34,7 @@ async function trade(playerId: string) {
         <span class="flex min-w-0 items-center gap-2">
           <PixelIcon name="user" :size="18" class="shrink-0" />
           <span class="truncate font-semibold">{{ owner.player.pseudo }}</span>
-          <span class="shrink-0 text-sm text-ink/75">× {{ owner.quantity }}</span>
+          <span class="shrink-0 text-sm text-ink/80">× {{ owner.quantity }}</span>
         </span>
         <button
           type="button"

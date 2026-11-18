@@ -66,7 +66,7 @@ const players = (r: DeletionRequest) =>
         Demandée par <strong>{{ r.requestedBy.pseudo }}</strong> le
         {{ formatDateTime(r.createdAt) }}, validateur : <strong>{{ r.validator.pseudo }}</strong>
       </p>
-      <p v-if="r.reason" class="mt-1"><span class="text-ink/70">Motif :</span> {{ r.reason }}</p>
+      <p v-if="r.reason" class="mt-1"><span class="text-ink/80">Motif :</span> {{ r.reason }}</p>
       <p v-if="r.status === 'PENDING'" class="mt-1 text-ink/80">
         Expire le {{ formatDateTime(r.expiresAt) }}
       </p>

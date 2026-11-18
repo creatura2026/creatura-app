@@ -1,9 +1,9 @@
 """Booster — UC-03, UC-04."""
 
-from fastapi import Depends, APIRouter, status
+from fastapi import APIRouter, Depends, status
 
 from app.controllers import booster
-from app.dependencies import apply_scheduled_changes, PlayerUser, DbSession
+from app.dependencies import DbSession, PlayerUser, apply_scheduled_changes
 from app.schemas.booster import BoosterOut, BoosterTodayOut
 
 router = APIRouter(tags=["Booster"], dependencies=[Depends(apply_scheduled_changes)])

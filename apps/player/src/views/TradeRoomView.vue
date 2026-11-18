@@ -7,9 +7,9 @@
  * validé ; retirer sa validation rouvre son tapis. Toute modification d'un tapis retire les deux
  * validations (règle du serveur) : on ne valide que ce que l'on voit.
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Problem, Trade, TradeItem } from '@creatura/shared/api/types'
+import type { Problem, Trade, TradeItem, TradeItemInput } from '@creatura/shared/api/types'
 import { errorMessage } from '@creatura/shared/api/types'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
@@ -63,6 +63,8 @@ const room = useTradeRoom(() => props.id, {
     }
   },
   onError: (problem) => {
+    // Action refusée (ou carte devenue indisponible) : le tapis du serveur fait foi.
+    sentMat.value = null
     if (!room.connected.value) refused.value = problem
     else toast(problem.detail ?? problem.title, 'error', 6000)
   },
@@ -112,20 +114,51 @@ const status = computed(() => {
 const toInputs = (items: TradeItem[]) =>
   items.map((item) => ({ creatureId: item.creature.id, quantity: item.quantity }))
 
-function add(creatureId: string) {
-  const cards = seats.value?.mine.cards ?? []
-  const inputs = toInputs(cards)
-  const line = inputs.find((i) => i.creatureId === creatureId)
-  if (line) line.quantity++
-  else inputs.push({ creatureId, quantity: 1 })
+const matKey = (inputs: TradeItemInput[]) =>
+  inputs
+    .map((i) => `${i.creatureId}:${i.quantity}`)
+    .sort()
+    .join(',')
+
+/**
+ * Dernier tapis envoyé, pas encore confirmé par le serveur. Le serveur REMPLACE le tapis par la
+ * liste reçue : une carte posée juste après une autre doit partir de ce tapis-là, sinon elle
+ * effacerait la précédente. Oublié dès que le serveur renvoie ce tapis, ou refuse l'action.
+ */
+const sentMat = shallowRef<TradeItemInput[] | null>(null)
+
+watch(
+  () => seats.value?.mine.cards,
+  (cards) => {
+    if (sentMat.value && matKey(toInputs(cards ?? [])) === matKey(sentMat.value)) {
+      sentMat.value = null
+    }
+  },
+)
+
+/** Son tapis tel qu'il sera une fois les envois en cours confirmés. */
+function myMat(): TradeItemInput[] {
+  return (sentMat.value ?? toInputs(seats.value?.mine.cards ?? [])).map((i) => ({ ...i }))
+}
+
+function sendMat(inputs: TradeItemInput[]) {
+  sentMat.value = inputs
   room.setOffer(inputs)
 }
 
+function add(creatureId: string) {
+  const inputs = myMat()
+  const line = inputs.find((i) => i.creatureId === creatureId)
+  if (line) line.quantity++
+  else inputs.push({ creatureId, quantity: 1 })
+  sendMat(inputs)
+}
+
 function remove(creatureId: string) {
-  const inputs = toInputs(seats.value?.mine.cards ?? [])
+  const inputs = myMat()
     .map((i) => (i.creatureId === creatureId ? { ...i, quantity: i.quantity - 1 } : i))
     .filter((i) => i.quantity > 0)
-  room.setOffer(inputs)
+  sendMat(inputs)
 }
 
 function toggleReady() {

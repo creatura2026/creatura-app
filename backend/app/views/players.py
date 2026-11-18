@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Query
 
 from app.controllers import player
-from app.dependencies import PlayerUser, DbSession, Pagination
+from app.dependencies import DbSession, Pagination, PlayerUser
 from app.schemas.base import Page
 from app.schemas.catalog import CreatureSummaryOut
 from app.schemas.player import CreatureOwnerOut, CreatureOwnersOut, PlayerOut, TradeableCardOut, TradeableCardsOut

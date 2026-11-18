@@ -43,7 +43,7 @@ async function act(decision: 'accept' | 'refuse' | 'cancel') {
         <span class="font-pixel">{{ received ? `Reçu de ${other.pseudo}` : `Offert à ${other.pseudo}` }}</span>
       </p>
       <div class="flex items-center gap-2">
-        <time class="text-xs text-ink/75" :datetime="gift.decidedAt ?? gift.createdAt">
+        <time class="text-xs text-ink/80" :datetime="gift.decidedAt ?? gift.createdAt">
           {{ formatDateTime(gift.decidedAt ?? gift.createdAt) }}
         </time>
         <span
@@ -60,7 +60,7 @@ async function act(decision: 'accept' | 'refuse' | 'cancel') {
       <img :src="gift.creature.imageUrl" alt="" class="pixelated size-12 shrink-0" />
       <p class="min-w-0 flex-1 font-semibold">
         {{ gift.creature.name }}
-        <span class="text-ink/75">× {{ gift.quantity }}</span>
+        <span class="text-ink/80">× {{ gift.quantity }}</span>
       </p>
 
       <div v-if="pending" class="flex shrink-0 flex-wrap justify-end gap-2">

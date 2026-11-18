@@ -36,7 +36,7 @@ defineProps<{
         </span>
       </li>
     </ul>
-    <p v-else class="mt-2 text-sm text-ink/70">
+    <p v-else class="mt-2 text-sm text-ink/80">
       {{ emptyText ?? 'Aucune carte' }}
     </p>
   </div>

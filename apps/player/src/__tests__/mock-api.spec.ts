@@ -137,6 +137,43 @@ describe('API simulée — booster quotidien (UC-03, UC-04)', () => {
     expect((await api.getMe()).progress.totalCards).toBe(before + DEFAULT_CARDS_PER_BOOSTER)
   })
 
+  it('deux ouvertures simultanées ne donnent qu’un booster', async () => {
+    const { api, loginAs } = setup()
+    await loginAs('demo')
+    const before = (await api.getMe()).progress.totalCards
+
+    const results = await Promise.allSettled([api.claimBooster(), api.claimBooster()])
+
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected'])
+    const refused = results.find((r) => r.status === 'rejected')!
+    expect(isApiError(refused.reason, 'BOOSTER_ALREADY_CLAIMED')).toBe(true)
+    expect((await api.getMe()).progress.totalCards).toBe(before + DEFAULT_CARDS_PER_BOOSTER)
+  })
+
+  it('voit le booster ouvert dans un autre onglet et n’écrase pas ses données', async () => {
+    const { api, loginAs } = setup()
+    await loginAs('demo')
+    expect((await api.getTodayBooster()).available).toBe(true)
+
+    // Un autre onglet (même stockage, autre mémoire) ouvre le booster du jour.
+    const raw = localStorage.getItem('creatura.mock-db')!
+    clearDbCache()
+    const other = setup()
+    await other.loginAs('demo')
+    const opened = await other.api.claimBooster()
+    const written = localStorage.getItem('creatura.mock-db')
+    // Cet onglet-ci reprend la copie qu'il avait en mémoire avant l'ouverture.
+    localStorage.setItem('creatura.mock-db', raw)
+    clearDbCache()
+    await api.getMe()
+    localStorage.setItem('creatura.mock-db', written!)
+
+    expect((await api.getTodayBooster()).booster?.id).toBe(opened.id)
+    await expect(api.claimBooster()).rejects.toSatisfy((e) =>
+      isApiError(e, 'BOOSTER_ALREADY_CLAIMED'),
+    )
+  })
+
   it('tire le nombre de cartes réglé par l’administrateur', async () => {
     writeMockBoosterSettings({
       cardsPerBooster: 8,

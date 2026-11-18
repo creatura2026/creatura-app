@@ -79,11 +79,14 @@ const cards = computed(() => {
               type="button"
               class="block w-full cursor-pointer text-left transition-transform enabled:hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-45"
               :disabled="locked || e.left < 1"
-              :aria-label="`Poser ${e.creature.name} sur mon tapis, ${e.left} disponible${e.left > 1 ? 's' : ''}`"
               :data-flip="`pick:${e.creature.id}`"
               @click="$emit('add', e.creature.id)"
             >
+              <span class="sr-only">Poser </span>
               <CreatureCard :creature="e.creature" :highlight="e.creature.id === wantedId" />
+              <span class="sr-only">
+                sur mon tapis, {{ e.left }} disponible{{ e.left > 1 ? 's' : '' }}
+              </span>
             </button>
             <span
               class="pointer-events-none absolute -top-2 -left-2 border-2 border-ink px-1.5 font-pixel text-sm font-bold"

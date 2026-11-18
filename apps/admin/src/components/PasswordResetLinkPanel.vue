@@ -101,6 +101,6 @@ onBeforeUnmount(() => clearInterval(timer))
             : 'Générer un lien de réinitialisation'
       }}
     </button>
-    <p v-if="link && !expired" class="mt-1 text-xs text-ink/70">Un nouveau lien annule celui-ci.</p>
+    <p v-if="link && !expired" class="mt-1 text-xs text-ink/80">Un nouveau lien annule celui-ci.</p>
   </div>
 </template>

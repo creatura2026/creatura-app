@@ -1,0 +1,44 @@
+# =============================================================================
+# CREATURA - Stack réelle des tests de bout en bout (lot 3, voir docs/tests/README.md)
+#
+# Lancée et arrêtée par Playwright (stack/global-setup.ts) avec `pnpm test:stack`.
+# À la main :
+#   docker compose -f e2e/compose.yaml up -d --build --wait
+#   docker compose -f e2e/compose.yaml down -v
+#
+# Ports à part (55432, 58000) : la stack de développement (5432, 8000) peut tourner à côté.
+# Base en mémoire (tmpfs) : chaque démarrage repart du schéma, du catalogue et des comptes de démo.
+# =============================================================================
+name: creatura-e2e
+
+services:
+  db:
+    build: ../db
+    environment:
+      POSTGRES_USER: creatura
+      POSTGRES_PASSWORD: creatura
+      POSTGRES_DB: creatura
+      CREATURA_DEMO: "true"
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  api:
+    build: ../backend
+    environment:
+      DATABASE_URL: postgres://creatura:creatura@db:5432/creatura
+      JWT_SECRET: e2e-only-secret-not-for-production-0123456789abcdef
+      ADMIN_LOGIN: admin
+      ADMIN_PASSWORD: admin
+      CORS_ORIGINS: "*"
+    ports:
+      - "127.0.0.1:58000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

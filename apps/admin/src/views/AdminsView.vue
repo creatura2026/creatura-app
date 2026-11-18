@@ -6,8 +6,8 @@
  */
 import { computed, ref } from 'vue'
 import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { toTypedSchema } from '@creatura/shared/forms'
 import {
   errorMessage,
   isApiError,
@@ -30,13 +30,13 @@ const { data, isPending, error, refetch } = useAdmins()
 const schema = toTypedSchema(
   z.object({
     pseudo: z
-      .string({ required_error: 'Saisissez un pseudonyme.' })
+      .string({ error: 'Saisissez un pseudonyme.' })
       .trim()
       .min(3, '3 caractères minimum.')
       .max(20, '20 caractères maximum.')
       .regex(/^[A-Za-z0-9_-]+$/, 'Lettres sans accent, chiffres, - et _ seulement.'),
     login: z
-      .string({ required_error: 'Saisissez un identifiant.' })
+      .string({ error: 'Saisissez un identifiant.' })
       .trim()
       .min(3, '3 caractères minimum.')
       .max(50, '50 caractères maximum.'),
@@ -125,7 +125,7 @@ function status(a: AdminAccount): string {
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <span class="text-base font-semibold">
                   {{ a.pseudo }}
-                  <span v-if="a.id === auth.user?.id" class="text-ink/70">(vous)</span>
+                  <span v-if="a.id === auth.user?.id" class="text-ink/80">(vous)</span>
                 </span>
                 <span
                   class="border-2 border-ink px-1.5 text-xs font-bold"
