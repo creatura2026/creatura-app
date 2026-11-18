@@ -14,6 +14,7 @@ from app.seed import ensure_admin
 from app.validation import validation_problem
 from app.views import api_router
 
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # Le schéma est créé par les fichiers SQL de db/ : le back ne crée aucune table.
@@ -53,6 +54,13 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        # Le navigateur ne devine pas le type des réponses : relevé par le scan OWASP ZAP de nuit.
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        return response
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(_: Request, exc: DomainError):

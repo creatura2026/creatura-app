@@ -137,3 +137,10 @@ def test_refresh_and_logout(client):
         f"{API}/auth/logout", json={"refreshToken": new_tokens["refreshToken"]}, headers=auth_headers(new_tokens)
     )
     assert r.status_code == 204
+
+
+def test_responses_forbid_content_sniffing(client):
+    """Toutes les réponses, erreurs comprises, interdisent au navigateur de deviner leur type."""
+    for response in (client.get(f"{API}/health"), client.get(f"{API}/me"), client.get(f"{API}/nulle-part")):
+        assert response.headers["x-content-type-options"] == "nosniff", response.url
+

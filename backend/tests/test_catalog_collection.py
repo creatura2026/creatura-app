@@ -5,7 +5,6 @@ from math import ceil
 
 from conftest import API, catalogue_size, creature_id, give, problem, register_and_login, set_stock
 
-
 FAMILIES = ["NATURE", "CRISTAL", "BRUME", "LUEUR"]
 RARITIES = ["COMMON", "UNCOMMON", "RARE", "LEGENDARY"]
 
@@ -140,3 +139,13 @@ def test_collection_filters_and_progress(client):
 
     second = collection(page=2, pageSize=5)
     assert names(second) == catalog[5:10]
+
+
+def test_page_number_is_bounded(client):
+    """Une page démesurée est refusée proprement, sans faire déborder l'OFFSET SQL (500 trouvé par
+    Schemathesis avec page=2**63)."""
+    headers = register_and_login(client, "Paginee")["headers"]
+    get = lambda page: client.get(f"{API}/creatures", params={"page": page}, headers=headers)  # noqa: E731
+    problem(get(2**63), 400, "VALIDATION_ERROR")
+    problem(get(100_001), 400, "VALIDATION_ERROR")
+    assert get(100_000).json()["items"] == []

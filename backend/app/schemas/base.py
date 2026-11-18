@@ -1,8 +1,9 @@
 """Socle des schémas d'API : JSON en camelCase et pages de résultats (contrat OpenAPI)."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import ceil
-from typing import Callable, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel

@@ -100,7 +100,7 @@ def create_gift(db: Session, me: Utilisateur, data: GiftCreateIn) -> Don:
         db.commit()  # uq_don_en_attente : course entre deux créations simultanées
     except IntegrityError as exc:
         db.rollback()
-        raise from_integrity_error(exc)
+        raise from_integrity_error(exc) from exc
     return _reload(db, gift.id)
 
 
@@ -142,7 +142,7 @@ def accept_gift(db: Session, me: Utilisateur, gift_id: uuid.UUID) -> Don:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise from_integrity_error(exc)
+        raise from_integrity_error(exc) from exc
     return _reload(db, gift_id)
 
 

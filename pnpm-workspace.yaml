@@ -13,3 +13,13 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     openapi-typescript>typescript: "6"
+
+# Audit des dépendances (pnpm audit, workflow de nuit) : failles connues, examinées et acceptées.
+# À revoir à chaque mise à jour ; les retirer dès qu'un correctif est appliqué (docs/tests/README.md, § 12).
+auditConfig:
+  ignoreGhsas:
+    # zod 3 : épuisement mémoire sur des collections énormes. zod ne valide ici que des formulaires,
+    # dans le navigateur de l'utilisateur ; correctif seulement en zod 4 (adaptateur vee-validate à migrer).
+    - GHSA-mrhx-c7xc-m3w5
+    # picomatch : ReDoS, aucun correctif publié ; utilisé au build par vue-router, pas dans le site servi.
+    - GHSA-fc5q-39xc-vjpf

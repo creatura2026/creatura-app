@@ -47,10 +47,10 @@ pnpm build        # vérification des types + build des deux apps
 
 | Partie | Commande |
 |---|---|
-| Front, unitaires | `pnpm test:unit` (ou `pnpm --filter player test:unit` en mode surveillance) |
+| Front, unitaires | `pnpm test:unit` (ou `pnpm --filter player test:unit` en mode surveillance) ; avec la couverture : `pnpm test:coverage` |
 | Bout en bout (Playwright, dossier `e2e/`) | `pnpm --filter e2e test:mock` (Chromium) ou `pnpm test:e2e` (tous les navigateurs et le mobile) ; la première fois : `pnpm --filter e2e exec playwright install chromium firefox webkit` |
 | Bout en bout sur la stack réelle (Docker) | `pnpm --filter e2e test:stack` : démarre base et API en Docker, puis teste le vrai WebSocket entre deux navigateurs |
-| API | `cd backend && uv run pytest` (voir [backend/README.md](backend/README.md)) |
+| API | `cd backend && uv run ruff check . && uv run pytest --cov=app` (voir [backend/README.md](backend/README.md)) |
 | Base | scripts de `db/tests/` (voir [db/README.md](db/README.md)) |
 
 Stratégie, types de tests, outils, scénarios et ce que lance la CI :

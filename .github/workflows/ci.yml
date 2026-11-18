@@ -138,15 +138,33 @@ jobs:
       - name: Installer les dépendances
         run: uv sync --frozen
 
+      # Règles dans pyproject.toml ([tool.ruff]).
+      - name: Lint (Ruff)
+        run: uv run ruff check . --output-format=github
+
+      # Couverture : 92 % au lot 6 ; en dessous de 90 %, la CI échoue.
       - name: Tests
-        run: uv run pytest --junitxml=../reports/backend-tests.xml
+        run: |
+          mkdir -p ../reports
+          uv run pytest --junitxml=../reports/backend-tests.xml             --cov=app --cov-report=term --cov-report=xml:../reports/backend-coverage.xml             --cov-fail-under=90
+
+      - name: Couverture dans le résumé
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          rate = float(ET.parse('../reports/backend-coverage.xml').getroot().get('line-rate')) * 100
+          print(f"### Couverture du back : {rate:.1f} % des lignes (seuil : 90 %)")
+          PY
 
       - name: Publier le rapport de tests
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: tests-backend-${{ github.run_id }}-${{ github.run_attempt }}
-          path: reports/backend-tests.xml
+          path: |
+            reports/backend-tests.xml
+            reports/backend-coverage.xml
 
   # ---------------------------------------------------------------------------
   # Front : PWA joueur et dashboard admin (monorepo pnpm)
@@ -178,6 +196,15 @@ jobs:
           pnpm -r run lint
           git diff --exit-code
 
+      # Le contrat (creatura-api.openapi.yaml) fait foi : les types générés doivent le suivre.
+      - name: Contrat OpenAPI (types générés à jour)
+        run: |
+          pnpm --filter @creatura/shared run generate:api
+          if ! git diff --exit-code -- packages/shared/src/api/schema.d.ts; then
+            echo "::error file=packages/shared/src/api/schema.d.ts::Types générés en retard sur creatura-api.openapi.yaml : lancer pnpm --filter @creatura/shared generate:api et commiter."
+            exit 1
+          fi
+
       - name: Vérification des types et build déployable
         env:
           VITE_API_BASE_URL: /api/v1
@@ -193,8 +220,32 @@ jobs:
           test -f release-site/index.html
           test -f release-site/admin/index.html
 
-      - name: Tests unitaires
-        run: pnpm -r run test:unit --run
+      # Tests unitaires avec couverture ; seuils dans les vitest.config.ts (planchers du lot 6).
+      - name: Tests unitaires et couverture
+        run: pnpm -r run test:coverage
+
+      - name: Couverture dans le résumé
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### Couverture du front (logique .ts, lignes)"
+            for pkg in apps/player apps/admin packages/shared; do
+              f="$pkg/coverage/coverage-summary.json"
+              [ -f "$f" ] && echo "- \`$pkg\` : $(jq -r '.total.lines.pct' "$f") %"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier la couverture du front
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-frontend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/player/coverage/
+            apps/admin/coverage/
+            packages/shared/coverage/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Emballer et identifier le frontend testé
         run: python scripts/ci/package-frontend.py

@@ -99,7 +99,9 @@ Le back n'a pas de mot de passe : à chaque nouvelle connexion, il signe un jeto
 ## Tests
 
 ```bash
-uv run pytest        # la base de db/ doit tourner
+uv run pytest                    # la base de db/ doit tourner
+uv run pytest --cov=app          # avec la couverture (la CI exige 90 %)
+uv run ruff check .              # lint (règles dans pyproject.toml), --fix pour corriger
 ```
 
 Les tests utilisent une base séparée, `creatura_test`, créée automatiquement sur le même

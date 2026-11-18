@@ -1,9 +1,9 @@
 """Catalogue — UC-05 et filtres."""
 
-from fastapi import Depends, APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.controllers import catalog
-from app.dependencies import apply_scheduled_changes, CurrentUser, DbSession, Pagination
+from app.dependencies import CurrentUser, DbSession, Pagination, apply_scheduled_changes
 from app.models import Famille
 from app.schemas.base import Page
 from app.schemas.catalog import RARETE_OF, CreatureOut, FamilyOut, RarityCode, RarityOut

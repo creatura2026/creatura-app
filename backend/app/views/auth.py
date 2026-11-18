@@ -1,7 +1,6 @@
 """Authentification — UC-01, UC-02."""
 
 from fastapi import APIRouter, status
-
 from starlette.concurrency import run_in_threadpool
 
 from app.controllers import account, auth

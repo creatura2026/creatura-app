@@ -11,7 +11,7 @@
  */
 import { computed, reactive, ref, watch } from 'vue'
 import { errorMessage, type AdminCreature, type AdminCreatureUpdate } from '@creatura/shared/api/types'
-import type { CreatureSummary } from '@creatura/shared/api/types'
+import type { AdminCreatureInput, CreatureSummary } from '@creatura/shared/api/types'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
@@ -28,13 +28,17 @@ import {
   useUploadSprite,
 } from '@/api/queries'
 
-const FAMILIES = [
+/** Codes acceptés par le contrat (creatura-api.openapi.yaml). */
+type FamilyCode = AdminCreatureInput['family']
+type RarityCode = AdminCreatureInput['rarity']
+
+const FAMILIES: { code: FamilyCode; label: string }[] = [
   { code: 'NATURE', label: 'Nature' },
   { code: 'CRISTAL', label: 'Cristal' },
   { code: 'BRUME', label: 'Brume' },
   { code: 'LUEUR', label: 'Lueur' },
 ]
-const RARITIES = [
+const RARITIES: { code: RarityCode; label: string }[] = [
   { code: 'COMMON', label: 'Commune' },
   { code: 'UNCOMMON', label: 'Peu commune' },
   { code: 'RARE', label: 'Rare' },
@@ -97,9 +101,9 @@ function preview(opts: {
 const blank = () => ({
   name: '',
   description: '',
-  family: 'NATURE',
+  family: 'NATURE' as FamilyCode,
   // Par défaut une carte illimitée (exemplaires infinis) ; seule une légendaire a un stock.
-  rarity: 'COMMON',
+  rarity: 'COMMON' as RarityCode,
   stock: 50 as number | null,
 })
 const form = reactive(blank())
@@ -171,8 +175,8 @@ const editing = ref<string | null>(null)
 const edit = reactive({
   name: '',
   description: '',
-  family: 'NATURE',
-  rarity: 'COMMON',
+  family: 'NATURE' as FamilyCode,
+  rarity: 'COMMON' as RarityCode,
   stock: 50 as number | null,
 })
 const editFile = ref<File | null>(null)
@@ -201,9 +205,10 @@ function startEdit(c: AdminCreature) {
   editing.value = c.id
   edit.name = c.name
   edit.description = c.description ?? ''
-  edit.family = c.family.code
+  // Codes renvoyés par le serveur : toujours parmi ceux du contrat.
+  edit.family = c.family.code as FamilyCode
   // On repart du changement prévu s'il y en a un, sinon de la rareté actuelle.
-  edit.rarity = c.scheduledChange?.rarity.code ?? c.rarity.code
+  edit.rarity = (c.scheduledChange?.rarity.code ?? c.rarity.code) as RarityCode
   edit.stock = c.scheduledChange?.stock ?? c.stockTotal ?? 50
   setEditFile(null)
   if (editInput.value) editInput.value.value = ''

@@ -296,7 +296,9 @@ def set_ready(db: Session, me: Utilisateur, trade_id: uuid.UUID, ready: bool) ->
         db.commit()
         return _reload(db, trade.id), False
 
-    if not any(l.sens == Sens.OFFERT for l in trade.lignes) or not any(l.sens == Sens.DEMANDE for l in trade.lignes):
+    if not any(ligne.sens == Sens.OFFERT for ligne in trade.lignes) or not any(
+        ligne.sens == Sens.DEMANDE for ligne in trade.lignes
+    ):
         raise BadRequest("Il faut au moins une carte sur chaque tapis.")
     # Les deux tapis sont revérifiés à chaque validation.
     if _trim_mats(db, trade):
@@ -324,7 +326,7 @@ def set_ready(db: Session, me: Utilisateur, trade_id: uuid.UUID, ready: bool) ->
             return _reload(db, trade.id), True
         except IntegrityError as exc:
             db.rollback()
-            raise from_integrity_error(exc)
+            raise from_integrity_error(exc) from exc
     else:
         bus.announce(db, trade.id, bus.TRADE)
         db.commit()

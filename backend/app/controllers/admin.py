@@ -14,22 +14,24 @@ import uuid
 from datetime import date, timedelta
 
 import boto3
-from sqlalchemy import Date, cast, func, or_, select, update
+from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.controllers.booster import settings as booster_settings
 from app.controllers.booster import today
-from app.controllers.catalog import CATALOG_ORDER, parse_creature_id, paginate, rarity_drop_rates, rarity_weights
+from app.controllers.catalog import CATALOG_ORDER, paginate, parse_creature_id, rarity_drop_rates
 from app.controllers.planning import next_midnight_day
 from app.errors import BadRequest, NotFound, field_error
 from app.models import BoosterCarte, Creature, Echange, Rarete, RareteTirage, Reglage, Role, Statut, Utilisateur
-from app.schemas.admin import AdminCreatureIn, AdminCreatureUpdateIn, RarityChangeIn
 from app.schemas.admin import (
+    AdminCreatureIn,
+    AdminCreatureUpdateIn,
     AdminStatsOut,
     CompletedTrades,
     DailyCount,
     Period,
+    RarityChangeIn,
     RarityDistributionItem,
     RarityDistributionOut,
     Registrations,

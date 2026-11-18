@@ -47,7 +47,7 @@ def register(db: Session, data: RegisterIn) -> Utilisateur:
         db.commit()
     except IntegrityError as exc:  # inscription simultanée avec le même pseudo/identifiant
         db.rollback()
-        raise from_integrity_error(exc)
+        raise from_integrity_error(exc) from exc
     return user
 
 

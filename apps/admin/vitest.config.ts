@@ -12,6 +12,15 @@ export default mergeConfig(
       // Node 25+ a son propre localStorage global, qui masque celui de jsdom.
       execArgv: NODE_MAJOR >= 25 ? ['--no-experimental-webstorage'] : [],
       root: fileURLToPath(new URL('./', import.meta.url)),
+      coverage: {
+        provider: 'v8',
+        include: ['src/**/*.ts'],
+        exclude: ['src/**/__tests__/**', 'src/**/*.d.ts', 'src/main.ts'],
+        reporter: ['text-summary', 'json-summary', 'lcov'],
+        // Plancher juste sous le niveau mesuré : la couverture ne peut que monter (voir
+        // docs/tests/README.md, § 16). Les écrans (.vue) sont couverts par les tests E2E.
+        thresholds: { statements: 54, branches: 52, functions: 45, lines: 54 },
+      },
     },
   }),
 )

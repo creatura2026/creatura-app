@@ -155,24 +155,25 @@ Projets Playwright :
 | PostgreSQL 16 (service CI) | Base réelle des tests du back, même version que RDS | en place |
 | `psql` + scripts SQL | Tests du schéma et des données de démo | en place |
 | `vue-tsc`, ESLint, oxlint | Vérifications statiques du front | en CI |
-| `@vitest/coverage-v8`, `pytest-cov` | Couverture de code | à ajouter |
-| `@axe-core/playwright` | Accessibilité dans les tests E2E | à ajouter |
-| [Schemathesis](https://schemathesis.readthedocs.io) | Tests de contrat générés depuis l'OpenAPI | à ajouter |
-| `openapi-typescript` | Vérifier que `schema.d.ts` correspond à l'OpenAPI | à ajouter |
-| [k6](https://k6.io) | Charge de l'API et des salles d'échange | à ajouter |
+| `@vitest/coverage-v8`, `pytest-cov` | Couverture de code, avec seuil | en CI |
+| `@axe-core/playwright` | Accessibilité dans les tests E2E | en place |
+| [Schemathesis](https://schemathesis.readthedocs.io) | Requêtes générées depuis l'OpenAPI, contre la vraie API | nuit |
+| `openapi-typescript` | Vérifier que `schema.d.ts` correspond à l'OpenAPI | en CI |
+| [k6](https://k6.io) | Charge de l'API et des salles d'échange (`e2e/load/charge.js`) | nuit |
 | Playwright Android (`_android`) + émulateur | E2E de l'APK | en place, pas encore exécuté (§ 11) |
-| Trivy, `pnpm audit`, `pip-audit`, OWASP ZAP (baseline) | Sécurité : images, dépendances, en-têtes HTTP | à ajouter |
-| [Ruff](https://docs.astral.sh/ruff/) | Lint du back | à ajouter |
+| Trivy, `pnpm audit`, `pip-audit`, OWASP ZAP (scan de l'API) | Sécurité : images, dépendances, API | nuit |
+| [Ruff](https://docs.astral.sh/ruff/) | Lint du back (règles dans `backend/pyproject.toml`) | en CI |
 
 ## 5. État actuel
 
 | Niveau | Où | Nombre | En CI |
 |---|---|---|---|
 | SQL (schéma, données de démo) | `db/tests/` | 2 scripts | oui |
-| API + base (pytest) | `backend/tests/` | ~116 tests, 14 fichiers | oui |
-| Unitaires front joueur | `apps/player/src/__tests__/` | ~52 tests, 7 fichiers | oui |
-| Unitaires front admin | `apps/admin/src/__tests__/` | ~12 tests, 1 fichier | oui |
-| Unitaires `packages/shared` | — | 0 (le client HTTP est testé depuis le joueur) | — |
+| API + base (pytest) | `backend/tests/` | 124 tests, 15 fichiers ; couverture 92 % | oui |
+| Unitaires front joueur | `apps/player/src/__tests__/` | 65 tests, 9 fichiers | oui |
+| Unitaires front admin | `apps/admin/src/__tests__/` | 19 tests, 2 fichiers | oui |
+| Unitaires `packages/shared` | `packages/shared/src/__tests__/` | 37 tests, 3 fichiers (le client HTTP et l'inactivité sont testés depuis le joueur) | oui |
+| Contrôles de nuit | `.github/workflows/nightly.yml` | dépendances, images, contrat, charge, sécurité de l'API | chaque nuit |
 | E2E joueur (API simulée) | `e2e/specs/player/` | 61 tests, 8 fichiers (dont 13 d'accessibilité) | oui |
 | E2E admin (API simulée) | `e2e/specs/admin/` | 29 tests, 4 fichiers (dont 11 d'accessibilité) | oui |
 | E2E multi-navigateurs et mobile | mêmes specs, Firefox, WebKit, Pixel 7, iPhone 14 | 282 exécutions en tout | push |
@@ -193,9 +194,10 @@ Le workflow est [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (no
 
 | Déclencheur | Tests lancés | Autres étapes |
 |---|---|---|
-| Pull request | SQL (schéma, données), pytest, lint, type-check + build du front, Vitest, E2E sur l'API simulée (Chromium) | images Docker construites, pas publiées |
+| Pull request | SQL (schéma, données), Ruff + pytest avec couverture (≥ 90 %), lint, **contrat** (`schema.d.ts` à jour), type-check + build du front, Vitest avec couverture (planchers), E2E sur l'API simulée (Chromium) | images Docker construites, pas publiées |
 | Push sur `develop` ou `main` | les mêmes, l'E2E simulé dans Firefox, WebKit, Pixel 7 et iPhone 14, l'**E2E sur la stack réelle** avec l'application Electron (job `e2e-stack`), et l'**exe construit** (job `desktop`), l'**APK sur émulateur** (job `e2e-mobile`) | images publiées sur GHCR si tous les tests sont verts (E2E compris) ; exe et APK publiés s'ils passent leurs tests |
 | Tag `v*` | les mêmes | Release GitHub (exe, APK) |
+| Chaque nuit (`nightly.yml`) | `pnpm audit`, `pip-audit`, Trivy (images), Schemathesis, k6, OWASP ZAP (API) | rapports en artefact, rien n'est publié |
 
 Les jobs exe et APK sont en
 `continue-on-error` : leur échec ne fait pas échouer la CI.
@@ -222,42 +224,35 @@ detect ─┬─ db
 
 ## 7. Tests unitaires et de composants
 
-**Outils :** Vitest + jsdom + @vue/test-utils. **Emplacement :** `src/__tests__/` de chaque app,
-`packages/shared/src/__tests__/` (à créer).
+**Outils :** Vitest + jsdom + @vue/test-utils. **Emplacement :** `src/__tests__/` de chaque app
+et de `packages/shared`.
 
-Déjà en place : API simulée (comptes, booster, collection, échanges), client HTTP et WebSocket
-(faux `WebSocket`), expiration de session, abandon d'un échange, téléchargement de l'exe et de
-l'APK, `CreatureCard`.
-
-À ajouter, par ordre d'intérêt :
-
-| Cible | Ce qu'on vérifie |
+| Où | Ce qui est testé |
 |---|---|
-| API simulée joueur : **dons** | offrir, accepter (transfert), refuser, annuler, don échoué si la carte a disparu |
-| Garde du routeur admin | non connecté → `/connexion?redirect=…` ; joueur → `/acces-refuse` ; `mustChangePassword` → `/mot-de-passe` |
-| API simulée admin : suppression d'un joueur | la demande doit être validée par **un autre** admin |
-| `useTradeRoom` | état mis à jour par `init`, `trade`, `chat`, `presence`, `error` |
-| `GiftCreatureForm`, `GiftCard` | quantité bornée par la possession, boutons selon le rôle (donneur, destinataire) |
-| `RarityGems` | nombre de losanges selon la rareté |
-| `DeletionRequestDialog`, aperçu de carte (`CreaturesView`) | champs obligatoires, aperçu mis à jour |
-| `packages/shared` : `format.ts`, `rarity.ts`, `family.ts`, `idle.ts` | fonctions pures |
+| joueur | API simulée (comptes, booster, collection, échanges), **dons** (`gifts.spec.ts` : accepter, refuser, annuler, rôles, don échoué, dons impossibles, listes), **`useTradeRoom`** (état tenu par `init`, `trade`, `chat` sans doublon, `presence`, `error` ; messages envoyés ; collection rafraîchie à la conclusion ; sortie de la salle), client HTTP et WebSocket (faux `WebSocket`), expiration de session, abandon d'un échange, téléchargements, `CreatureCard` |
+| admin | API simulée (statistiques, échanges, raretés, réglages, suppression validée par un autre admin, admin au mot de passe provisoire), **garde du routeur** (`router-guard.spec.ts` : connexion avec retour à la page demandée, joueur refusé, mot de passe provisoire, page de connexion déjà connecté, adresse inconnue) |
+| `packages/shared` | dates à l'heure de Paris (minuit, heure d'été et d'hiver), mises en forme, outils de l'API simulée (recherche sans accents, pages, `Problem`), réglage par cookie, session, notifications, `useDebounced`, couleurs ; composants `RarityGems` (losanges), `TradeStatusBadge`, `ProgressBar` |
+
+Encore à couvrir : `GiftCreatureForm` et `GiftCard` (quantité bornée, boutons selon le rôle),
+`DeletionRequestDialog`, l'aperçu de `CreaturesView`, `usePeriod` (admin), et les hooks de
+requêtes (`queries.ts`), aujourd'hui couverts seulement par les tests E2E.
 
 ## 8. Tests d'intégration et fonctionnels (API et base)
 
 **Outils :** pytest, `fastapi.testclient.TestClient` (HTTP et WebSocket), PostgreSQL 16 réel.
 Chaque test part d'une base recréée depuis `db/init/` (`conftest.py`).
 
-Ces tests sont la **référence des règles métier** : un cas limite se teste ici. Pistes
-d'amélioration :
+Ces tests sont la **référence des règles métier** : un cas limite se teste ici.
 
-- **Couverture** avec `pytest-cov`, seuil minimal en CI (§ 16).
-- **Contrat** : Schemathesis lit `creatura-api.openapi.yaml`, génère des requêtes et vérifie que
-  les réponses respectent le schéma (codes, champs, format des erreurs). En CI de nuit sur la
-  stack réelle, et sur quelques routes choisies à chaque PR.
-- **Autorisations** : une table de toutes les routes admin appelées avec un jeton joueur (→ 403)
-  et sans jeton (→ 401), pour qu'une nouvelle route ne soit jamais oubliée.
-- **Base** : ajouter à `test_schema.sql` les contraintes des évolutions 10 (joueurs, admins) et
-  11 (dons) si elles n'y sont pas encore.
+- **Lint** : Ruff, règles `E4 E7 E9 F I B N UP` (`backend/pyproject.toml`), en CI avant pytest.
+- **Couverture** : `pytest-cov`, **92 %** des lignes au lot 6, seuil bloquant à 90 % en CI.
+  Les moins couverts : `views/trades.py` (70 %) et `realtime.py` (76 %), la salle d'échange.
+- **Contrat** : en CI, `schema.d.ts` est régénéré depuis `creatura-api.openapi.yaml` et doit être
+  identique au fichier commité. Chaque nuit, Schemathesis génère environ 2 400 requêtes depuis
+  le contrat contre la vraie API : aucune ne doit provoquer d'erreur serveur.
+- **Pistes** : une table de toutes les routes admin appelées avec un jeton joueur (→ 403) et sans
+  jeton (→ 401), pour qu'une nouvelle route ne soit jamais oubliée ; ajouter à `test_schema.sql`
+  les contraintes des évolutions 10 (joueurs, admins) et 11 (dons).
 
 ## 9. Tests de bout en bout du site
 
@@ -483,9 +478,10 @@ Le test sur un vrai téléphone reste en recette manuelle (§ 17).
 |---|---|---|---|
 | Accessibilité | Aucune violation grave (WCAG 2.1 A et AA) sur chaque écran du site et du dashboard (`accessibilite.spec.ts`) | `@axe-core/playwright` | à chaque E2E simulé |
 | Compatibilité | Chromium, Firefox, WebKit ; viewports téléphone et tablette | Playwright | push sur `develop` |
-| Performance | Temps de réponse de l'API sous charge (connexion, booster, catalogue) ; 100 salles d'échange ouvertes en parallèle | k6 (HTTP et WebSocket) | nuit |
-| Performance front | Poids des bundles, score Lighthouse de l'accueil | Lighthouse CI | nuit |
-| Sécurité | Dépendances vulnérables, images Docker, en-têtes HTTP, injections basiques | `pnpm audit`, `pip-audit`, Trivy, OWASP ZAP baseline | nuit |
+| Performance | 40 joueurs (connexion, accueil, catalogue, collection, booster) et 10 salles d'échange en WebSocket pendant 2 min ; seuils : < 1 % d'erreurs, 95 % des requêtes < 500 ms, entrée dans une salle < 1 s | k6 (`e2e/load/charge.js`) | nuit |
+| Performance front (à faire) | Poids des bundles, score Lighthouse de l'accueil | Lighthouse CI | — |
+| Sécurité | Dépendances (failles « high » et plus), images Docker (failles corrigibles « high » et plus), API (scan à partir du contrat) | `pnpm audit`, `pip-audit`, Trivy, OWASP ZAP | nuit |
+| Robustesse de l'API | Aucune erreur serveur sur des requêtes générées depuis le contrat | Schemathesis | nuit |
 | Sécurité (règles) | 401 sans jeton, 403 joueur sur les routes admin, salle d'échange réservée aux deux joueurs, jeton expiré | pytest (§ 8), WS-09 | à chaque PR |
 | Résilience | Reconnexion du WebSocket, redémarrage de l'API, perte du bus | WS-07, WS-08, `test_trades_multi.py` | push |
 | Visuel (optionnel) | Captures de référence des écrans clés | `toHaveScreenshot()` | à la demande |
@@ -507,6 +503,24 @@ une règle de la liste une fois corrigée.
 | Une carte posée juste après une autre remplaçait la première | `TradeRoomView.vue`, `add()` : le tapis était reconstruit depuis le dernier état confirmé par le serveur, qui remplace le tapis par la liste reçue | sur la vraie API, 2 fois sur 3 : le joueur posait 2 cartes, il en restait 1 | **corrigé** : le dernier tapis envoyé (`sentMat`) sert de base jusqu'à sa confirmation. Non-régression : `specs-stack/realtime`, « deux cartes posées coup sur coup » (16 exécutions sur 16) et P-09 |
 | L'écran du booster « clignote » à l'ouverture | `BoosterView.vue` : les données du jour sont rechargées avant d'afficher la pile | « Voir ma collection » apparaît un instant avant la pile à révéler | à corriger ; `BoosterPage.openAndReveal()` attend « Tout révéler » |
 | Deux ouvertures simultanées ouvrent deux boosters (API simulée seulement) | `apps/player/src/api/mock/server.ts`, `claimBooster` : vérifie après un délai | sans effet en production (le back est protégé) | à corriger ; un seul clic dans les tests |
+| Une page démesurée (`page=2**63`) provoquait une erreur 500 sur les listes paginées | `backend/app/dependencies.py` : l'OFFSET SQL débordait | 4 routes répondaient 500 au lieu de 400 (trouvé par Schemathesis) | **corrigé** : `page` ≤ 100 000, dans le back et le contrat ; test `test_page_number_is_bounded` |
+| Les types générés (`schema.d.ts`) étaient en retard sur le contrat | dons, routes admin des cartes, des joueurs, des demandes de suppression et des comptes, `/me/password` absents ; types écrits à la main dans `types.ts` | le compilateur ne vérifiait pas ces appels contre le contrat | **corrigé** : régénéré, vérifié en CI ; deux erreurs de typage révélées dans `CreaturesView.vue` (famille et rareté en texte libre), corrigées |
+| `pnpm --filter @creatura/shared generate:api` ne marchait pas | `packages/shared` appelait `openapi-typescript` sans l'avoir en dépendance | la commande documentée échouait | **corrigé** |
+| Les réponses de l'API n'interdisaient pas au navigateur de deviner leur type | en-tête `X-Content-Type-Options` absent (scan OWASP ZAP) | risque faible | **corrigé** : `nosniff` sur toutes les réponses (`app/main.py`) ; test `test_responses_forbid_content_sniffing` |
+| Images Docker avec une faille zlib corrigible | images de base `python:3.13-slim` et `postgres:16` pas encore reconstruites avec le correctif Debian | faille « high » (Trivy) | **corrigé** : `apt-get upgrade` au build ; `pip` retiré de l'image de l'API (inutile à l'exécution) |
+
+**Points de sécurité connus et acceptés** (contrôles de nuit) :
+
+- `pnpm audit` : deux failles « high » ignorées dans `pnpm-workspace.yaml` (`auditConfig`), avec
+  leur raison. **zod 3** (épuisement mémoire sur des collections énormes : zod ne valide ici que
+  des formulaires, côté navigateur ; correctif seulement en zod 4, adaptateur vee-validate à
+  migrer) et **picomatch** (ReDoS, aucun correctif publié ; utilisé au build par vue-router).
+- Trivy : `gosu`, binaire de l'image officielle `postgres:16` compilé avec une ancienne version
+  de Go (26 failles, dont une critique). Il ne sert qu'au démarrage du conteneur ; exclu du scan
+  jusqu'à une nouvelle image `postgres:16`.
+- OWASP ZAP : en-tête `Cross-Origin-Resource-Policy` absent (risque faible ; son effet sur l'exe
+  et l'APK est à étudier avant de l'ajouter) ; jeton d'accès dans l'adresse du WebSocket (choix
+  documenté du contrat : un navigateur n'envoie pas d'en-tête sur un WebSocket).
 
 Une action faite pendant une reconnexion de la salle n'est pas envoyée : `http.ts` affiche alors
 « Connexion à la salle d'échange en cours : réessayez dans un instant ». WS-08 attend donc la fin
@@ -581,19 +595,25 @@ pnpm --filter e2e test:android         # APK sur l'émulateur démarré (adb dev
 
 **Rapports conservés en artefact de CI :**
 
-- pytest : JUnit (`reports/backend-tests.xml`, déjà en place) ;
-- Vitest : JUnit + couverture ;
+- pytest : JUnit et couverture (`reports/backend-tests.xml`, `backend-coverage.xml`) ;
+- Vitest : couverture (`coverage/` de chaque paquet, artefact `coverage-frontend-…`) ;
+- nuit : Schemathesis (JUnit), k6 (résumé JSON), ZAP (rapport HTML et JSON) ;
 - Playwright : rapport HTML, traces des tests en échec ;
 - Playwright Android : rapport HTML et traces des tests en échec (`playwright-report-android`) ;
 - un résumé dans `GITHUB_STEP_SUMMARY` (tests passés, échoués, ignorés par job).
 
-**Couverture visée** (mesurée, seuil bloquant une fois atteint) :
+**Couverture** (mesurée au lot 6 ; en dessous du seuil, la CI échoue) :
 
-| Partie | Seuil |
-|---|---|
-| Back (`backend/app`) | 85 % des lignes |
-| API simulée et composables du front | 80 % |
-| Composants Vue | pas de seuil : couverts par les E2E |
+| Partie | Mesurée (lignes) | Seuil |
+|---|---|---|
+| Back (`backend/app`) | 92 % | 90 % |
+| Front joueur, logique `.ts` (API simulée, composables, stores) | 52 % | planchers juste sous la mesure, dans `vitest.config.ts` |
+| Front admin, logique `.ts` | 55 % | idem |
+| `packages/shared`, logique `.ts` | 29 % (le client HTTP et l'inactivité sont testés depuis le joueur) | idem |
+| Écrans et composants `.vue` | non mesurés | couverts par les tests E2E |
+
+Les planchers sont à remonter à chaque ajout de tests : la cible reste 80 % pour l'API simulée
+et les composables.
 
 **Critères de réussite :**
 
@@ -626,7 +646,7 @@ pnpm --filter e2e test:android         # APK sur l'émulateur démarré (adb dev
 | 3. Stack réelle ✅ | `e2e/compose.yaml`, fixtures API, `specs-stack/`, **WS-01 à WS-11**, X-01 à X-04, A-02 ; job `e2e-stack` | intégration réelle et temps réel couverts |
 | 4. Application Windows ✅ | D-01 à D-08 (Electron sur la stack, Linux), E-01 et E-02 (exe construit, Windows) ; jobs `e2e-stack` et `desktop` | exe testé avant publication |
 | 5. Application Android ✍️ | M-01 à M-05 (Playwright Android) ; job `e2e-mobile` sur émulateur, qui conditionne la publication de l'APK. Écrit, **première exécution au prochain push** | APK testé avant publication |
-| 6. Compléments | unitaires manquants (§ 7), couverture et seuils, contrat OpenAPI, k6, sécurité de nuit | qualité mesurée |
+| 6. Compléments ✅ | unitaires (shared, dons, `useTradeRoom`, garde du routeur), couverture et seuils (front et back), contrat (`schema.d.ts` en CI, Schemathesis), Ruff, contrôles de nuit (audits, Trivy, k6, ZAP) | qualité mesurée |
 
 ## 19. Matrice de traçabilité
 

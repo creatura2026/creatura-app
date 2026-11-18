@@ -2,19 +2,20 @@
 
 import logging
 import uuid
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from fastapi import APIRouter, Response, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
-from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app import bus
 from app.controllers import trade
 from app.database import SessionLocal
-from app.dependencies import PlayerUser, DbSession, Pagination, user_from_token
+from app.dependencies import DbSession, Pagination, PlayerUser, user_from_token
 from app.errors import DomainError, Forbidden, NotFound, Unauthorized, problem_body
-from app.models import EchangeMessage, Utilisateur, Role
+from app.models import EchangeMessage, Role, Utilisateur
 from app.realtime import Room, Seat, rooms
 from app.schemas.base import Page
 from app.schemas.trade import (
@@ -303,7 +304,7 @@ async def join_trade(websocket: WebSocket, tradeId: str, access_token: str | Non
         try:
             trade_id = uuid.UUID(tradeId)
         except ValueError:
-            raise NotFound("Cet échange n'existe pas.")
+            raise NotFound("Cet échange n'existe pas.") from None
         if not access_token:
             raise Unauthorized("Connectez-vous pour continuer.")
         player_id = await _db(_enter, access_token, trade_id)
