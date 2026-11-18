@@ -1,3 +1,8 @@
+<script setup lang="ts">
+const base = import.meta.env.BASE_URL
+const img = (name: string) => base + 'guide-images/' + name
+</script>
+
 <template>
   <div class="guide">
     <nav class="toc" aria-label="Sommaire">
@@ -22,7 +27,7 @@
       <p>Si vous n'avez pas encore de compte, rendez-vous sur la page d'accueil publique du site.
         Vous y trouverez deux boutons : <strong>Créer un compte</strong> et <strong>J'ai déjà un compte</strong>.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/01-accueil-public.png'" alt="Page d'accueil publique de Créatura" />
+        <img :src="img('01-accueil-public.png')" alt="Page d'accueil publique de Créatura" />
         <figcaption>Page d'accueil — boutons de création de compte et de connexion</figcaption>
       </figure>
       <p>Cliquez sur <strong>Créer un compte</strong>, puis remplissez le formulaire :</p>
@@ -33,7 +38,7 @@
         <li>Cliquez sur <strong>Créer mon compte</strong> pour valider.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/02-inscription.png'" alt="Formulaire d'inscription" />
+        <img :src="img('02-inscription.png')" alt="Formulaire d'inscription" />
         <figcaption>Formulaire d'inscription — remplissez tous les champs puis validez</figcaption>
       </figure>
       <div class="tip mint">
@@ -52,7 +57,7 @@
         <li>Cliquez sur <strong>Se connecter</strong>.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/03-connexion.png'" alt="Page de connexion" />
+        <img :src="img('03-connexion.png')" alt="Page de connexion" />
         <figcaption>Page de connexion — entrez vos identifiants puis validez</figcaption>
       </figure>
       <div class="tip butter">
@@ -71,7 +76,7 @@
         <li><strong>Catalogue</strong> — accès rapide à toutes les cartes.</li>
       </ul>
       <figure class="screenshot">
-        <img :src="'/guide-images/04-accueil.png'" alt="Tableau de bord" />
+        <img :src="img('04-accueil.png')" alt="Tableau de bord" />
         <figcaption>Tableau de bord après connexion</figcaption>
       </figure>
     </section>
@@ -87,7 +92,7 @@
         <li>Une fois toutes les cartes affichées, elles sont ajoutées à votre collection.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/05-booster.png'" alt="Page booster quotidien" />
+        <img :src="img('05-booster.png')" alt="Page booster quotidien" />
         <figcaption>Page booster — ouverture du booster du jour</figcaption>
       </figure>
       <div class="tip sky">
@@ -106,14 +111,14 @@
         <li><strong>Rareté</strong> — Commune, Peu commune, Rare, Très rare, Légendaire.</li>
       </ul>
       <figure class="screenshot">
-        <img :src="'/guide-images/06-catalogue.png'" alt="Catalogue des créatures" />
+        <img :src="img('06-catalogue.png')" alt="Catalogue des créatures" />
         <figcaption>Catalogue — cartes non possédées en gris, possédées en couleur</figcaption>
       </figure>
       <h3>Détail d'une créature</h3>
       <p>Cliquez sur une carte pour voir sa fiche : image, famille, rareté, description, et la liste des
         joueurs qui la possèdent (utile pour proposer un échange).</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/07-creature-detail.png'" alt="Fiche détail d'une créature" />
+        <img :src="img('07-creature-detail.png')" alt="Fiche détail d'une créature" />
         <figcaption>Fiche détail d'une créature</figcaption>
       </figure>
     </section>
@@ -122,7 +127,7 @@
       <h2>6. Ma collection</h2>
       <p>La collection regroupe toutes les cartes que vous avez obtenues, y compris les doublons.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/08-collection.png'" alt="Ma collection" />
+        <img :src="img('08-collection.png')" alt="Ma collection" />
         <figcaption>Ma collection — progression et cartes possédées</figcaption>
       </figure>
       <ul>
@@ -142,7 +147,7 @@
       <p>Depuis <span class="nav-pill">Échanges</span>, retrouvez tous vos échanges actifs.
         Ceux qui <strong>attendent votre réponse</strong> apparaissent en premier.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/09-echanges-liste.png'" alt="Liste des échanges en cours" />
+        <img :src="img('09-echanges-liste.png')" alt="Liste des échanges en cours" />
         <figcaption>Liste des échanges en cours</figcaption>
       </figure>
       <h3>Ouvrir un nouvel échange — par joueur</h3>
@@ -153,7 +158,7 @@
         <li>Cliquez sur <strong>Échanger avec [pseudo]</strong> pour ouvrir la salle.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/10-nouvel-echange-joueur.png'" alt="Ouvrir un échange par joueur" />
+        <img :src="img('10-nouvel-echange-joueur.png')" alt="Ouvrir un échange par joueur" />
         <figcaption>Mode « Par joueur » — cartes du joueur cible</figcaption>
       </figure>
       <h3>Ouvrir un nouvel échange — par carte</h3>
@@ -163,7 +168,7 @@
         <li>Cliquez sur <strong>Échanger avec [pseudo]</strong> pour lancer la salle d'échange.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/11-nouvel-echange-carte.png'" alt="Ouvrir un échange par carte" />
+        <img :src="img('11-nouvel-echange-carte.png')" alt="Ouvrir un échange par carte" />
         <figcaption>Mode « Par carte » — joueurs possédant la créature souhaitée</figcaption>
       </figure>
     </section>
@@ -178,7 +183,7 @@
         <li>Les cartes sont échangées instantanément et vos collections sont mises à jour.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/12-salle-echange.png'" alt="Salle d'échange" />
+        <img :src="img('12-salle-echange.png')" alt="Salle d'échange" />
         <figcaption>Salle d'échange — chaque joueur pose sa carte avant de confirmer</figcaption>
       </figure>
       <div class="tip salmon">
@@ -198,7 +203,7 @@
         <li><strong>Se déconnecter</strong> — ferme votre session sur cet appareil uniquement.</li>
       </ul>
       <figure class="screenshot">
-        <img :src="'/guide-images/13-profil.png'" alt="Page profil" />
+        <img :src="img('13-profil.png')" alt="Page profil" />
         <figcaption>Page profil — informations, progression et déconnexion</figcaption>
       </figure>
     </section>
@@ -214,7 +219,7 @@
         <li>Cliquez sur <strong>Changer le mot de passe</strong>.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/14-securite-mdp.png'" alt="Formulaire de changement de mot de passe" />
+        <img :src="img('14-securite-mdp.png')" alt="Formulaire de changement de mot de passe" />
         <figcaption>Section sécurité — formulaire de changement de mot de passe</figcaption>
       </figure>
       <div class="tip butter">
@@ -242,7 +247,7 @@
         L'installateur (<code>.exe</code>) est disponible dans la section
         <a href="/telechargements/">Téléchargements</a>.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/15-telechargement-windows.png'" alt="Téléchargement Windows" />
+        <img :src="img('15-telechargement-windows.png')" alt="Téléchargement Windows" />
         <figcaption>Bouton de téléchargement Windows sur la page d'accueil</figcaption>
       </figure>
       <h3>Application Android</h3>

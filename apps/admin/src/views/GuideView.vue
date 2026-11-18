@@ -1,3 +1,21 @@
+<script setup lang="ts">
+import imgLogin from '@/assets/guide-images/Admin_login_Page.png'
+import imgDashboard from '@/assets/guide-images/Admin_Dashboard_Page.png'
+import imgCartesList from '@/assets/guide-images/Liste_Des_Cartes.png'
+import imgCartesForm from '@/assets/guide-images/Gestion_des_cartes.png'
+import imgSprite from '@/assets/guide-images/modif_sprite.png'
+import imgRarete from '@/assets/guide-images/Modif_rarete.png'
+import imgJoueurs from '@/assets/guide-images/Liste_Joueur.png'
+import imgFicheJoueur from '@/assets/guide-images/fiche_joueur.png'
+import imgSuppression from '@/assets/guide-images/Demande_suppression.png'
+import imgAdminList from '@/assets/guide-images/admin_list.png'
+import imgBooster from '@/assets/guide-images/modif_booster.png'
+
+import { useRoute } from 'vue-router'
+const route = useRoute()
+const anchor = (id: string) => ({ hash: '#' + id, query: route.query })
+</script>
+
 <template>
   <div class="guide">
     <div class="tip salmon">
@@ -9,16 +27,16 @@
     <nav class="toc" aria-label="Sommaire" style="margin-top:1.5rem">
       <h2>Sommaire</h2>
       <ol>
-        <li><a href="#connexion">1. Connexion et accès</a></li>
-        <li><a href="#tableau-de-bord">2. Tableau de bord et statistiques</a></li>
-        <li><a href="#cartes">3. Gestion des cartes (créatures)</a></li>
-        <li><a href="#sprite">4. Ajouter ou modifier le sprite d'une carte</a></li>
-        <li><a href="#rarete">5. Programmer un changement de rareté</a></li>
-        <li><a href="#joueurs">6. Gestion des joueurs</a></li>
-        <li><a href="#suppressions">7. Demandes de suppression de compte</a></li>
-        <li><a href="#administrateurs">8. Comptes administrateurs</a></li>
-        <li><a href="#reglages">9. Réglages du booster</a></li>
-        <li><a href="#compte">10. Mon compte administrateur</a></li>
+        <li><RouterLink :to="anchor('connexion')">1. Connexion et accès</RouterLink></li>
+        <li><RouterLink :to="anchor('tableau-de-bord')">2. Tableau de bord et statistiques</RouterLink></li>
+        <li><RouterLink :to="anchor('cartes')">3. Gestion des cartes (créatures)</RouterLink></li>
+        <li><RouterLink :to="anchor('sprite')">4. Ajouter ou modifier le sprite d'une carte</RouterLink></li>
+        <li><RouterLink :to="anchor('rarete')">5. Programmer un changement de rareté</RouterLink></li>
+        <li><RouterLink :to="anchor('joueurs')">6. Gestion des joueurs</RouterLink></li>
+        <li><RouterLink :to="anchor('suppressions')">7. Demandes de suppression de compte</RouterLink></li>
+        <li><RouterLink :to="anchor('administrateurs')">8. Comptes administrateurs</RouterLink></li>
+        <li><RouterLink :to="anchor('reglages')">9. Réglages du booster</RouterLink></li>
+        <li><RouterLink :to="anchor('compte')">10. Mon compte administrateur</RouterLink></li>
       </ol>
     </nav>
 
@@ -29,7 +47,7 @@
         Entrez votre adresse e-mail et votre mot de passe administrateur.
       </p>
       <figure class="screenshot">
-        <img :src="'/guide-images/Admin_login_Page.png'" alt="Page de connexion admin" />
+        <img :src="imgLogin" alt="Page de connexion admin" />
         <figcaption>Page de connexion de l'interface d'administration</figcaption>
       </figure>
       <div class="tip butter">
@@ -47,7 +65,7 @@
       <p>Le tableau de bord (<span class="nav-pill">Dashboard</span>) affiche les indicateurs clés
         de la plateforme sur la période choisie.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/Admin_Dashboard_Page.png'" alt="Tableau de bord admin" />
+        <img :src="imgDashboard" alt="Tableau de bord admin" />
         <figcaption>Tableau de bord — statistiques générales</figcaption>
       </figure>
       <ul>
@@ -65,7 +83,7 @@
       <p>La page <span class="nav-pill">Cartes</span> liste toutes les créatures disponibles
         dans le jeu, y compris celles dont la rareté sera modifiée au prochain minuit.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/Liste_Des_Cartes.png'" alt="Liste des cartes" />
+        <img :src="imgCartesList" alt="Liste des cartes" />
         <figcaption>Liste des cartes — toutes les créatures du jeu</figcaption>
       </figure>
       <h3>Ajouter une nouvelle carte</h3>
@@ -80,7 +98,7 @@
         <li>Cliquez sur <strong>Ajouter la carte</strong>.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/Gestion_des_cartes.png'" alt="Formulaire de création d'une carte" />
+        <img :src="imgCartesForm" alt="Formulaire de création d'une carte" />
         <figcaption>Formulaire de création — nom, famille, rareté, description et sprite PNG</figcaption>
       </figure>
       <div class="tip mint">
@@ -107,7 +125,7 @@
         <li>L'upload démarre automatiquement. Une confirmation s'affiche en cas de succès.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/modif_sprite.png'" alt="Upload d'un sprite" />
+        <img :src="imgSprite" alt="Upload d'un sprite" />
         <figcaption>Upload du sprite depuis la fiche d'une carte</figcaption>
       </figure>
       <div class="tip butter">
@@ -133,7 +151,7 @@
         <li>Confirmez. La fiche affiche alors les deux raretés : l'actuelle et la prochaine.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/Modif_rarete.png'" alt="Changement de rareté programmé" />
+        <img :src="imgRarete" alt="Changement de rareté programmé" />
         <figcaption>Rareté actuelle et future sur une carte en attente de changement</figcaption>
       </figure>
       <h3>Annuler un changement programmé</h3>
@@ -145,7 +163,7 @@
       <h2>6. Gestion des joueurs</h2>
       <p>La page <span class="nav-pill">Joueurs</span> liste tous les joueurs inscrits sur la plateforme.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/Liste_Joueur.png'" alt="Liste des joueurs" />
+        <img :src="imgJoueurs" alt="Liste des joueurs" />
         <figcaption>Liste des joueurs</figcaption>
       </figure>
       <h3>Fiche joueur</h3>
@@ -157,7 +175,7 @@
         <li>Possibilité de <strong>soumettre une demande de suppression de compte</strong> pour ce joueur.</li>
       </ul>
       <figure class="screenshot">
-        <img :src="'/guide-images/fiche_joueur.png'" alt="Fiche détail d'un joueur" />
+        <img :src="imgFicheJoueur" alt="Fiche détail d'un joueur" />
         <figcaption>Fiche détail d'un joueur — informations, collection et historique</figcaption>
       </figure>
     </section>
@@ -182,7 +200,7 @@
         <li>En cas d'approbation, le compte est supprimé (anonymisé) immédiatement.</li>
       </ol>
       <figure class="screenshot">
-        <img :src="'/guide-images/Demande_suppression.png'" alt="Demandes de suppression" />
+        <img :src="imgSuppression" alt="Demandes de suppression" />
         <figcaption>Demandes de suppression en attente de validation</figcaption>
       </figure>
       <div class="tip salmon">
@@ -198,7 +216,7 @@
       <h2>8. Comptes administrateurs</h2>
       <p>La page <span class="nav-pill">Administrateurs</span> liste tous les comptes admin actifs.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/admin_list.png'" alt="Liste des administrateurs" />
+        <img :src="imgAdminList" alt="Liste des administrateurs" />
         <figcaption>Liste des comptes administrateurs</figcaption>
       </figure>
       <h3>Créer un compte administrateur</h3>
@@ -229,7 +247,7 @@
       <p>La page <span class="nav-pill">Réglages</span> permet de configurer le nombre de cartes
         distribués par booster quotidien.</p>
       <figure class="screenshot">
-        <img :src="'/guide-images/modif_booster.png'" alt="Réglages du booster" />
+        <img :src="imgBooster" alt="Réglages du booster" />
         <figcaption>Configuration du booster quotidien</figcaption>
       </figure>
       <ul>
