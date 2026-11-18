@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { guestOnly: true, title: 'Créer un compte' },
     },
     {
+      path: '/guide',
+      name: 'guide',
+      component: () => import('@/views/GuideView.vue'),
+      meta: { title: 'Guide du joueur' },
+    },
+    {
       path: '/',
       component: AppShell,
       meta: { requiresAuth: true },
@@ -95,12 +101,6 @@ const router = createRouter({
           name: 'profile',
           component: () => import('@/views/ProfileView.vue'),
           meta: { title: 'Mon profil' },
-        },
-        {
-          path: 'guide',
-          name: 'guide',
-          component: () => import('@/views/GuideView.vue'),
-          meta: { title: 'Guide du joueur' },
         },
       ],
     },

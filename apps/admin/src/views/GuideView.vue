@@ -29,7 +29,7 @@
         Entrez votre adresse e-mail et votre mot de passe administrateur.
       </p>
       <figure class="screenshot">
-        <img src="/guides/admin/images/Admin_login_Page.png" alt="Page de connexion admin" />
+        <img :src="'/guides/admin/images/Admin_login_Page.png'" alt="Page de connexion admin" />
         <figcaption>Page de connexion de l'interface d'administration</figcaption>
       </figure>
       <div class="tip butter">
@@ -47,7 +47,7 @@
       <p>Le tableau de bord (<span class="nav-pill">Dashboard</span>) affiche les indicateurs clés
         de la plateforme sur la période choisie.</p>
       <figure class="screenshot">
-        <img src="/guides/admin/images/Admin_Dashboard_Page.png" alt="Tableau de bord admin" />
+        <img :src="'/guides/admin/images/Admin_Dashboard_Page.png'" alt="Tableau de bord admin" />
         <figcaption>Tableau de bord — statistiques générales</figcaption>
       </figure>
       <ul>
@@ -65,7 +65,7 @@
       <p>La page <span class="nav-pill">Cartes</span> liste toutes les créatures disponibles
         dans le jeu, y compris celles dont la rareté sera modifiée au prochain minuit.</p>
       <figure class="screenshot">
-        <img src="/guides/admin/images/Liste_Des_Cartes.png" alt="Liste des cartes" />
+        <img :src="'/guides/admin/images/Liste_Des_Cartes.png'" alt="Liste des cartes" />
         <figcaption>Liste des cartes — toutes les créatures du jeu</figcaption>
       </figure>
       <h3>Ajouter une nouvelle carte</h3>
@@ -80,7 +80,7 @@
         <li>Cliquez sur <strong>Ajouter la carte</strong>.</li>
       </ol>
       <figure class="screenshot">
-        <img src="/guides/admin/images/Gestion_des_cartes.png" alt="Formulaire de création d'une carte" />
+        <img :src="'/guides/admin/images/Gestion_des_cartes.png'" alt="Formulaire de création d'une carte" />
         <figcaption>Formulaire de création — nom, famille, rareté, description et sprite PNG</figcaption>
       </figure>
       <div class="tip mint">
@@ -107,7 +107,7 @@
         <li>L'upload démarre automatiquement. Une confirmation s'affiche en cas de succès.</li>
       </ol>
       <figure class="screenshot">
-        <img src="/guides/admin/images/modif_sprite.png" alt="Upload d'un sprite" />
+        <img :src="'/guides/admin/images/modif_sprite.png'" alt="Upload d'un sprite" />
         <figcaption>Upload du sprite depuis la fiche d'une carte</figcaption>
       </figure>
       <div class="tip butter">
@@ -133,7 +133,7 @@
         <li>Confirmez. La fiche affiche alors les deux raretés : l'actuelle et la prochaine.</li>
       </ol>
       <figure class="screenshot">
-        <img src="/guides/admin/images/Modif_rarete.png" alt="Changement de rareté programmé" />
+        <img :src="'/guides/admin/images/Modif_rarete.png'" alt="Changement de rareté programmé" />
         <figcaption>Rareté actuelle et future sur une carte en attente de changement</figcaption>
       </figure>
       <h3>Annuler un changement programmé</h3>
@@ -145,7 +145,7 @@
       <h2>6. Gestion des joueurs</h2>
       <p>La page <span class="nav-pill">Joueurs</span> liste tous les joueurs inscrits sur la plateforme.</p>
       <figure class="screenshot">
-        <img src="/guides/admin/images/Liste_Joueur.png" alt="Liste des joueurs" />
+        <img :src="'/guides/admin/images/Liste_Joueur.png'" alt="Liste des joueurs" />
         <figcaption>Liste des joueurs</figcaption>
       </figure>
       <h3>Fiche joueur</h3>
@@ -157,7 +157,7 @@
         <li>Possibilité de <strong>soumettre une demande de suppression de compte</strong> pour ce joueur.</li>
       </ul>
       <figure class="screenshot">
-        <img src="/guides/admin/images/fiche_joueur.png" alt="Fiche détail d'un joueur" />
+        <img :src="'/guides/admin/images/fiche_joueur.png'" alt="Fiche détail d'un joueur" />
         <figcaption>Fiche détail d'un joueur — informations, collection et historique</figcaption>
       </figure>
     </section>
@@ -182,7 +182,7 @@
         <li>En cas d'approbation, le compte est supprimé (anonymisé) immédiatement.</li>
       </ol>
       <figure class="screenshot">
-        <img src="/guides/admin/images/Demande_suppression.png" alt="Demandes de suppression" />
+        <img :src="'/guides/admin/images/Demande_suppression.png'" alt="Demandes de suppression" />
         <figcaption>Demandes de suppression en attente de validation</figcaption>
       </figure>
       <div class="tip salmon">
@@ -198,7 +198,7 @@
       <h2>8. Comptes administrateurs</h2>
       <p>La page <span class="nav-pill">Administrateurs</span> liste tous les comptes admin actifs.</p>
       <figure class="screenshot">
-        <img src="/guides/admin/images/admin_list.png" alt="Liste des administrateurs" />
+        <img :src="'/guides/admin/images/admin_list.png'" alt="Liste des administrateurs" />
         <figcaption>Liste des comptes administrateurs</figcaption>
       </figure>
       <h3>Créer un compte administrateur</h3>
@@ -229,7 +229,7 @@
       <p>La page <span class="nav-pill">Réglages</span> permet de configurer le nombre de cartes
         distribués par booster quotidien.</p>
       <figure class="screenshot">
-        <img src="/guides/admin/images/modif_booster.png" alt="Réglages du booster" />
+        <img :src="'/guides/admin/images/modif_booster.png'" alt="Réglages du booster" />
         <figcaption>Configuration du booster quotidien</figcaption>
       </figure>
       <ul>
