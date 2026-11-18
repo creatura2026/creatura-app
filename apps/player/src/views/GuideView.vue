@@ -1,24 +1,37 @@
 <script setup lang="ts">
 const base = import.meta.env.BASE_URL
 const img = (name: string) => base + 'guide-images/' + name
+
+// Défilement direct vers une section : fiable quel que soit le scrollBehavior du router.
+const reduced =
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+function scrollToId(id: string) {
+  document
+    .getElementById(id)
+    ?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
+}
 </script>
 
 <template>
   <div class="guide">
+    <RouterLink to="/accueil" class="btn btn-secondary mb-4">
+      &larr; Retour à l'application
+    </RouterLink>
+
     <nav class="toc" aria-label="Sommaire">
       <h2>Sommaire</h2>
       <ol>
-        <li><a href="#creer-un-compte">1. Créer un compte</a></li>
-        <li><a href="#se-connecter">2. Se connecter</a></li>
-        <li><a href="#accueil">3. Tableau de bord (accueil)</a></li>
-        <li><a href="#booster">4. Booster quotidien</a></li>
-        <li><a href="#catalogue">5. Catalogue des créatures</a></li>
-        <li><a href="#collection">6. Ma collection</a></li>
-        <li><a href="#echanges">7. Échanges</a></li>
-        <li><a href="#salle-echange">8. La salle d'échange</a></li>
-        <li><a href="#profil">9. Mon profil</a></li>
-        <li><a href="#securite">10. Sécurité du compte</a></li>
-        <li><a href="#application">11. Télécharger l'application</a></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('creer-un-compte')">1. Créer un compte</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('se-connecter')">2. Se connecter</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('accueil')">3. Tableau de bord (accueil)</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('booster')">4. Booster quotidien</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('catalogue')">5. Catalogue des créatures</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('collection')">6. Ma collection</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('echanges')">7. Échanges</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('salle-echange')">8. La salle d'échange</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('profil')">9. Mon profil</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('securite')">10. Sécurité du compte</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('application')">11. Télécharger l'application</button></li>
       </ol>
     </nav>
 
@@ -258,9 +271,31 @@ const img = (name: string) => base + 'guide-images/' + name
         <p>Sur Android, autorisez l'installation depuis une source inconnue pour continuer.</p>
       </div>
     </section>
+
+    <RouterLink to="/accueil" class="btn btn-secondary mt-6">
+      &larr; Retour à l'application
+    </RouterLink>
   </div>
 </template>
 
 <style>
-.guide { --guide-accent: var(--color-sun, #fcd34d); }
+.guide {
+  --guide-accent: var(--color-sun, #fcd34d);
+}
+/* Entrées du sommaire : boutons rendus comme les anciens liens (défilement direct). */
+.guide .toc-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-ink, #1a1a2e);
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.guide .toc-link:hover {
+  text-decoration-thickness: 2px;
+}
 </style>
