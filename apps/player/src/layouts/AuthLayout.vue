@@ -34,7 +34,11 @@ const art = CREATURES.find((c) => c.name === (props.creature ?? 'Moussou'))!
       <RouterLink to="/" class="self-start lg:hidden" aria-label="Retour à l’accueil">
         <BrandMark />
       </RouterLink>
-      <main id="contenu" class="mx-auto my-auto w-full max-w-md py-8">
+      <main
+        id="contenu"
+        tabindex="-1"
+        class="mx-auto my-auto w-full max-w-md py-8 focus:shadow-none focus:outline-none"
+      >
         <p class="eyebrow">{{ eyebrow }}</p>
         <h1 class="mt-2 mb-6 text-3xl font-bold sm:text-4xl">{{ title }}</h1>
         <div class="card-pixel p-5 sm:p-6" :class="tone === 'mint' ? 'bg-mint' : 'bg-sky'">

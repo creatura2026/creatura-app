@@ -59,7 +59,7 @@ const LOOP = [
       </div>
     </header>
 
-    <main id="contenu">
+    <main id="contenu" tabindex="-1" class="focus:shadow-none focus:outline-none">
       <section class="bg-ink text-cream">
         <div class="mx-auto max-w-6xl px-4 pb-14 sm:pb-20">
           <div class="grid items-center gap-10 pt-10 sm:pt-14 lg:grid-cols-[1fr_auto]">

@@ -143,7 +143,11 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           >Données fictives</span
         >
       </div>
-      <main id="contenu" class="w-full max-w-7xl flex-1 px-4 py-6 sm:px-8 sm:py-8">
+      <main
+        id="contenu"
+        tabindex="-1"
+        class="w-full max-w-7xl flex-1 px-4 py-6 focus:shadow-none focus:outline-none sm:px-8 sm:py-8"
+      >
         <RouterView />
       </main>
     </div>

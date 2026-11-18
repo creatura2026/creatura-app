@@ -86,7 +86,11 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
       </div>
     </header>
 
-    <main id="contenu" class="mx-auto w-full max-w-6xl flex-1 px-4 pt-5 pb-28 sm:pt-8 md:pb-12">
+    <main
+      id="contenu"
+      tabindex="-1"
+      class="mx-auto w-full max-w-6xl flex-1 px-4 pt-5 pb-28 focus:shadow-none focus:outline-none sm:pt-8 md:pb-12"
+    >
       <RouterView v-slot="{ Component }">
         <Transition
           mode="out-in"
