@@ -212,14 +212,19 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Tests de bout en bout (e2e/) : site joueur et dashboard admin sur l'API
-  # simulée, dans Chromium. Stratégie et scénarios : docs/tests/README.md
+  # simulée. PR : Chromium. Push : Chromium, Firefox, WebKit et mobile.
+  # Stratégie et scénarios : docs/tests/README.md
   # ---------------------------------------------------------------------------
   e2e-mock:
     name: E2E (API simulée)
     needs: detect
     if: needs.detect.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      # PR : retour rapide. Push : tous les navigateurs.
+      E2E_BROWSERS: ${{ github.event_name == 'pull_request' && 'chromium' || 'chromium firefox webkit' }}
+      E2E_SCRIPT: ${{ github.event_name == 'pull_request' && 'test:mock' || 'test:mock:all' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -247,18 +252,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ env.E2E_BROWSERS }}
 
-      - name: Installer Chromium
+      - name: Installer les navigateurs
         if: steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter e2e exec playwright install --with-deps chromium
+        run: pnpm --filter e2e exec playwright install --with-deps $E2E_BROWSERS
 
-      - name: Dépendances système de Chromium
+      - name: Dépendances système des navigateurs
         if: steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm --filter e2e exec playwright install-deps chromium
+        run: pnpm --filter e2e exec playwright install-deps $E2E_BROWSERS
 
+      # Les apps sont construites en mode simulé puis servies par vite preview (playwright.config.ts).
       - name: Tests
-        run: pnpm --filter e2e run test:mock
+        run: pnpm --filter e2e run $E2E_SCRIPT
 
       - name: Publier le rapport
         if: ${{ !cancelled() }}

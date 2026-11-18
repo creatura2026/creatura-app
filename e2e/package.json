@@ -7,19 +7,21 @@
   "scripts": {
     "test": "playwright test",
     "test:mock": "playwright test --project=player-mock --project=admin-mock",
+    "test:mock:all": "playwright test --project=player-mock* --project=admin-mock* --project=player-mobile*",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --fix --cache"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.0",
     "@types/node": "^24.19.2",
     "eslint": "^10.14.0",
     "eslint-plugin-playwright": "^2.12.2",
+    "jiti": "^2.7.0",
     "typescript": "~6.0.0",
-    "typescript-eslint": "^8.72.1",
-    "jiti": "^2.7.0"
+    "typescript-eslint": "^8.72.1"
   },
   "engines": {
     "node": "^22.18.0 || >=24.12.0"

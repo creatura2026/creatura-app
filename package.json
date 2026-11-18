@@ -13,6 +13,7 @@
     "mobile:demo": "pnpm --filter mobile dist:demo",
     "test:unit": "pnpm -r run test:unit --run",
     "test:e2e": "pnpm --filter e2e test",
+    "test:ui": "pnpm --filter e2e test:ui",
     "lint": "pnpm -r run lint",
     "format": "pnpm -r run format"
   }

@@ -8,6 +8,7 @@ node_modules/
 
 # Builds
 dist/
+dist-e2e/
 coverage/
 
 # Variables d'environnement (ne jamais commiter de secrets)

@@ -1,20 +1,32 @@
 /**
  * Tests de bout en bout de Créatura. Stratégie et liste des scénarios : docs/tests/README.md.
  *
- * Projets :
- *  - player-mock : site joueur sur l'API simulée (specs/player)
- *  - admin-mock  : dashboard admin sur l'API simulée (specs/admin)
+ * Projets (API simulée) :
+ *  - player-mock, admin-mock         : site joueur (specs/player) et dashboard (specs/admin), Chromium
+ *  - *-firefox, *-webkit             : les mêmes tests dans Firefox et WebKit (Safari)
+ *  - player-mobile, player-mobile-ios : tests étiquetés @mobile, sur Pixel 7 et iPhone 14
+ *
+ * `pnpm test:mock` lance les projets Chromium (chaque PR) ; `pnpm test:mock:all` lance tout.
  *
  * Les deux apps tournent sur des ports à elles (5174, 5175), pour ne pas gêner un `pnpm dev`
- * lancé à côté sur 5173. En local, un serveur déjà démarré sur ces ports est réutilisé.
+ * lancé à côté sur 5173. En local, un serveur déjà démarré sur ces ports est réutilisé : l'arrêter
+ * après avoir changé de mode (E2E_SERVER).
  */
 import process from 'node:process'
 import { defineConfig, devices } from '@playwright/test'
 
 const CI = !!process.env.CI
+/**
+ * Serveur des apps : build de production servi par `vite preview` (rapide, proche du site publié),
+ * ou serveur de développement (aucun build, pratique pour écrire un test). Preview par défaut en CI ;
+ * en local, `E2E_SERVER=preview pnpm test:mock` pour l'essayer.
+ */
+const PREVIEW = (process.env.E2E_SERVER ?? (CI ? 'preview' : 'dev')) === 'preview'
 
 const PLAYER_PORT = 5174
 const ADMIN_PORT = 5175
+const PLAYER_URL = `http://localhost:${PLAYER_PORT}`
+const ADMIN_URL = `http://localhost:${ADMIN_PORT}`
 
 export default defineConfig({
   testDir: './specs',
@@ -39,36 +51,54 @@ export default defineConfig({
     timezoneId: 'Europe/Paris',
     // Le service worker de la PWA mettrait des pages en cache d'un test à l'autre.
     serviceWorkers: 'block',
+    // Les animations (booster, cartes) respectent prefers-reduced-motion : tests plus rapides.
+    contextOptions: { reducedMotion: 'reduce' },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
 
   projects: [
+    ...(['chromium', 'firefox', 'webkit'] as const).flatMap((browser) => {
+      const device = { chromium: 'Desktop Chrome', firefox: 'Desktop Firefox', webkit: 'Desktop Safari' }[browser]
+      const suffix = browser === 'chromium' ? '' : `-${browser}`
+      return [
+        {
+          name: `player-mock${suffix}`,
+          testDir: './specs/player',
+          use: { ...devices[device], baseURL: PLAYER_URL },
+        },
+        {
+          name: `admin-mock${suffix}`,
+          testDir: './specs/admin',
+          use: { ...devices[device], baseURL: ADMIN_URL },
+        },
+      ]
+    }),
     {
-      name: 'player-mock',
+      name: 'player-mobile',
       testDir: './specs/player',
-      use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PLAYER_PORT}` },
+      grep: /@mobile/,
+      use: { ...devices['Pixel 7'], baseURL: PLAYER_URL },
     },
     {
-      name: 'admin-mock',
-      testDir: './specs/admin',
-      use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${ADMIN_PORT}` },
+      name: 'player-mobile-ios',
+      testDir: './specs/player',
+      grep: /@mobile/,
+      use: { ...devices['iPhone 14'], baseURL: PLAYER_URL },
     },
   ],
 
   webServer: [
-    {
-      command: `pnpm --filter player exec vite --mode mock --port ${PLAYER_PORT} --strictPort`,
-      url: `http://localhost:${PLAYER_PORT}`,
-      reuseExistingServer: !CI,
-      timeout: 120_000,
-    },
-    {
-      command: `pnpm --filter admin exec vite --mode mock --port ${ADMIN_PORT} --strictPort`,
-      url: `http://localhost:${ADMIN_PORT}`,
-      reuseExistingServer: !CI,
-      timeout: 120_000,
-    },
-  ],
+    { app: 'player', port: PLAYER_PORT },
+    { app: 'admin', port: ADMIN_PORT },
+  ].map(({ app, port }) => ({
+    command: PREVIEW
+      ? `pnpm --filter ${app} exec vite build --mode mock --outDir dist-e2e --emptyOutDir && ` +
+        `pnpm --filter ${app} exec vite preview --mode mock --outDir dist-e2e --port ${port} --strictPort`
+      : `pnpm --filter ${app} exec vite --mode mock --port ${port} --strictPort`,
+    url: `http://localhost:${port}`,
+    reuseExistingServer: !CI,
+    timeout: 180_000,
+  })),
 })

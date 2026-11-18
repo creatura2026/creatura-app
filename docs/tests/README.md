@@ -128,8 +128,8 @@ Projets Playwright :
 | Projet | Mode | Navigateur | Specs | État |
 |---|---|---|---|---|
 | `player-mock`, `admin-mock` | API simulée | Chromium | `player/`, `admin/` | en place |
-| `player-mock-firefox`, `player-mock-webkit`, idem pour l'admin | API simulée | Firefox, WebKit | `player/`, `admin/` | lot 2 |
-| `player-mobile` | API simulée | Pixel 7 (Chromium), iPhone 14 (WebKit) | `player/` (étiquette `@mobile`) | lot 2 |
+| `player-mock-firefox`, `player-mock-webkit`, idem pour l'admin | API simulée | Firefox, WebKit | `player/`, `admin/` | en place |
+| `player-mobile`, `player-mobile-ios` | API simulée | Pixel 7 (Chromium), iPhone 14 (WebKit) | `player/` (étiquette `@mobile`) | en place |
 | `stack` | stack réelle | Chromium | tout ce qui est étiqueté `@stack`, `cross/`, `realtime/` | lot 3 |
 | `desktop` | stack réelle ou démo | Electron | `desktop/` | lot 4 |
 
@@ -162,8 +162,9 @@ Projets Playwright :
 | Unitaires front joueur | `apps/player/src/__tests__/` | ~52 tests, 7 fichiers | oui |
 | Unitaires front admin | `apps/admin/src/__tests__/` | ~12 tests, 1 fichier | oui |
 | Unitaires `packages/shared` | — | 0 (le client HTTP est testé depuis le joueur) | — |
-| E2E joueur (API simulée) | `e2e/specs/player/` | 2 tests | oui |
-| E2E admin (API simulée) | `e2e/specs/admin/` | 2 tests | oui |
+| E2E joueur (API simulée) | `e2e/specs/player/` | 61 tests, 8 fichiers (dont 13 d'accessibilité) | oui |
+| E2E admin (API simulée) | `e2e/specs/admin/` | 29 tests, 4 fichiers (dont 11 d'accessibilité) | oui |
+| E2E multi-navigateurs et mobile | mêmes specs, Firefox, WebKit, Pixel 7, iPhone 14 | 282 exécutions en tout | push |
 | Exe, APK | — | 0 (construits, pas testés) | — |
 
 Ce qui est déjà bien couvert côté back : comptes, booster, tirage, catalogue, collection,
@@ -179,7 +180,7 @@ Le workflow est [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (no
 | Déclencheur | Tests lancés | Autres étapes |
 |---|---|---|
 | Pull request | SQL (schéma, données), pytest, lint, type-check + build du front, Vitest, E2E sur l'API simulée (Chromium) | images Docker construites, pas publiées |
-| Push sur `develop` ou `main` | les mêmes | images publiées sur GHCR si tous les tests sont verts (E2E compris) ; exe et APK **construits, pas testés** |
+| Push sur `develop` ou `main` | les mêmes, et l'E2E simulé dans Firefox, WebKit, Pixel 7 et iPhone 14 | images publiées sur GHCR si tous les tests sont verts (E2E compris) ; exe et APK **construits, pas testés** |
 | Tag `v*` | les mêmes | Release GitHub (exe, APK) |
 
 Pas encore d'E2E sur la stack réelle, ni de test de l'exe ou de l'APK. Les jobs exe et APK sont en
@@ -246,17 +247,28 @@ d'amélioration :
 
 ## 9. Tests de bout en bout du site
 
-**Outil :** Playwright. Étiquettes dans le titre du test : `@mock` (API simulée), `@stack`
-(stack réelle), `@mobile` (rejoué sur viewport mobile), `@smoke` (parcours critique).
+**Outil :** Playwright. Étiquettes (`tag`) : `@smoke` (parcours critique), `@mobile` (rejoué sur
+Pixel 7 et iPhone 14), `@stack` (rejoué sur la stack réelle, lot 3). Le mode simulé est celui des
+projets `*-mock`.
 
 ### 9.1 Mise en place
 
-- `webServer` : `vite --mode mock` pour les projets `*-mock` (joueur sur 5174, admin sur 5175) ; pour `stack`, `docker compose -f
-  e2e/compose.yaml up --wait` puis `vite preview` du build non simulé.
+- `webServer` des projets simulés (joueur sur 5174, admin sur 5175) : en CI, build en mode simulé
+  servi par `vite preview` (rapide et proche du site publié) ; en local, serveur de développement
+  `vite --mode mock` (pas de build). `E2E_SERVER=preview` ou `dev` force l'un ou l'autre. Pour
+  `stack` (lot 3) : `docker compose -f e2e/compose.yaml up --wait` puis `vite preview` du build non
+  simulé.
+- Animations réduites (`reducedMotion: 'reduce'`) : l'app les respecte, les tests vont plus vite.
+- Service worker de la PWA bloqué : pas de cache d'un test à l'autre.
 - Ports distincts pour le joueur et l'admin, pour lancer les deux ensemble.
 - **Fixtures** :
-  - `signIn(compte)` : connexion avec un compte de démonstration (en place) ; en stack réelle,
-    une session préparée par l'API et chargée avec `storageState` ;
+  - `signIn(compte)` : connexion avec un compte de démonstration ; en stack réelle, une session
+    préparée par l'API et chargée avec `storageState` ;
+  - `switchTo(compte)` : changer de compte dans le même test. En mode simulé, les comptes d'un
+    même navigateur partagent les données : on offre une carte en Dresseur, on l'accepte en Lina.
+    Côté admin, les données simulées vivent en mémoire : `switchTo` ne recharge pas la page et
+    l'on navigue par le menu (`shell.open`) ;
+  - `checkA11y()` : analyse axe-core de la page affichée (§ 12) ;
   - `newPlayer()` (stack) : crée un compte unique par l'API et renvoie ses identifiants ;
   - `api` (stack) : un client HTTP pour préparer les données sans passer par l'écran (ouvrir un
     booster, poser un réglage) ;
@@ -276,15 +288,15 @@ d'amélioration :
 | P-06 | Collection : filtres possédées, manquantes, doublons | mock, stack |
 | P-07 | Nouvel échange : rechercher un joueur (correctif AS-72), ouvrir la salle | mock, stack |
 | P-08 | Échange **1 carte contre 1 carte, avec le dernier exemplaire** (pas seulement des doublons) : les deux valident, chaque collection est à jour | mock (partenaire simulé), stack (2 navigateurs) |
-| P-09 | Échange de plusieurs cartes de chaque côté | stack |
+| P-09 | Échange de plusieurs cartes de chaque côté ; discussion avec réponse de l'autre joueur et historique gardé | stack (discussion : mock) |
 | P-10 | Modifier son tapis retire les deux validations ; tapis validé verrouillé ; validation refusée tant qu'un tapis est vide | mock, stack |
 | P-11 | Refus par le destinataire, annulation par le proposant, abandon : salle fermée, rien n'est transféré | mock, stack |
 | P-12 | Un seul échange ouvert entre deux joueurs : « nouvel échange » rouvre le premier | mock, stack |
 | P-13 | Carte disparue avant la validation (donnée ou échangée ailleurs) : retirée du tapis, message aux deux joueurs | stack |
 | P-14 | **Don** : offrir une carte → le destinataire accepte (transfert) ; refuser ; annuler par le donneur | mock, stack |
-| P-15 | Don qui échoue : la carte a été échangée entre-temps | stack |
+| P-15 | Don qui échoue : la carte a été donnée à quelqu'un d'autre entre-temps | mock, stack |
 | P-16 | Profil : changer son mot de passe, se reconnecter avec le nouveau | mock, stack |
-| P-17 | Supprimer son compte ; l'autre joueur voit « Joueur supprimé » dans l'historique | stack |
+| P-17 | Supprimer son compte (mot de passe demandé), plus de connexion possible ; l'autre joueur voit « Joueur supprimé » dans l'historique | mock (sans « Joueur supprimé »), stack |
 | P-18 | Page inconnue → page 404 | mock |
 | P-19 | Accueil : lien de téléchargement de l'exe (Windows) et de l'APK (Android) selon la plateforme | mock |
 
@@ -293,15 +305,15 @@ d'amélioration :
 | ID | Scénario | Mode |
 |---|---|---|
 | A-01 | Non connecté → `/connexion` puis retour sur la page demandée ; un joueur → « Accès refusé » | mock, stack |
-| A-02 | Un 403 sur une **action** affiche une erreur sur place, sans rediriger vers « Accès refusé » | mock |
+| A-02 | Un 403 sur une **action** affiche une erreur sur place, sans rediriger vers « Accès refusé » | stack (l'API simulée ne renvoie pas de 403 sur une action permise par l'écran) ; à couvrir aussi par un test unitaire de `main.ts` (lot 6) |
 | A-03 | Compte admin avec mot de passe à changer → forcé sur `/mot-de-passe`, puis accès au dashboard | mock, stack |
 | A-04 | Dashboard : statistiques affichées (inscrits, boosters, échanges) | mock, stack |
 | A-05 | Joueurs : liste, recherche, fiche de suivi d'un joueur | mock, stack |
 | A-06 | **Suppression d'un joueur validée par un second admin** : l'admin A demande, A ne peut pas valider sa propre demande, l'admin B valide (deux contextes) | mock, stack |
 | A-07 | Administrateurs : créer un compte admin, première connexion avec changement de mot de passe obligatoire | mock, stack |
 | A-08 | Cartes : créer une carte avec son PNG, **aperçu** mis à jour pendant la saisie, modifier, losanges de rareté | mock, stack |
-| A-09 | Raretés : modifier les taux de tirage | mock, stack |
-| A-10 | Réglages : nombre de cartes par booster | mock, stack |
+| A-09 | Raretés : distribution observée comparée au théorique, une ligne par rareté (les poids se règlent en A-10) | mock, stack |
+| A-10 | Réglages : nombre de cartes par booster, appliqué au prochain minuit | mock, stack |
 | A-11 | Échanges : supervision (liste, filtres, détail) | mock, stack |
 | A-12 | Mon compte : changer son mot de passe | mock, stack |
 
@@ -396,7 +408,7 @@ job `mobile`. Le test sur un vrai téléphone reste en recette manuelle.
 
 | Domaine | Ce qu'on vérifie | Outil | Quand |
 |---|---|---|---|
-| Accessibilité | Aucune violation grave (WCAG A et AA) sur chaque écran visité par les E2E | `@axe-core/playwright` | à chaque E2E simulé |
+| Accessibilité | Aucune violation grave (WCAG 2.1 A et AA) sur chaque écran du site et du dashboard (`accessibilite.spec.ts`) | `@axe-core/playwright` | à chaque E2E simulé |
 | Compatibilité | Chromium, Firefox, WebKit ; viewports téléphone et tablette | Playwright | push sur `develop` |
 | Performance | Temps de réponse de l'API sous charge (connexion, booster, catalogue) ; 100 salles d'échange ouvertes en parallèle | k6 (HTTP et WebSocket) | nuit |
 | Performance front | Poids des bundles, score Lighthouse de l'accueil | Lighthouse CI | nuit |
@@ -404,6 +416,16 @@ job `mobile`. Le test sur un vrai téléphone reste en recette manuelle.
 | Sécurité (règles) | 401 sans jeton, 403 joueur sur les routes admin, salle d'échange réservée aux deux joueurs, jeton expiré | pytest (§ 8), WS-09 | à chaque PR |
 | Résilience | Reconnexion du WebSocket, redémarrage de l'API, perte du bus | WS-07, WS-08, `test_trades_multi.py` | push |
 | Visuel (optionnel) | Captures de référence des écrans clés | `toHaveScreenshot()` | à la demande |
+
+**Défauts d'accessibilité connus** (relevés par le lot 2, à corriger dans l'application). Ils sont
+listés dans `e2e/fixtures/a11y.ts` : ils apparaissent dans le rapport Playwright (annotation
+« a11y connu ») sans faire échouer les tests ; toute autre violation grave fait échouer. Retirer
+une règle de la liste une fois corrigée.
+
+| Règle axe | Où | Correction possible |
+|---|---|---|
+| `color-contrast` | surtitres `.eyebrow` (connexion, inscription, accueil), textes `text-ink/70` et `/75`, heures des messages | foncer ces couleurs |
+| `label-content-name-mismatch` (WCAG 2.5.3) | logo « CREATURA » nommé « Créatura, accueil » ; lien du profil nommé « Mon profil » qui affiche le pseudo ; cartes cliquables de la salle d'échange | faire commencer le nom accessible par le texte affiché (« CREATURA, accueil »), ou retirer l'`aria-label` |
 
 ## 13. Données de test
 
@@ -449,10 +471,12 @@ cd backend && uv run pytest
 cd db && docker compose up -d
 docker exec creatura-db psql -U creatura -d creatura -v ON_ERROR_STOP=1 -f /db/tests/test_schema.sql
 
-# E2E (la première fois : télécharger le navigateur)
-pnpm --filter e2e exec playwright install chromium
+# E2E (la première fois : télécharger les navigateurs)
+pnpm --filter e2e exec playwright install chromium firefox webkit
 pnpm test:e2e                          # tous les projets
-pnpm --filter e2e test:mock            # API simulée (lance les serveurs Vite tout seul)
+pnpm --filter e2e test:mock            # API simulée, Chromium (lance les serveurs Vite tout seul)
+pnpm --filter e2e test:mock:all        # API simulée, tous les navigateurs et le mobile
+E2E_SERVER=preview pnpm --filter e2e test:mock   # comme en CI : apps construites puis servies
 pnpm --filter e2e test:ui              # mode interactif, pour écrire ou déboguer un test
 pnpm --filter e2e report               # dernier rapport HTML
 # À venir : test:stack (lot 3, Docker requis), test:desktop (lot 4)
@@ -503,7 +527,7 @@ pnpm --filter e2e report               # dernier rapport HTML
 | Lot | Contenu | Livrable |
 |---|---|---|
 | 1. Socle ✅ | paquet `e2e/`, configuration Playwright, fixtures, page objects, migration des 3 tests ; job `e2e-mock` ; lint en CI | E2E simulé en CI sur chaque PR |
-| 2. E2E simulé | P-01 à P-19, A-01 à A-12 en mode simulé ; projets mobile et multi-navigateurs ; axe-core | parcours écran couverts |
+| 2. E2E simulé ✅ | P-01 à P-19, A-01 à A-12 en mode simulé ; projets mobile et multi-navigateurs ; axe-core | parcours écran couverts |
 | 3. Stack réelle | `e2e/compose.yaml`, fixtures API, tests `@stack`, **WS-01 à WS-11**, X-01 à X-04 ; job `e2e-stack` | intégration réelle et temps réel couverts |
 | 4. Application Windows | D-01 à D-07 ; job `e2e-desktop` (Linux + Windows) | exe testé avant publication |
 | 5. Application Android | M-01 à M-05 ; job `e2e-mobile` sur émulateur | APK testé avant publication |
