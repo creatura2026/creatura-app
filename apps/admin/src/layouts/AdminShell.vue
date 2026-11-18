@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import PixelIcon, { type IconName } from '@creatura/shared/ui/PixelIcon.vue'
+import SkipLink from '@creatura/shared/ui/SkipLink.vue'
 
 import { USE_MOCK_API } from '@/api'
 import { useRequestsToValidate } from '@/api/queries'
@@ -46,6 +47,8 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
   <div
     class="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:bg-[linear-gradient(to_right,var(--color-ink)_16rem,transparent_16rem)]"
   >
+    <!-- Hors du flux (sr-only) : n'occupe aucune case de la grille -->
+    <SkipLink />
     <!-- Barre du haut (mobile / tablette) -->
     <header
       class="sticky top-0 z-30 flex h-14 items-center justify-between border-b-2 border-ink bg-ink px-4 text-cream lg:hidden"

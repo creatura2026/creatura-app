@@ -4,6 +4,7 @@ import CreatureCard from '@creatura/shared/ui/CreatureCard.vue'
 import boosterUrl from '@creatura/shared/assets/booster.png'
 import { CREATURES } from '@creatura/shared/fixtures/catalog'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
+import SkipLink from '@creatura/shared/ui/SkipLink.vue'
 
 import AndroidDownload from '@/components/AndroidDownload.vue'
 import DesktopDownload from '@/components/DesktopDownload.vue'
@@ -45,110 +46,126 @@ const LOOP = [
 
 <template>
   <div class="min-h-dvh">
-    <!-- Héros sombre, comme la couverture du document -->
-    <section class="bg-ink text-cream">
-      <div class="mx-auto max-w-6xl px-4 pt-5 pb-14 sm:pb-20">
+    <SkipLink />
+    <!-- En-tête et héros sombres d'un seul tenant, comme la couverture du document -->
+    <header class="bg-ink text-cream">
+      <div class="mx-auto max-w-6xl px-4 pt-5">
         <nav class="flex items-center justify-between gap-3" aria-label="Accès au compte">
           <BrandMark tone="light" />
           <RouterLink to="/connexion" class="btn btn-dark min-h-10 px-3 text-sm"
             >Se connecter</RouterLink
           >
         </nav>
+      </div>
+    </header>
 
-        <div class="mt-10 grid items-center gap-10 sm:mt-14 lg:grid-cols-[1fr_auto]">
-          <div>
-            <p class="eyebrow !text-sun">Vision</p>
-            <h1 class="mt-3 text-5xl leading-none font-bold tracking-wide sm:text-7xl">CREATURA</h1>
-            <p class="mt-5 max-w-xl text-xl leading-snug sm:text-2xl">
-              Une plateforme de collection et d’échange de cartes de créatures
-            </p>
-            <p class="mt-3 text-lg">Découvrez. Collectionnez. Échangez.</p>
-            <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-              <RouterLink to="/inscription" class="btn btn-primary text-lg"
-                >Créer un compte</RouterLink
+    <main id="contenu">
+      <section class="bg-ink text-cream">
+        <div class="mx-auto max-w-6xl px-4 pb-14 sm:pb-20">
+          <div class="grid items-center gap-10 pt-10 sm:pt-14 lg:grid-cols-[1fr_auto]">
+            <div>
+              <p class="eyebrow !text-sun">Vision</p>
+              <h1 class="mt-3 text-5xl leading-none font-bold tracking-wide sm:text-7xl">
+                CREATURA
+              </h1>
+              <p class="mt-5 max-w-xl text-xl leading-snug sm:text-2xl">
+                Une plateforme de collection et d’échange de cartes de créatures
+              </p>
+              <p class="mt-3 text-lg">Découvrez. Collectionnez. Échangez.</p>
+              <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+                <RouterLink to="/inscription" class="btn btn-primary text-lg"
+                  >Créer un compte</RouterLink
+                >
+                <RouterLink to="/connexion" class="btn btn-dark text-lg"
+                  >J’ai déjà un compte</RouterLink
+                >
+              </div>
+              <a
+                v-if="android && mobile"
+                href="#application-android"
+                class="mt-4 inline-flex items-center gap-2 text-cream/85 underline underline-offset-4 hover:text-sun"
               >
-              <RouterLink to="/connexion" class="btn btn-dark text-lg"
-                >J’ai déjà un compte</RouterLink
-              >
+                <PixelIcon name="download" :size="18" />
+                Installer l’application Android
+              </a>
             </div>
-            <a
-              v-if="android && mobile"
-              href="#application-android"
-              class="mt-4 inline-flex items-center gap-2 text-cream/85 underline underline-offset-4 hover:text-sun"
-            >
-              <PixelIcon name="download" :size="18" />
-              Installer l’application Android
-            </a>
-          </div>
-          <!--
+            <!--
             Booster et, quand l'exe est en ligne, son téléchargement (sur mobile : section plus bas).
             Le bouton est hors du flux : la colonne garde la hauteur du booster et les cartes
             d'exemple ne descendent pas.
           -->
-          <div class="relative hidden lg:block">
-            <img
-              :src="boosterUrl"
-              alt="Un booster de cartes Créatura"
-              class="pixelated mx-auto w-[150px] animate-float xl:w-[225px]"
-            />
-            <div
-              v-if="release && !mobile"
-              class="absolute top-full right-0 mt-8 flex flex-col items-end gap-2 whitespace-nowrap xl:right-1/2 xl:translate-x-1/2 xl:items-center"
-            >
-              <a :href="release.setup.url" download class="btn btn-primary">
-                <PixelIcon name="download" :size="18" />
-                Télécharger pour Windows
-              </a>
-              <a
-                href="#application-windows"
-                class="text-sm text-cream/75 underline-offset-4 hover:text-sun hover:underline"
+            <div class="relative hidden lg:block">
+              <img
+                :src="boosterUrl"
+                alt="Un booster de cartes Créatura"
+                class="pixelated mx-auto w-[150px] animate-float xl:w-[225px]"
+              />
+              <div
+                v-if="release && !mobile"
+                class="absolute top-full right-0 mt-8 flex flex-col items-end gap-2 whitespace-nowrap xl:right-1/2 xl:translate-x-1/2 xl:items-center"
               >
-                Version {{ release.version }}, {{ release.setup.size }}
-              </a>
+                <a :href="release.setup.url" download class="btn btn-primary">
+                  <PixelIcon name="download" :size="18" />
+                  Télécharger pour Windows
+                </a>
+                <a
+                  href="#application-windows"
+                  class="text-sm text-cream/75 underline-offset-4 hover:text-sun hover:underline"
+                >
+                  Version {{ release.version }}, {{ release.setup.size }}
+                </a>
+              </div>
             </div>
           </div>
+
+          <!-- Trois cartes au format du booster : la largeur est bornée pour qu'elles restent des cartes -->
+          <!-- Titre de section des cartes (RGAA 9.1) : les noms des cartes sont des h3 -->
+          <h2 class="sr-only">Exemples de cartes</h2>
+          <ul class="mt-12 grid max-w-[34rem] grid-cols-3 gap-2 sm:gap-4">
+            <li v-for="c in showcase" :key="c.id">
+              <CreatureCard :creature="c" class="!shadow-none sm:!shadow-pixel-sm" />
+            </li>
+          </ul>
         </div>
+      </section>
 
-        <!-- Trois cartes au format du booster : la largeur est bornée pour qu'elles restent des cartes -->
-        <ul class="mt-12 grid max-w-[34rem] grid-cols-3 gap-2 sm:gap-4">
-          <li v-for="c in showcase" :key="c.id">
-            <CreatureCard :creature="c" class="!shadow-none sm:!shadow-pixel-sm" />
-          </li>
-        </ul>
-      </div>
-    </section>
-
-    <!--
+      <!--
       Application de l'appareil du visiteur : l'exe sur ordinateur (s'il est en ligne), l'APK sur
       téléphone (« bientôt disponible » tant qu'il n'est pas publié).
     -->
-    <AndroidDownload v-if="mobile && androidOffered" :release="android" class="border-t-2" />
-    <DesktopDownload v-else-if="!mobile && release" :release="release" />
+      <AndroidDownload v-if="mobile && androidOffered" :release="android" class="border-t-2" />
+      <DesktopDownload v-else-if="!mobile && release" :release="release" />
 
-    <!-- Notre ambition -->
-    <section class="mx-auto max-w-6xl px-4 py-12 sm:py-16">
-      <p class="eyebrow">Notre ambition</p>
-      <h2 class="mt-2 text-3xl font-bold sm:text-4xl">Trois verbes, une aventure</h2>
-      <ul class="mt-6 grid gap-5 md:grid-cols-3">
-        <li v-for="p in PILLARS" :key="p.n" class="card-pixel p-5" :class="p.bg">
-          <h3 class="font-sans text-lg font-bold">{{ p.n }} · {{ p.title }}</h3>
-          <p class="mt-2">{{ p.text }}</p>
-        </li>
-      </ul>
+      <!-- Notre ambition -->
+      <section class="mx-auto max-w-6xl px-4 py-12 sm:py-16">
+        <p class="eyebrow">Notre ambition</p>
+        <h2 class="mt-2 text-3xl font-bold sm:text-4xl">Trois verbes, une aventure</h2>
+        <ul class="mt-6 grid gap-5 md:grid-cols-3">
+          <li v-for="p in PILLARS" :key="p.n" class="card-pixel p-5" :class="p.bg">
+            <h3 class="font-sans text-lg font-bold">{{ p.n }} · {{ p.title }}</h3>
+            <p class="mt-2">{{ p.text }}</p>
+          </li>
+        </ul>
 
-      <h2 class="mt-14 text-3xl font-bold sm:text-4xl">Une boucle de collection</h2>
-      <ol class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <li v-for="step in LOOP" :key="step.n" class="card-pixel-sm relative p-4" :class="step.bg">
-          <p class="font-bold">{{ step.n }} · {{ step.title }}</p>
-          <p>{{ step.text }}</p>
-        </li>
-      </ol>
-      <p class="mt-3 text-sm font-medium text-blue">↻ Et retour au prochain booster, demain.</p>
+        <h2 class="mt-14 text-3xl font-bold sm:text-4xl">Une boucle de collection</h2>
+        <ol class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <li
+            v-for="step in LOOP"
+            :key="step.n"
+            class="card-pixel-sm relative p-4"
+            :class="step.bg"
+          >
+            <p class="font-bold">{{ step.n }} · {{ step.title }}</p>
+            <p>{{ step.text }}</p>
+          </li>
+        </ol>
+        <p class="mt-3 text-sm font-medium text-blue">↻ Et retour au prochain booster, demain.</p>
 
-      <p class="banner mt-10">
-        Périmètre : aucun combat, aucun achat en argent réel. Juste le plaisir de collectionner.
-      </p>
-    </section>
+        <p class="banner mt-10">
+          Périmètre : aucun combat, aucun achat en argent réel. Juste le plaisir de collectionner.
+        </p>
+      </section>
+    </main>
 
     <footer class="border-t-2 border-ink/10 py-6">
       <p class="mx-auto max-w-6xl px-4 font-pixel text-xs text-ink/70">

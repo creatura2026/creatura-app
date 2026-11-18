@@ -6,6 +6,7 @@ import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import EmptyState from '@creatura/shared/ui/EmptyState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
+import { useTabs } from '@creatura/shared/tabs'
 
 import TradeCard from '@/components/TradeCard.vue'
 import GiftCard from '@/components/GiftCard.vue'
@@ -31,6 +32,7 @@ const STATUSES: { value: TradeStatus | ''; label: string }[] = [
 
 const tab = ref<Tab>('open')
 const historyStatus = ref<TradeStatus | ''>('')
+const tabs = useTabs(tab, () => TABS.map((t) => t.value))
 
 const query = computed<ListMyTradesQuery>(() =>
   tab.value === 'history'
@@ -80,66 +82,68 @@ const EMPTY: Record<Tab, { title: string; text: string }> = {
     </PageHeader>
 
     <div
-      role="tablist"
+      v-bind="tabs.listProps"
       aria-label="Échanges"
       class="mb-5 grid grid-cols-3 border-2 border-ink bg-white sm:inline-grid"
     >
       <button
         v-for="t in TABS"
         :key="t.value"
-        type="button"
-        role="tab"
+        v-bind="tabs.tabProps(t.value)"
         class="min-h-11 cursor-pointer px-4 font-semibold not-last:border-r-2 not-last:border-ink sm:px-6"
         :class="tab === t.value ? 'bg-ink text-cream' : 'hover:bg-mist'"
-        :aria-selected="tab === t.value"
         @click="tab = t.value"
       >
         {{ t.label }}
       </button>
     </div>
 
-    <AsyncState
-      v-if="tab === 'gifts'"
-      :loading="giftsQuery.isPending.value"
-      :error="giftsQuery.error.value"
-      @retry="giftsQuery.refetch()"
-    >
-      <ul v-if="gifts.length" class="grid gap-5 lg:grid-cols-2">
-        <li v-for="g in gifts" :key="g.id">
-          <GiftCard :gift="g" :me-id="meId" />
-        </li>
-      </ul>
-      <EmptyState
-        v-else
-        title="Aucun don"
-        text="Offrez une carte depuis « Ouvrir un échange » → Par carte, ou attendez qu’un joueur vous en offre une."
+    <div v-bind="tabs.panelProps()">
+      <AsyncState
+        v-if="tab === 'gifts'"
+        :loading="giftsQuery.isPending.value"
+        :error="giftsQuery.error.value"
+        @retry="giftsQuery.refetch()"
       >
-        <RouterLink to="/echanges/nouveau" class="btn btn-secondary">Offrir une carte</RouterLink>
-      </EmptyState>
-    </AsyncState>
+        <ul v-if="gifts.length" class="grid gap-5 lg:grid-cols-2">
+          <li v-for="g in gifts" :key="g.id">
+            <GiftCard :gift="g" :me-id="meId" />
+          </li>
+        </ul>
+        <EmptyState
+          v-else
+          title="Aucun don"
+          text="Offrez une carte depuis « Ouvrir un échange » → Par carte, ou attendez qu’un joueur vous en offre une."
+        >
+          <RouterLink to="/echanges/nouveau" class="btn btn-secondary">Offrir une carte</RouterLink>
+        </EmptyState>
+      </AsyncState>
 
-    <div v-if="tab === 'history'" class="mb-5 flex flex-wrap gap-2">
-      <button
-        v-for="s in STATUSES"
-        :key="s.value"
-        type="button"
-        class="chip"
-        :aria-pressed="historyStatus === s.value"
-        @click="historyStatus = s.value"
-      >
-        {{ s.label }}
-      </button>
+      <div v-if="tab === 'history'" class="mb-5 flex flex-wrap gap-2">
+        <button
+          v-for="s in STATUSES"
+          :key="s.value"
+          type="button"
+          class="chip"
+          :aria-pressed="historyStatus === s.value"
+          @click="historyStatus = s.value"
+        >
+          {{ s.label }}
+        </button>
+      </div>
+
+      <AsyncState v-if="tab !== 'gifts'" :loading="isPending" :error="error" @retry="refetch()">
+        <ul v-if="trades.length" class="grid gap-5 lg:grid-cols-2">
+          <li v-for="t in trades" :key="t.id">
+            <TradeCard :trade="t" :me-id="meId" />
+          </li>
+        </ul>
+        <EmptyState v-else :title="EMPTY[tab].title" :text="EMPTY[tab].text">
+          <RouterLink to="/echanges/nouveau" class="btn btn-secondary"
+            >Ouvrir un échange</RouterLink
+          >
+        </EmptyState>
+      </AsyncState>
     </div>
-
-    <AsyncState v-if="tab !== 'gifts'" :loading="isPending" :error="error" @retry="refetch()">
-      <ul v-if="trades.length" class="grid gap-5 lg:grid-cols-2">
-        <li v-for="t in trades" :key="t.id">
-          <TradeCard :trade="t" :me-id="meId" />
-        </li>
-      </ul>
-      <EmptyState v-else :title="EMPTY[tab].title" :text="EMPTY[tab].text">
-        <RouterLink to="/echanges/nouveau" class="btn btn-secondary">Ouvrir un échange</RouterLink>
-      </EmptyState>
-    </AsyncState>
   </section>
 </template>

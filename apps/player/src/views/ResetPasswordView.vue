@@ -86,6 +86,7 @@ async function onSubmit() {
         v-model="password"
         type="password"
         label="Nouveau mot de passe"
+        reveal-label="le nouveau mot de passe"
         autocomplete="new-password"
         :hint="`${MIN_LENGTH} caractères minimum.`"
         :error="errors.password"
@@ -94,6 +95,7 @@ async function onSubmit() {
         v-model="confirm"
         type="password"
         label="Confirmer le nouveau mot de passe"
+        reveal-label="la confirmation du mot de passe"
         autocomplete="new-password"
         :error="errors.confirm"
       />

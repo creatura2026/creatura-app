@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import PixelIcon, { type IconName } from '@creatura/shared/ui/PixelIcon.vue'
+import SkipLink from '@creatura/shared/ui/SkipLink.vue'
 
 import { USE_MOCK_API } from '@/api'
 import { useMe, useOpenTrades } from '@/api/queries'
@@ -30,12 +31,7 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
 
 <template>
   <div class="flex min-h-dvh flex-col">
-    <a
-      href="#contenu"
-      class="sr-only z-50 bg-sun px-4 py-2 font-semibold focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
-    >
-      Aller au contenu
-    </a>
+    <SkipLink />
 
     <!-- En-tête : marque + navigation (bureau) + profil -->
     <header class="sticky top-0 z-30 border-b-2 border-ink bg-ink text-cream">
