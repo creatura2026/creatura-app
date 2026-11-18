@@ -1,6 +1,8 @@
 node_modules/
 test-results/
+test-results-stack/
 playwright-report/
+playwright-report-stack/
 reports/
 blob-report/
 .eslintcache

@@ -280,7 +280,7 @@ export class NewTradePage {
     await this.mode('Par carte').click()
     await this.chooseCard(card).click()
     await this.cardAction('Faire un don').click()
-    await this.giftRecipient.fill(recipient.slice(0, 3))
+    await this.giftRecipient.fill(recipient)
     await this.player(recipient).click()
     await this.giftQuantity.fill(String(quantity))
     await this.giftSubmit.click()

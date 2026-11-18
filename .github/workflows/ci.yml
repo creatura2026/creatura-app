@@ -3,7 +3,8 @@
 #
 #   1. Vérifier  : tests de la base (SQL), du back (pytest sur PostgreSQL),
 #                  du front (lint, types, tests unitaires, build),
-#                  de bout en bout (Playwright sur l'API simulée)
+#                  de bout en bout (Playwright sur l'API simulée, et hors PR
+#                  sur la stack réelle en Docker)
 #   2. Construire: une image Docker par composant
 #   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
 #   4. Windows   : l'exe de l'application (apps/desktop) en artefact, hors PR ;
@@ -279,6 +280,76 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
+  # Tests de bout en bout sur la stack réelle : base et API en Docker
+  # (e2e/compose.yaml), site et dashboard construits sans API simulée, vrai
+  # WebSocket entre deux navigateurs. Hors PR : construit les images à chaque fois.
+  # ---------------------------------------------------------------------------
+  e2e-stack:
+    name: E2E (stack réelle)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # La stack reste en place après les tests : ses journaux sont publiés en cas d'échec.
+      E2E_KEEP_STACK: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Version de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter e2e exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache des navigateurs
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+
+      - name: Installer Chromium
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      - name: Dépendances système de Chromium
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter e2e exec playwright install-deps chromium
+
+      # Démarre la stack (stack/global-setup.ts), construit les apps, lance les tests.
+      - name: Tests
+        run: pnpm --filter e2e run test:stack
+
+      - name: Journaux de la stack
+        if: failure()
+        run: |
+          mkdir -p e2e/reports
+          docker compose -f e2e/compose.yaml logs --no-color > e2e/reports/stack.log 2>&1 || true
+
+      - name: Publier le rapport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-stack-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report-stack/
+            e2e/reports/
+            e2e/test-results-stack/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # Application Windows (apps/desktop) : exe en artefact, et Release GitHub sur
   # un tag v*. Adresse du backend : variable CUSTOM_DOMAIN de l'environnement
   # production (domaine du site, devant CloudFront) ; sans elle, exe de
@@ -524,14 +595,16 @@ jobs:
   # ---------------------------------------------------------------------------
   images:
     name: Image ${{ matrix.image.name }}
-    needs: [detect, db, backend, frontend, e2e-mock]
-    # Le front peut être absent (job ignoré) ; tout le reste doit avoir réussi.
+    needs: [detect, db, backend, frontend, e2e-mock, e2e-stack]
+    # Le front peut être absent (job ignoré), l'E2E sur stack réelle ne tourne pas sur les PR ;
+    # tout le reste doit avoir réussi.
     if: >-
       ${{ !cancelled()
       && needs.db.result == 'success'
       && needs.backend.result == 'success'
       && contains(fromJSON('["success", "skipped"]'), needs.frontend.result)
-      && contains(fromJSON('["success", "skipped"]'), needs['e2e-mock'].result) }}
+      && contains(fromJSON('["success", "skipped"]'), needs['e2e-mock'].result)
+      && contains(fromJSON('["success", "skipped"]'), needs['e2e-stack'].result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
