@@ -151,7 +151,7 @@ const LOOP = [
     </section>
 
     <footer class="border-t-2 border-ink/10 py-6">
-      <p class="mx-auto max-w-6xl px-4 font-pixel text-xs text-ink/70">
+      <p class="mx-auto max-w-6xl px-4 font-pixel text-xs text-ink/80">
         CREATURA — Projet d’intégration DLTQ 2026
       </p>
     </footer>

@@ -58,8 +58,11 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
-        # Le navigateur ne devine pas le type des réponses : relevé par le scan OWASP ZAP de nuit.
+        # En-têtes relevés par le scan OWASP ZAP de nuit. Le navigateur ne devine pas le type des
+        # réponses, et aucune autre origine ne peut les charger comme ressource (<img>, <script>).
+        # Les appels CORS (fetch du site, de l'exe, de l'APK) et le WebSocket n'y sont pas soumis.
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         return response
 
     @app.exception_handler(DomainError)

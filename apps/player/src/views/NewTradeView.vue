@@ -204,9 +204,9 @@ watch(mode, (m) => {
                   type="button"
                   class="block h-full w-full cursor-pointer text-left transition-transform enabled:hover:-translate-y-1"
                   :disabled="opening"
-                  :aria-label="`Échanger avec ${player.pseudo} pour obtenir ${c.creature.name}`"
                   @click="openWith(player.id, c.creature.id)"
                 >
+                  <span class="sr-only">Échanger avec {{ player.pseudo }} pour obtenir </span>
                   <CreatureCard :creature="c.creature" :quantity="c.availableQuantity" />
                 </button>
                 <span
@@ -271,8 +271,13 @@ watch(mode, (m) => {
           </div>
 
           <template v-if="cardAction === 'trade'">
-            <h2 class="mb-3 text-2xl font-bold">Qui possède {{ wanted?.name ?? 'cette carte' }} ?</h2>
-            <CreatureOwners :creature-id="wantedId" :creature-name="wanted?.name ?? 'cette carte'" />
+            <h2 class="mb-3 text-2xl font-bold">
+              Qui possède {{ wanted?.name ?? 'cette carte' }} ?
+            </h2>
+            <CreatureOwners
+              :creature-id="wantedId"
+              :creature-name="wanted?.name ?? 'cette carte'"
+            />
           </template>
           <template v-else>
             <h2 class="mb-3 text-2xl font-bold">Offrir {{ wanted?.name ?? 'cette carte' }}</h2>
@@ -308,9 +313,9 @@ watch(mode, (m) => {
                 <button
                   type="button"
                   class="block h-full w-full cursor-pointer text-left transition-transform hover:-translate-y-1"
-                  :aria-label="`Trouver les joueurs qui possèdent ${c.name}`"
                   @click="chooseCard(c.id)"
                 >
+                  <span class="sr-only">Trouver les joueurs qui possèdent </span>
                   <CreatureCard
                     :creature="c"
                     :missing="!owned.get(c.id)"

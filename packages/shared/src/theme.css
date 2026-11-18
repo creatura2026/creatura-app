@@ -37,8 +37,8 @@
   --color-salmon: #f8c0b2; /* Échanger, Proposer, refus */
   --color-sky: #d2e2f5; /* Repérer, information */
   --color-sun: #f6cb67; /* badge de partie, accent */
-  --color-blue: #4776bc; /* sur-titres, barres d'en-tête, graphiques */
-  --color-blue-dark: #375f9b;
+  --color-blue: #3f6aab; /* sur-titres, barres d'en-tête, graphiques (contraste ≥ 4,5:1 sur crème et blanc) */
+  --color-blue-dark: #33578e;
   --color-brick: #b14635; /* flèches, erreurs */
   --color-leaf: #83cba4; /* progression */
   --color-mist: #e7edf2; /* colonnes, fonds neutres */
@@ -175,7 +175,7 @@
     @apply mb-1 block text-sm font-semibold;
   }
   .field-input {
-    @apply block min-h-11 w-full border-2 border-ink bg-white px-3 py-2 text-base text-ink placeholder:text-ink/50;
+    @apply block min-h-11 w-full border-2 border-ink bg-white px-3 py-2 text-base text-ink placeholder:text-ink/70;
   }
   .field-input[aria-invalid='true'] {
     @apply border-brick bg-salmon/20;

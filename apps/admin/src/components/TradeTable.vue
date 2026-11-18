@@ -34,7 +34,8 @@ const items = (list: TradeItem[]) =>
           </td>
           <td class="py-2.5 pr-3">
             <span class="font-semibold">{{ t.proposer.pseudo }}</span>
-            <span class="px-1 text-brick" aria-label="avec">↔</span>
+            <span class="px-1 text-brick" aria-hidden="true">↔</span
+            ><span class="sr-only">avec</span>
             <span class="font-semibold">{{ t.recipient.pseudo }}</span>
           </td>
           <td class="py-2.5 pr-3">{{ items(t.offered) }}</td>
@@ -51,11 +52,12 @@ const items = (list: TradeItem[]) =>
           <TradeStatusBadge :status="t.status" />
         </div>
         <p class="mt-1.5 font-semibold">
-          {{ t.proposer.pseudo }} <span class="text-brick" aria-label="avec">↔</span>
+          {{ t.proposer.pseudo }} <span class="text-brick" aria-hidden="true">↔</span
+          ><span class="sr-only">avec</span>
           {{ t.recipient.pseudo }}
         </p>
-        <p class="mt-1"><span class="text-ink/70">Proposé :</span> {{ items(t.offered) }}</p>
-        <p><span class="text-ink/70">Demandé :</span> {{ items(t.requested) }}</p>
+        <p class="mt-1"><span class="text-ink/80">Proposé :</span> {{ items(t.offered) }}</p>
+        <p><span class="text-ink/80">Demandé :</span> {{ items(t.requested) }}</p>
       </li>
     </ul>
   </div>

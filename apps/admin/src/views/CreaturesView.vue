@@ -345,7 +345,7 @@ watch(editing, (id) => {
                 <span v-if="spriteKey" class="block truncate text-xs">
                   Clé sur le CDN : <code>sprites/{{ spriteKey }}.png</code>
                 </span>
-                <span v-else class="block text-xs text-ink/70">La clé suit le nom de la carte.</span>
+                <span v-else class="block text-xs text-ink/80">La clé suit le nom de la carte.</span>
               </span>
               <input
                 ref="newFileInput"

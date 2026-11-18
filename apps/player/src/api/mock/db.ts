@@ -240,6 +240,12 @@ function seed(): MockDb {
 }
 
 let cache: MockDb | null = null
+/**
+ * Données telles que cet onglet les a lues ou écrites. Un autre onglet du même navigateur qui écrit
+ * dans le stockage les change : on relit alors la base, sinon cet onglet travaillerait sur une copie
+ * périmée (un second booster le même jour, des écritures de l'autre onglet écrasées).
+ */
+let cacheRaw: string | null = null
 
 function storage(): Storage | null {
   try {
@@ -256,14 +262,16 @@ function keepDemoSessions(db: MockDb, sessions: Record<string, string>): void {
 }
 
 export function loadDb(): MockDb {
-  if (cache) return cache
-  const raw = storage()?.getItem(STORAGE_KEY)
+  const raw = storage()?.getItem(STORAGE_KEY) ?? null
+  // Stockage indisponible ou vidé : on garde les données en mémoire.
+  if (cache && (raw === null || raw === cacheRaw)) return cache
   let sessions: Record<string, string> = {}
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as MockDb
       if (parsed.version === VERSION) {
         cache = parsed
+        cacheRaw = raw
         return cache
       }
       // Ancienne forme des données : on repart de zéro, sans déconnecter le joueur.
@@ -280,8 +288,9 @@ export function loadDb(): MockDb {
 
 export function saveDb(): void {
   if (!cache) return
+  cacheRaw = JSON.stringify(cache)
   try {
-    storage()?.setItem(STORAGE_KEY, JSON.stringify(cache))
+    storage()?.setItem(STORAGE_KEY, cacheRaw)
   } catch {
     // Stockage indisponible (navigation privée) : les données restent en mémoire.
   }
@@ -317,4 +326,5 @@ export function addCards(userId: string, creatureId: string, delta: number): voi
 /** Pour les tests : oublie le cache mémoire. */
 export function clearDbCache(): void {
   cache = null
+  cacheRaw = null
 }

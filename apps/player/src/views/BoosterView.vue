@@ -85,8 +85,10 @@ const cardArea = ref<HTMLDivElement | null>(null)
 const table = useCardTable(cardArea, total)
 // Booster disponible : sachet à déchirer. Déjà ouvert sans son contenu (le serveur ne le
 // conserve pas) : simple rappel, les cartes sont dans la collection.
+// Pendant l'ouverture, le sachet reste affiché : les données du jour sont rechargées avant que la
+// réponse arrive ici, et montreraient un instant le booster déjà ouvert au lieu de la pile.
 const showTear = computed(
-  () => animating.value || (!booster.value && today.value?.available !== false),
+  () => animating.value || claiming.value || (!booster.value && today.value?.available !== false),
 )
 const allRevealed = computed(() => !opened.value || flipped.value >= total.value)
 /**

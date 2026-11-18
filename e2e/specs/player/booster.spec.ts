@@ -23,6 +23,37 @@ test.describe('booster du jour (P-04)', () => {
     },
   )
 
+  test('l’ouverture passe du sachet à la pile sans montrer le booster déjà ouvert', async ({
+    page,
+    signIn,
+    boosterPage,
+  }) => {
+    await signIn('dresseur')
+    await boosterPage.goto()
+    await expect(boosterPage.rates).toHaveCount(4)
+    await expect(boosterPage.toCollection).toBeHidden()
+
+    // Note, dans l'ordre, ce que l'écran affiche entre le clic et la pile à révéler.
+    await page.evaluate(() => {
+      const body = document.body
+      body.dataset.seen = ''
+      new MutationObserver(() => {
+        const text = document.querySelector('main')?.textContent ?? ''
+        const seen = body.dataset.seen ? body.dataset.seen.split(',') : []
+        for (const [label, mark] of [
+          ['Voir ma collection', 'collection'],
+          ['Tout révéler', 'pile'],
+        ] as const) {
+          if (text.includes(label) && !seen.includes(mark)) seen.push(mark)
+        }
+        body.dataset.seen = seen.join(',')
+      }).observe(body, { childList: true, subtree: true, characterData: true })
+    })
+    await boosterPage.open()
+
+    await expect(page.locator('body')).toHaveAttribute('data-seen', 'pile')
+  })
+
   test('un second booster est refusé le même jour', async ({ page, signIn, homePage, boosterPage }) => {
     await signIn('dresseur')
     await boosterPage.goto()

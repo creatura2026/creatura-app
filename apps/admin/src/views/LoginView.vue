@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { toTypedSchema } from '@creatura/shared/forms'
 import { useRoute, useRouter } from 'vue-router'
 import { errorMessage } from '@creatura/shared/api/types'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
@@ -16,11 +16,11 @@ import { useAuthStore } from '@/stores/auth'
 const schema = toTypedSchema(
   z.object({
     login: z
-      .string({ required_error: 'Saisissez votre identifiant.' })
+      .string({ error: 'Saisissez votre identifiant.' })
       .trim()
       .min(1, 'Saisissez votre identifiant.'),
     password: z
-      .string({ required_error: 'Saisissez votre mot de passe.' })
+      .string({ error: 'Saisissez votre mot de passe.' })
       .min(1, 'Saisissez votre mot de passe.'),
   }),
 )

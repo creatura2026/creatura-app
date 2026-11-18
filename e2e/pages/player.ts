@@ -89,25 +89,24 @@ export class BoosterPage {
     await this.page.goto('/booster')
   }
 
-  /**
-   * Ouvre le booster du jour et révèle toutes ses cartes.
-   *
-   * Pendant l'ouverture, l'écran montre un instant « Voir ma collection » (les données du jour,
-   * rechargées, contiennent déjà le booster), puis la pile à révéler. Seul « Tout révéler » signale
-   * que l'ouverture est terminée.
-   */
-  async openAndReveal() {
+  /** Ouvre le booster du jour (« Ouvrir sans déchirer ») : la pile est prête à révéler. */
+  async open() {
     // La mise en page bouge au chargement (probabilités, hauteur du cadre) : on attend qu'elle soit
     // en place, sinon le clic peut tomber à côté du bouton.
     await expect(this.rates).toHaveCount(4)
     await expect(async () => {
       // Pendant une ouverture le bouton est désactivé : on ne reclique que si le clic précédent
-      // n'a rien lancé (deux ouvertures simultanées ouvriraient deux boosters dans l'API simulée).
+      // n'a rien lancé (un second clic serait refusé : booster déjà ouvert).
       if ((await this.openButton.isVisible()) && (await this.openButton.isEnabled())) {
         await this.openButton.click({ timeout: 2_000 })
       }
       await expect(this.revealAll).toBeVisible({ timeout: 5_000 })
     }).toPass({ timeout: 20_000 })
+  }
+
+  /** Ouvre le booster du jour et révèle toutes ses cartes. */
+  async openAndReveal() {
+    await this.open()
     await this.revealAll.click()
     await expect(this.toCollection).toBeVisible()
   }

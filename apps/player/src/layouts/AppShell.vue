@@ -40,8 +40,8 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
     <!-- En-tête : marque + navigation (bureau) + profil -->
     <header class="sticky top-0 z-30 border-b-2 border-ink bg-ink text-cream">
       <div class="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:h-16">
-        <RouterLink to="/accueil" class="shrink-0" aria-label="Créatura, accueil">
-          <BrandMark tone="light" />
+        <RouterLink to="/accueil" class="shrink-0">
+          <BrandMark tone="light" /><span class="sr-only">, accueil</span>
         </RouterLink>
 
         <nav
@@ -60,9 +60,12 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
             <span
               v-if="item.to === '/echanges' && pendingCount"
               class="ml-0.5 min-w-5 border-2 border-ink bg-sun px-1 text-center text-xs leading-4 font-bold text-ink"
-              :aria-label="`${pendingCount} échange(s) à votre tour`"
+              aria-hidden="true"
             >
               {{ pendingCount }}
+            </span>
+            <span v-if="item.to === '/echanges' && pendingCount" class="sr-only">
+              , {{ pendingCount }} échange(s) à votre tour
             </span>
           </RouterLink>
         </nav>
@@ -71,10 +74,10 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
           to="/profil"
           class="ml-auto flex min-h-10 items-center gap-2 border-2 border-cream/40 px-2.5 text-sm font-semibold hover:border-cream sm:px-3"
           active-class="!border-cream bg-cream/10"
-          aria-label="Mon profil"
         >
           <PixelIcon name="user" :size="18" />
           <span class="max-w-28 truncate sm:max-w-40">{{ pseudo }}</span>
+          <span class="sr-only">, mon profil</span>
         </RouterLink>
       </div>
     </header>
@@ -94,7 +97,7 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
     </main>
 
     <footer class="hidden border-t-2 border-ink/10 py-5 md:block">
-      <p class="mx-auto max-w-6xl px-4 font-pixel text-xs text-ink/70">
+      <p class="mx-auto max-w-6xl px-4 font-pixel text-xs text-ink/80">
         CREATURA — Projet d’intégration DLTQ 2026<template v-if="USE_MOCK_API">
           · Données fictives (API simulée)</template
         >
@@ -119,9 +122,12 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
             <span
               v-if="item.to === '/echanges' && pendingCount"
               class="absolute top-1.5 right-[calc(50%-1.4rem)] min-w-5 border-2 border-ink bg-sun px-1 text-center text-[0.65rem] leading-4 font-bold text-ink"
-              :aria-label="`${pendingCount} échange(s) à votre tour`"
+              aria-hidden="true"
             >
               {{ pendingCount }}
+            </span>
+            <span v-if="item.to === '/echanges' && pendingCount" class="sr-only">
+              , {{ pendingCount }} échange(s) à votre tour
             </span>
           </RouterLink>
         </li>

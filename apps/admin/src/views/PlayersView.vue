@@ -212,7 +212,7 @@ const history = useDeletionRequests(computed(() => ({ page: historyPage.value, p
                   >
                     {{ p.pseudo }}
                   </RouterLink>
-                  <span class="block text-xs text-ink/70">{{ p.login }}</span>
+                  <span class="block text-xs text-ink/80">{{ p.login }}</span>
                 </td>
                 <td class="py-2.5 pr-3 whitespace-nowrap tabular-nums">
                   {{ formatDateTime(p.createdAt) }}

@@ -54,7 +54,7 @@ const describedBy = computed(
         {{ reveal ? 'Masquer' : 'Afficher' }}
       </button>
     </div>
-    <p v-if="hint && !error" :id="`${id}-hint`" class="mt-1 text-sm text-ink/75">{{ hint }}</p>
+    <p v-if="hint && !error" :id="`${id}-hint`" class="mt-1 text-sm text-ink/80">{{ hint }}</p>
     <p v-if="error" :id="`${id}-error`" class="field-error">{{ error }}</p>
   </div>
 </template>

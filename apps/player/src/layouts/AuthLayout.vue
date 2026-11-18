@@ -15,7 +15,9 @@ const art = CREATURES.find((c) => c.name === (props.creature ?? 'Moussou'))!
   <div class="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
     <!-- Colonne illustrée (grand écran) -->
     <aside class="relative hidden flex-col justify-between bg-ink p-10 text-cream lg:flex">
-      <RouterLink to="/" aria-label="Retour à l’accueil"><BrandMark tone="light" /></RouterLink>
+      <RouterLink to="/">
+        <BrandMark tone="light" /><span class="sr-only">, retour à l’accueil</span>
+      </RouterLink>
       <img
         :src="art.imageUrl"
         alt=""
@@ -28,8 +30,8 @@ const art = CREATURES.find((c) => c.name === (props.creature ?? 'Moussou'))!
     </aside>
 
     <div class="flex flex-col px-4 py-5 sm:px-8">
-      <RouterLink to="/" class="self-start lg:hidden" aria-label="Retour à l’accueil">
-        <BrandMark />
+      <RouterLink to="/" class="self-start lg:hidden">
+        <BrandMark /><span class="sr-only">, retour à l’accueil</span>
       </RouterLink>
       <div class="mx-auto my-auto w-full max-w-md py-8">
         <p class="eyebrow">{{ eyebrow }}</p>

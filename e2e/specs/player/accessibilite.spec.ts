@@ -48,3 +48,47 @@ test('page accessible : fiche d’une créature', async ({ page, signIn, catalog
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Moussou')
   await checkA11y()
 })
+
+test('page accessible : booster, pile à révéler puis cartes révélées', async ({
+  signIn,
+  boosterPage,
+  checkA11y,
+}) => {
+  await signIn('dresseur')
+  await boosterPage.goto()
+  await boosterPage.open()
+  await checkA11y()
+
+  await boosterPage.revealAll.click()
+  await expect(boosterPage.toCollection).toBeVisible()
+  await checkA11y()
+})
+
+test('page accessible : salle d’échange avec des cartes sur le tapis', async ({
+  page,
+  signIn,
+  tradesPage,
+  tradeRoomPage,
+  checkA11y,
+}) => {
+  await signIn('dresseur')
+  await tradesPage.goto()
+  await tradesPage.trade('Noe').click()
+  await tradeRoomPage.put('Moussou')
+  await tradeRoomPage.put('Moussou')
+  await expect(tradeRoomPage.myMat.getByText('2 exemplaires')).toBeAttached()
+  await expect(page.getByRole('status', { name: /Chargement/ })).toHaveCount(0)
+  await checkA11y()
+})
+
+test('page accessible : nouvel échange par carte', async ({ page, signIn, newTradePage, checkA11y }) => {
+  await signIn('dresseur')
+  await newTradePage.goto()
+  await newTradePage.mode('Par carte').click()
+  await expect(newTradePage.chooseCard('Brumel')).toBeVisible()
+  await checkA11y()
+
+  await newTradePage.chooseCard('Brumel').click()
+  await expect(page.getByRole('button', { name: /^Échanger avec .+ pour obtenir Brumel/ }).first()).toBeVisible()
+  await checkA11y()
+})

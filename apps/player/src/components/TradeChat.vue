@@ -76,7 +76,7 @@ watch(
       aria-live="polite"
       aria-relevant="additions"
     >
-      <li v-if="!messages.length" class="m-auto max-w-56 text-center text-sm text-ink/70">
+      <li v-if="!messages.length" class="m-auto max-w-56 text-center text-sm text-ink/80">
         Écrivez à {{ partner }} pour vous mettre d’accord.
       </li>
       <li
@@ -92,7 +92,7 @@ watch(
           <span class="sr-only">{{ m.author.id === meId ? 'Vous' : m.author.pseudo }} : </span>
           {{ m.text }}
         </span>
-        <time class="mt-0.5 text-[0.7rem] text-ink/60" :datetime="m.sentAt">
+        <time class="mt-0.5 text-[0.7rem] text-ink/80" :datetime="m.sentAt">
           {{ timeFmt.format(new Date(m.sentAt)) }}
         </time>
       </li>
