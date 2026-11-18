@@ -13,18 +13,28 @@ import imgAdminList from '@/assets/guide-images/admin_list.png'
 import imgBooster from '@/assets/guide-images/modif_booster.png'
 
 import { api } from '@/api'
-import { useRoute } from 'vue-router'
 
 // Valide la session au chargement : un token expiré → 401 → refresh échoue → UNAUTHENTICATED
 // → le gestionnaire global (main.ts queryCache.onError) efface la session et redirige vers login.
 useQuery({ queryKey: ['me'], queryFn: () => api.getMe() })
 
-const route = useRoute()
-const anchor = (id: string) => ({ hash: '#' + id, query: route.query })
+// Défilement direct vers une section : fiable dans les deux modes d'historique (web et hash desktop),
+// contrairement à une navigation par ancre qui dépend du scrollBehavior du router.
+const reduced =
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+function scrollToId(id: string) {
+  document
+    .getElementById(id)
+    ?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
+}
 </script>
 
 <template>
   <div class="guide">
+    <RouterLink :to="{ name: 'dashboard' }" class="btn btn-secondary mb-4">
+      &larr; Retour au tableau de bord
+    </RouterLink>
+
     <div class="tip salmon">
       <span class="tip-icon">&#x1f512;</span>
       <p>Ce guide est réservé aux administrateurs. L'interface d'administration est accessible sur
@@ -34,16 +44,16 @@ const anchor = (id: string) => ({ hash: '#' + id, query: route.query })
     <nav class="toc" aria-label="Sommaire" style="margin-top:1.5rem">
       <h2>Sommaire</h2>
       <ol>
-        <li><RouterLink :to="anchor('connexion')">1. Connexion et accès</RouterLink></li>
-        <li><RouterLink :to="anchor('tableau-de-bord')">2. Tableau de bord et statistiques</RouterLink></li>
-        <li><RouterLink :to="anchor('cartes')">3. Gestion des cartes (créatures)</RouterLink></li>
-        <li><RouterLink :to="anchor('sprite')">4. Ajouter ou modifier le sprite d'une carte</RouterLink></li>
-        <li><RouterLink :to="anchor('rarete')">5. Programmer un changement de rareté</RouterLink></li>
-        <li><RouterLink :to="anchor('joueurs')">6. Gestion des joueurs</RouterLink></li>
-        <li><RouterLink :to="anchor('suppressions')">7. Demandes de suppression de compte</RouterLink></li>
-        <li><RouterLink :to="anchor('administrateurs')">8. Comptes administrateurs</RouterLink></li>
-        <li><RouterLink :to="anchor('reglages')">9. Réglages du booster</RouterLink></li>
-        <li><RouterLink :to="anchor('compte')">10. Mon compte administrateur</RouterLink></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('connexion')">1. Connexion et accès</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('tableau-de-bord')">2. Tableau de bord et statistiques</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('cartes')">3. Gestion des cartes (créatures)</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('sprite')">4. Ajouter ou modifier le sprite d'une carte</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('rarete')">5. Programmer un changement de rareté</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('joueurs')">6. Gestion des joueurs</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('suppressions')">7. Demandes de suppression de compte</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('administrateurs')">8. Comptes administrateurs</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('reglages')">9. Réglages du booster</button></li>
+        <li><button type="button" class="toc-link" @click="scrollToId('compte')">10. Mon compte administrateur</button></li>
       </ol>
     </nav>
 
@@ -285,9 +295,31 @@ const anchor = (id: string) => ({ hash: '#' + id, query: route.query })
         <p>Déconnectez-vous toujours lorsque vous quittez un poste partagé.</p>
       </div>
     </section>
+
+    <RouterLink :to="{ name: 'dashboard' }" class="btn btn-secondary mt-6">
+      &larr; Retour au tableau de bord
+    </RouterLink>
   </div>
 </template>
 
 <style>
-.guide { --guide-accent: var(--color-salmon, #fecaca); }
+.guide {
+  --guide-accent: var(--color-salmon, #fecaca);
+}
+/* Entrées du sommaire : boutons rendus comme les anciens liens (défilement direct). */
+.guide .toc-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-ink, #1a1a2e);
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.guide .toc-link:hover {
+  text-decoration-thickness: 2px;
+}
 </style>
