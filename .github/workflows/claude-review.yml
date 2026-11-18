@@ -65,8 +65,25 @@ jobs:
             `backend` en FastAPI, `db/init` en SQL). La branche de la PR est déjà
             récupérée dans le répertoire courant.
 
-            Relis le diff de la PR et rédige une revue EN FRANÇAIS, concise et utile.
-            Concentre-toi sur :
+            ÉTAPE 1 — Besoin de base (obligatoire). Lis la description de la PR avec
+            `gh pr view ${{ github.event.pull_request.number }} --json title,body`.
+            Vérifie qu'elle décrit le BESOIN DE BASE : le problème fonctionnel ou le
+            besoin métier auquel la PR répond (le « pourquoi »), pas seulement la liste
+            des changements techniques. Si ce besoin est absent, vague ou illisible, la
+            PR NE PEUT PAS être validée : rends le verdict « ❌ À corriger », explique
+            ce qui manque et demande de compléter la description avant toute fusion.
+            N'infère pas le besoin à partir du code pour contourner cette exigence.
+
+            ÉTAPE 2 — Adéquation besoin ↔ modifications. Analyse le besoin identifié,
+            puis corrèle-le avec les changements réellement apportés dans le diff pour
+            déterminer s'ils RÉSOLVENT ce besoin. Dis clairement s'il est résolu
+            entièrement, partiellement (précise ce qui manque), ou pas du tout, et
+            signale les écarts : besoin non couvert, ou changements hors-sujet qui ne
+            servent pas le besoin annoncé (scope creep). Appuie chaque constat sur des
+            fichiers/lignes précis du diff.
+
+            ÉTAPE 3 — Revue du code. Relis le diff et rédige une revue EN FRANÇAIS,
+            concise et utile. Concentre-toi sur :
               - les bugs et cas limites (logique, états d'erreur, concurrence) ;
               - la sécurité (authz/authn, injection, fuite de données, secrets) ;
               - la cohérence contrat-first : `creatura-api.openapi.yaml` ↔
@@ -76,10 +93,23 @@ jobs:
                 lancement) et l'invariante de stock des légendaires ;
               - la performance et la lisibilité, sans réécrire le style.
             Signale ce qui est bloquant en priorité ; ne te disperse pas sur les
-            détails cosmétiques. Si la PR est saine, dis-le clairement.
+            détails cosmétiques.
 
             Publie uniquement sur GitHub (ne rends pas la revue sous forme de message) :
-              - `gh pr comment` pour la synthèse générale ;
+              - `gh pr comment` pour la synthèse générale. Commence-la EXACTEMENT par
+                ces trois lignes :
+                  Verdict : <✅ Validable | ⚠️ À améliorer | ❌ À corriger>
+                  Score de qualité : <0-100>/100
+                  Besoin de base décrit : <Oui | Non>
+                  Besoin résolu par les modifs : <Oui | Partiellement | Non>
+                Puis une courte justification du score (critères : clarté du besoin,
+                résolution du besoin par les modifs, correction, sécurité, cohérence du
+                contrat, tests, lisibilité) et la liste des points bloquants puis des
+                suggestions. Le verdict est « ❌ À corriger » dès que le besoin de base
+                manque, qu'il n'est pas résolu par les modifications, ou qu'un point
+                bloquant existe ; « ⚠️ À améliorer » si le besoin n'est que partiellement
+                résolu. Le score reflète l'ensemble (un besoin non décrit ou non résolu
+                le plafonne à 50).
               - `mcp__github_inline_comment__create_inline_comment` (avec
                 `confirmed: true`) pour chaque remarque liée à des lignes précises.
           claude_args: |
