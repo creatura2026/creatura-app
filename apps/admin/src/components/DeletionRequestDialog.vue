@@ -49,6 +49,7 @@ async function submit() {
 </script>
 
 <template>
+  <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- Échap ferme la boîte de dialogue, où que soit le focus -->
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
     @keydown.escape="emit('close')"

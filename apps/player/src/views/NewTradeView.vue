@@ -15,6 +15,7 @@ import EmptyState from '@creatura/shared/ui/EmptyState.vue'
 import CreatureCard from '@creatura/shared/ui/CreatureCard.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
 import { useDebounced } from '@creatura/shared/composables'
+import { useTabs } from '@creatura/shared/tabs'
 
 import CreatureFilters from '@/components/CreatureFilters.vue'
 import CreatureOwners from '@/components/CreatureOwners.vue'
@@ -33,6 +34,7 @@ const MODES: { value: Mode; label: string }[] = [
   { value: 'player', label: 'Par joueur' },
   { value: 'card', label: 'Par carte' },
 ]
+const modeTabs = useTabs(mode, () => MODES.map((m) => m.value))
 
 // ── Par joueur : ses cartes, toutes échangeables ─────────────────────────────
 const search = ref('')
@@ -82,6 +84,11 @@ const wanted = computed<CreatureSummary | null>(
 
 type CardAction = 'trade' | 'gift'
 const cardAction = ref<CardAction>('trade')
+const CARD_ACTIONS: { value: CardAction; label: string }[] = [
+  { value: 'trade', label: 'Échanger' },
+  { value: 'gift', label: 'Faire un don' },
+]
+const actionTabs = useTabs(cardAction, () => CARD_ACTIONS.map((a) => a.value))
 const ownedOfWanted = computed(() => (wantedId.value ? (owned.value.get(wantedId.value) ?? 0) : 0))
 
 function chooseCard(id: string | null) {
@@ -104,18 +111,16 @@ watch(mode, (m) => {
     <PageHeader title="Ouvrir un échange" />
 
     <div
-      role="tablist"
+      v-bind="modeTabs.listProps"
       aria-label="Chercher un échange"
       class="mb-5 grid grid-cols-2 border-2 border-ink bg-white sm:inline-grid"
     >
       <button
         v-for="m in MODES"
         :key="m.value"
-        type="button"
-        role="tab"
+        v-bind="modeTabs.tabProps(m.value)"
         class="min-h-11 cursor-pointer px-4 font-semibold not-last:border-r-2 not-last:border-ink sm:px-6"
         :class="mode === m.value ? 'bg-ink text-cream' : 'hover:bg-mist'"
-        :aria-selected="mode === m.value"
         @click="mode = m.value"
       >
         {{ m.label }}
@@ -123,7 +128,11 @@ watch(mode, (m) => {
     </div>
 
     <!-- Par joueur -->
-    <div v-if="mode === 'player'" class="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
+    <div
+      v-if="mode === 'player'"
+      v-bind="modeTabs.panelProps()"
+      class="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]"
+    >
       <div class="card-pixel self-start bg-sky p-5">
         <label for="player-search" class="field-label">Pseudonyme du joueur</label>
         <div class="relative">
@@ -228,7 +237,7 @@ watch(mode, (m) => {
     </div>
 
     <!-- Par carte -->
-    <div v-else>
+    <div v-else v-bind="modeTabs.panelProps()">
       <div v-if="wantedId" class="grid gap-5 md:grid-cols-[12rem_minmax(0,1fr)]">
         <div class="mx-auto w-44 self-start">
           <CreatureCard v-if="wanted" :creature="wanted" />
@@ -244,49 +253,46 @@ watch(mode, (m) => {
 
           <!-- Échange normal pour obtenir la carte, ou don si on la possède. -->
           <div
-            role="tablist"
+            v-bind="actionTabs.listProps"
             aria-label="Que faire avec cette carte ?"
             class="mb-4 grid grid-cols-2 border-2 border-ink bg-white sm:inline-grid"
           >
             <button
-              type="button"
-              role="tab"
+              v-for="a in CARD_ACTIONS"
+              :key="a.value"
+              v-bind="actionTabs.tabProps(a.value)"
               class="min-h-11 cursor-pointer px-4 font-semibold not-last:border-r-2 not-last:border-ink sm:px-6"
-              :class="cardAction === 'trade' ? 'bg-ink text-cream' : 'hover:bg-mist'"
-              :aria-selected="cardAction === 'trade'"
-              @click="cardAction = 'trade'"
+              :class="cardAction === a.value ? 'bg-ink text-cream' : 'hover:bg-mist'"
+              @click="cardAction = a.value"
             >
-              Échanger
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="min-h-11 cursor-pointer px-4 font-semibold not-last:border-r-2 not-last:border-ink sm:px-6"
-              :class="cardAction === 'gift' ? 'bg-ink text-cream' : 'hover:bg-mist'"
-              :aria-selected="cardAction === 'gift'"
-              @click="cardAction = 'gift'"
-            >
-              Faire un don
+              {{ a.label }}
             </button>
           </div>
 
-          <template v-if="cardAction === 'trade'">
-            <h2 class="mb-3 text-2xl font-bold">Qui possède {{ wanted?.name ?? 'cette carte' }} ?</h2>
-            <CreatureOwners :creature-id="wantedId" :creature-name="wanted?.name ?? 'cette carte'" />
-          </template>
-          <template v-else>
-            <h2 class="mb-3 text-2xl font-bold">Offrir {{ wanted?.name ?? 'cette carte' }}</h2>
-            <GiftCreatureForm
-              v-if="ownedOfWanted > 0"
-              :creature-id="wantedId"
-              :creature-name="wanted?.name ?? 'cette carte'"
-              :owned="ownedOfWanted"
-            />
-            <p v-else class="border-2 border-dashed border-ink/40 px-3 py-4 text-sm">
-              Vous ne possédez pas {{ wanted?.name ?? 'cette carte' }} : vous ne pouvez l’offrir
-              qu’une fois obtenue (ouvrez un échange ou un booster).
-            </p>
-          </template>
+          <div v-bind="actionTabs.panelProps()">
+            <template v-if="cardAction === 'trade'">
+              <h2 class="mb-3 text-2xl font-bold">
+                Qui possède {{ wanted?.name ?? 'cette carte' }} ?
+              </h2>
+              <CreatureOwners
+                :creature-id="wantedId"
+                :creature-name="wanted?.name ?? 'cette carte'"
+              />
+            </template>
+            <template v-else>
+              <h2 class="mb-3 text-2xl font-bold">Offrir {{ wanted?.name ?? 'cette carte' }}</h2>
+              <GiftCreatureForm
+                v-if="ownedOfWanted > 0"
+                :creature-id="wantedId"
+                :creature-name="wanted?.name ?? 'cette carte'"
+                :owned="ownedOfWanted"
+              />
+              <p v-else class="border-2 border-dashed border-ink/40 px-3 py-4 text-sm">
+                Vous ne possédez pas {{ wanted?.name ?? 'cette carte' }} : vous ne pouvez l’offrir
+                qu’une fois obtenue (ouvrez un échange ou un booster).
+              </p>
+            </template>
+          </div>
         </div>
       </div>
 

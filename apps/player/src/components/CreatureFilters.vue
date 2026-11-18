@@ -36,7 +36,7 @@ const id = useId()
           v-model="search"
           type="search"
           placeholder="Rechercher…"
-          class="block min-h-10 w-full border-2 border-white/80 bg-white/15 py-1.5 pr-3 pl-9 font-semibold text-white placeholder:text-white/80 focus:bg-white focus:text-ink focus:placeholder:text-ink/50"
+          class="block min-h-10 w-full border-2 border-white/80 bg-ink/15 py-1.5 pr-3 pl-9 font-semibold text-white placeholder:text-white/80 focus:bg-white focus:text-ink focus:placeholder:text-ink/50"
           autocomplete="off"
         />
       </div>

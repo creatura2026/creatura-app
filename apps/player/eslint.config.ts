@@ -1,6 +1,7 @@
 import { globalIgnores } from 'eslint/config'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import pluginVue from 'eslint-plugin-vue'
+import pluginVueA11y from 'eslint-plugin-vuejs-accessibility'
 import pluginPlaywright from 'eslint-plugin-playwright'
 import pluginVitest from '@vitest/eslint-plugin'
 import pluginOxlint from 'eslint-plugin-oxlint'
@@ -21,6 +22,15 @@ export default defineConfigWithVueTs(
 
   ...pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
+
+  // Accessibilité des templates (RGAA) : libellés, alternatives, rôles ARIA, interactions clavier
+  ...pluginVueA11y.configs['flat/recommended'],
+  {
+    rules: {
+      // Un <label for="…"> suffit (ou un champ imbriqué) : la règle exige les deux par défaut.
+      'vuejs-accessibility/label-has-for': ['error', { required: { some: ['nesting', 'id'] } }],
+    },
+  },
 
   {
     ...pluginPlaywright.configs['flat/recommended'],

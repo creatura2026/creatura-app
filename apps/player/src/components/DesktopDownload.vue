@@ -53,7 +53,7 @@ onBeforeUnmount(() => observer?.disconnect())
     >
       <!-- Illustration : la fenêtre de l'application et sa barre des tâches -->
       <div ref="scene" class="desk-scene mx-auto w-full max-w-md" :class="{ 'is-open': opened }">
-        <div class="desk-window card-pixel overflow-hidden bg-white" aria-hidden="true">
+        <div class="desk-window card-pixel overflow-hidden bg-white" aria-hidden="true" inert>
           <div class="flex items-center justify-between gap-3 bg-ink px-3 py-2 text-cream">
             <span class="font-pixel text-sm font-bold tracking-wide">
               Créatura <span class="font-normal text-cream/60">{{ release.version }}</span>

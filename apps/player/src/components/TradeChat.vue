@@ -92,7 +92,7 @@ watch(
           <span class="sr-only">{{ m.author.id === meId ? 'Vous' : m.author.pseudo }} : </span>
           {{ m.text }}
         </span>
-        <time class="mt-0.5 text-[0.7rem] text-ink/60" :datetime="m.sentAt">
+        <time class="mt-0.5 text-[0.7rem] text-ink-muted" :datetime="m.sentAt">
           {{ timeFmt.format(new Date(m.sentAt)) }}
         </time>
       </li>

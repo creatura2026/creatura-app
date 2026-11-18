@@ -91,6 +91,7 @@ const fan = computed(() =>
             >
               −
             </button>
+            <!-- eslint-disable-next-line vuejs-accessibility/form-control-has-label -- <output> affiche la valeur du curseur (for), ce n'est pas un champ de saisie -->
             <output
               for="cards-range"
               class="min-w-20 text-center font-pixel text-6xl leading-none font-bold tabular-nums"
