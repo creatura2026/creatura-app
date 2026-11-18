@@ -1,6 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+
 const base = import.meta.env.BASE_URL
 const img = (name: string) => base + 'guide-images/' + name
+
+// Le guide est public : le retour mène à l'accueil connecté si une session existe, sinon à
+// l'accueil public (`/`). Sans ça, un visiteur serait renvoyé vers la connexion (requiresAuth).
+const auth = useAuthStore()
+const backTo = computed(() => (auth.isAuthenticated ? '/accueil' : '/'))
 
 // Défilement direct vers une section : fiable quel que soit le scrollBehavior du router.
 const reduced =
@@ -14,7 +22,7 @@ function scrollToId(id: string) {
 
 <template>
   <div class="guide">
-    <RouterLink to="/accueil" class="btn btn-secondary mb-4">
+    <RouterLink :to="backTo" class="btn btn-secondary mb-4">
       &larr; Retour à l'application
     </RouterLink>
 
@@ -272,7 +280,7 @@ function scrollToId(id: string) {
       </div>
     </section>
 
-    <RouterLink to="/accueil" class="btn btn-secondary mt-6">
+    <RouterLink :to="backTo" class="btn btn-secondary mt-6">
       &larr; Retour à l'application
     </RouterLink>
   </div>
