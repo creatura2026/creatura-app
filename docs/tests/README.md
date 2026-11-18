@@ -170,7 +170,7 @@ Projets Playwright :
 | E2E joueur (API simulée) | `e2e/specs/player/` | 61 tests, 8 fichiers (dont 13 d'accessibilité) | oui |
 | E2E admin (API simulée) | `e2e/specs/admin/` | 29 tests, 4 fichiers (dont 11 d'accessibilité) | oui |
 | E2E multi-navigateurs et mobile | mêmes specs, Firefox, WebKit, Pixel 7, iPhone 14 | 282 exécutions en tout | push |
-| E2E stack réelle | `e2e/specs-stack/` | 26 tests, 4 fichiers (dont 1 bug connu, sauté) | push |
+| E2E stack réelle | `e2e/specs-stack/` | 26 tests, 4 fichiers | push |
 | Exe, APK | — | 0 (construits, pas testés) | — |
 
 Ce qui est déjà bien couvert côté back : comptes, booster, tirage, catalogue, collection,
@@ -446,14 +446,17 @@ une règle de la liste une fois corrigée.
 | `color-contrast` | surtitres `.eyebrow` (connexion, inscription, accueil), textes `text-ink/70` et `/75`, heures des messages | foncer ces couleurs |
 | `label-content-name-mismatch` (WCAG 2.5.3) | logo « CREATURA » nommé « Créatura, accueil » ; lien du profil nommé « Mon profil » qui affiche le pseudo ; cartes cliquables de la salle d'échange | faire commencer le nom accessible par le texte affiché (« CREATURA, accueil »), ou retirer l'`aria-label` |
 
-**Défauts fonctionnels relevés par les tests** (à corriger dans l'application) :
+**Défauts fonctionnels relevés par les tests :**
 
-| Défaut | Où | Effet | Dans les tests |
+| Défaut | Où | Effet | État |
 |---|---|---|---|
-| Une carte posée juste après une autre remplace la première | `TradeRoomView.vue`, `add()` : le tapis est reconstruit depuis le dernier état confirmé par le serveur | sur la vraie API, 2 fois sur 3 en local : le joueur pose 2 cartes, il en reste 1 | `specs-stack/realtime` : test marqué `fixme` (sauté) ; à réactiver une fois corrigé |
-| Une action faite pendant une reconnexion est perdue sans message | `packages/shared/src/api/http.ts` : n'envoie que sur une connexion ouverte | après une coupure, un clic sur une carte peut ne rien faire | WS-08 attend la fin de la reconnexion avant d'agir |
-| L'écran du booster « clignote » à l'ouverture | `BoosterView.vue` : les données du jour sont rechargées avant d'afficher la pile | « Voir ma collection » apparaît un instant avant la pile à révéler | `BoosterPage.openAndReveal()` attend « Tout révéler » |
-| Deux ouvertures simultanées ouvrent deux boosters (API simulée seulement) | `apps/player/src/api/mock/server.ts`, `claimBooster` : vérifie après un délai | sans effet en production (le back est protégé) | un seul clic dans les tests |
+| Une carte posée juste après une autre remplaçait la première | `TradeRoomView.vue`, `add()` : le tapis était reconstruit depuis le dernier état confirmé par le serveur, qui remplace le tapis par la liste reçue | sur la vraie API, 2 fois sur 3 : le joueur posait 2 cartes, il en restait 1 | **corrigé** : le dernier tapis envoyé (`sentMat`) sert de base jusqu'à sa confirmation. Non-régression : `specs-stack/realtime`, « deux cartes posées coup sur coup » (16 exécutions sur 16) et P-09 |
+| L'écran du booster « clignote » à l'ouverture | `BoosterView.vue` : les données du jour sont rechargées avant d'afficher la pile | « Voir ma collection » apparaît un instant avant la pile à révéler | à corriger ; `BoosterPage.openAndReveal()` attend « Tout révéler » |
+| Deux ouvertures simultanées ouvrent deux boosters (API simulée seulement) | `apps/player/src/api/mock/server.ts`, `claimBooster` : vérifie après un délai | sans effet en production (le back est protégé) | à corriger ; un seul clic dans les tests |
+
+Une action faite pendant une reconnexion de la salle n'est pas envoyée : `http.ts` affiche alors
+« Connexion à la salle d'échange en cours : réessayez dans un instant ». WS-08 attend donc la fin
+de la reconnexion (nouvel `init`) avant d'agir.
 
 ## 13. Données de test
 

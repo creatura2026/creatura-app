@@ -101,15 +101,8 @@ test.describe('tapis et validation', () => {
     const bobCards = (await bob.account.collection()).slice(0, 2).map((e) => e.creature)
     await Promise.all([alice.enterRoom(trade.id), bob.enterRoom(trade.id)])
 
-    // Chaque carte est attendue sur son tapis avant de poser la suivante (bug du test suivant).
-    for (const card of aliceCards) {
-      await alice.room.put(card.name)
-      await expect(creatureCard(alice.room.myMat, card.name)).toBeVisible()
-    }
-    for (const card of bobCards) {
-      await bob.room.put(card.name)
-      await expect(creatureCard(bob.room.myMat, card.name)).toBeVisible()
-    }
+    for (const card of aliceCards) await alice.room.put(card.name)
+    for (const card of bobCards) await bob.room.put(card.name)
     await expect(bob.room.theirMat).toContainText(`${aliceCards.length} cartes`)
     await expect(alice.room.theirMat).toContainText(`${bobCards.length} cartes`)
 
@@ -122,10 +115,9 @@ test.describe('tapis et validation', () => {
   })
 
   test('deux cartes posées coup sur coup restent toutes les deux sur le tapis', async ({ openPlayer }) => {
-    // BUG CONNU : TradeRoomView.add() reconstruit le tapis depuis le dernier état confirmé par le
-    // serveur. Un second clic avant sa réponse envoie un tapis sans la première carte, qui
-    // disparaît (2 fois sur 3 en local). Retirer ce fixme une fois corrigé.
-    test.fixme(true, 'une carte posée trop vite remplace la précédente (TradeRoomView.add)')
+    // Non-régression : le serveur remplace le tapis par la liste reçue. Un second clic avant sa
+    // réponse doit partir du tapis déjà envoyé (TradeRoomView, sentMat), sinon la première carte
+    // disparaît.
     const { alice, bob, trade } = await setUp(openPlayer)
     const [first, second] = (await alice.account.collection()).map((e) => e.creature)
     await Promise.all([alice.enterRoom(trade.id), bob.enterRoom(trade.id)])
