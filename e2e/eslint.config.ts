@@ -9,6 +9,7 @@ export default defineConfig(
     'reports/**',
     // Variantes de l'application Windows construites par les tests (desktop/app.ts)
     '.desktop-apps/**',
+    '.android-apps/**',
   ]),
 
   ...tseslint.configs.recommended,

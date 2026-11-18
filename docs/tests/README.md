@@ -123,7 +123,9 @@ e2e/                          paquet pnpm dédié aux tests de bout en bout
   specs-desktop/              application Windows : app/ (Electron sur la stack), exe/ (exe construit)
   desktop/                    préparation et lancement de l'application Electron
   playwright.exe.config.ts    tests de l'exe empaqueté (Windows)
-  (à venir) mobile/           flows Maestro pour l'APK
+  specs-android/              application Android (APK sur émulateur)
+  android/                    construction des APK de test, pilotage de l'appareil (adb)
+  playwright.android.config.ts  tests de l'APK
 ```
 
 Les 3 tests qui étaient dans `apps/player/e2e` et `apps/admin/e2e` ont été déplacés dans
@@ -158,7 +160,7 @@ Projets Playwright :
 | [Schemathesis](https://schemathesis.readthedocs.io) | Tests de contrat générés depuis l'OpenAPI | à ajouter |
 | `openapi-typescript` | Vérifier que `schema.d.ts` correspond à l'OpenAPI | à ajouter |
 | [k6](https://k6.io) | Charge de l'API et des salles d'échange | à ajouter |
-| [Maestro](https://maestro.mobile.dev) + émulateur Android | E2E de l'APK | à ajouter |
+| Playwright Android (`_android`) + émulateur | E2E de l'APK | en place, pas encore exécuté (§ 11) |
 | Trivy, `pnpm audit`, `pip-audit`, OWASP ZAP (baseline) | Sécurité : images, dépendances, en-têtes HTTP | à ajouter |
 | [Ruff](https://docs.astral.sh/ruff/) | Lint du back | à ajouter |
 
@@ -177,7 +179,7 @@ Projets Playwright :
 | E2E stack réelle | `e2e/specs-stack/` | 26 tests, 4 fichiers | push |
 | Application Windows (Electron) | `e2e/specs-desktop/app/` | 7 tests | push (job `e2e-stack`, Linux) |
 | Exe Windows construit | `e2e/specs-desktop/exe/` | 2 tests | push (job `desktop`, Windows) |
-| APK | — | 0 (construit, pas testé) | — |
+| APK | `e2e/specs-android/` | 5 tests, **pas encore exécutés** | push (job `e2e-mobile`) |
 
 Ce qui est déjà bien couvert côté back : comptes, booster, tirage, catalogue, collection,
 échanges (dont la salle WebSocket, la concurrence et le multi-répliques), dons, comptes admin,
@@ -192,10 +194,10 @@ Le workflow est [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (no
 | Déclencheur | Tests lancés | Autres étapes |
 |---|---|---|
 | Pull request | SQL (schéma, données), pytest, lint, type-check + build du front, Vitest, E2E sur l'API simulée (Chromium) | images Docker construites, pas publiées |
-| Push sur `develop` ou `main` | les mêmes, l'E2E simulé dans Firefox, WebKit, Pixel 7 et iPhone 14, l'**E2E sur la stack réelle** avec l'application Electron (job `e2e-stack`), et l'**exe construit** (job `desktop`) | images publiées sur GHCR si tous les tests sont verts (E2E compris) ; exe publié s'il passe ses tests ; APK **construit, pas testé** |
+| Push sur `develop` ou `main` | les mêmes, l'E2E simulé dans Firefox, WebKit, Pixel 7 et iPhone 14, l'**E2E sur la stack réelle** avec l'application Electron (job `e2e-stack`), et l'**exe construit** (job `desktop`), l'**APK sur émulateur** (job `e2e-mobile`) | images publiées sur GHCR si tous les tests sont verts (E2E compris) ; exe et APK publiés s'ils passent leurs tests |
 | Tag `v*` | les mêmes | Release GitHub (exe, APK) |
 
-Pas encore de test de l'APK. Les jobs exe et APK sont en
+Les jobs exe et APK sont en
 `continue-on-error` : leur échec ne fait pas échouer la CI.
 
 ### Cible
@@ -435,18 +437,45 @@ Deux variantes : l'APK normal ouvre **le site en ligne** dans une WebView (Capac
 page hors ligne ; l'APK de démo embarque le front et l'API simulée.
 
 La plupart des parcours sont déjà vérifiés par les tests du site sur viewport mobile
-(`player-mobile`). Ce qui reste propre à l'APK :
+(`player-mobile`). Ce qui reste propre à l'APK : l'installation et le lancement, la WebView et son
+identifiant (`CreaturaAndroid`), le bouton retour d'Android, la page hors ligne, la session gardée
+quand l'application est fermée.
 
-| ID | Scénario | Outil |
+**Outil : Playwright Android** (`_android`) plutôt que Maestro : un APK de debug autorise
+l'inspection de sa WebView, que Playwright voit comme une page. Les page objects du site s'y
+appliquent tels quels, et tout reste en TypeScript dans le même paquet. Les gestes Android (bouton
+retour, fermeture, effacement des données) passent par `adb shell` (`e2e/android/device.ts`).
+
+**APK de test** (`e2e/android/build-apks.ts`, `pnpm --filter e2e build:android`) : deux builds de
+debug par `apps/mobile/scripts/build.cjs`, sans les secrets de signature. Les sorties du build de
+`apps/mobile` (`release/`, `capacitor.config.json`…) sont sauvegardées puis remises en place.
+
+- `demo.apk` : l'API simulée embarquée, l'application fonctionne sans réseau ;
+- `offline.apk` : branché sur un site qui ne répond pas (`http://10.0.2.2:59999`, l'ordinateur
+  hôte vu depuis l'émulateur) : la page hors ligne s'affiche à coup sûr, sans couper le réseau.
+
+| ID | Scénario | APK |
 |---|---|---|
-| M-01 | L'APK s'installe et démarre sur l'accueil | Maestro + émulateur |
-| M-02 | APK démo : connexion, ouverture d'un booster, collection | Maestro + émulateur |
-| M-03 | Sans réseau : la page hors ligne s'affiche, « Réessayer » recharge le site | Maestro (mode avion) |
-| M-04 | Bouton retour d'Android : revient à l'écran précédent, ne ferme pas l'application sur l'accueil connecté | Maestro |
-| M-05 | La session survit à la fermeture et à la réouverture de l'application | Maestro |
+| M-01 | L'application s'installe, démarre sur l'accueil, se sait dans l'APK (identifiant `CreaturaAndroid`, pas de lien « Télécharger pour Android ») | démo |
+| M-02 | Connexion de démonstration, booster ouvert, collection | démo |
+| M-03 | Site injoignable : la page « Connexion impossible » s'affiche, « Réessayer » pointe vers le site | hors ligne |
+| M-04 | Bouton retour d'Android : revient à l'écran précédent, l'application reste au premier plan | démo |
+| M-05 | La session survit à la fermeture complète (`am force-stop`) et à la réouverture | démo |
 
-En CI : émulateur Android sur runner Ubuntu (`reactivecircus/android-emulator-runner`), après le
-job `mobile`. Le test sur un vrai téléphone reste en recette manuelle.
+Chaque test part d'une application fermée et sans données (`pm clear`). Sans appareil visible par
+adb, ou sans APK de test, les tests sont sautés en le disant.
+
+En CI : job `e2e-mobile`, émulateur Android 14 (x86_64, KVM) sur runner Ubuntu
+(`reactivecircus/android-emulator-runner`). Le job `mobile` l'attend : un APK n'est construit et
+publié que si ses tests passent.
+
+> **Pas encore exécutés.** Ces tests ont été écrits sans émulateur disponible (aucun SDK Android
+> sur le poste de développement) : leur première exécution aura lieu au prochain push sur
+> `develop`. Points à surveiller à ce moment-là : le nom de l'activité lancée
+> (`fr.esigelec.creatura/.MainActivity`, celui que génère Capacitor), et le comportement du bouton
+> retour (M-04), qui dépend de la gestion par défaut de Capacitor.
+
+Le test sur un vrai téléphone reste en recette manuelle (§ 17).
 
 ## 12. Tests non fonctionnels
 
@@ -544,6 +573,8 @@ E2E_STACK=external pnpm --filter e2e test:stack  # … puis relancer sans la rec
 pnpm --filter e2e test:stack:ui        # mode interactif sur la stack réelle
 pnpm --filter e2e test:desktop         # application Electron seule, sur la stack réelle
 pnpm desktop && pnpm --filter e2e test:exe   # exe Windows construit (Windows seulement)
+pnpm --filter e2e build:android        # APK de test (SDK Android et Java 21 requis)
+pnpm --filter e2e test:android         # APK sur l'émulateur démarré (adb devices)
 ```
 
 ## 16. Rapports, couverture et critères de réussite
@@ -553,7 +584,7 @@ pnpm desktop && pnpm --filter e2e test:exe   # exe Windows construit (Windows se
 - pytest : JUnit (`reports/backend-tests.xml`, déjà en place) ;
 - Vitest : JUnit + couverture ;
 - Playwright : rapport HTML, traces des tests en échec ;
-- Maestro : captures et enregistrement en cas d'échec ;
+- Playwright Android : rapport HTML et traces des tests en échec (`playwright-report-android`) ;
 - un résumé dans `GITHUB_STEP_SUMMARY` (tests passés, échoués, ignorés par job).
 
 **Couverture visée** (mesurée, seuil bloquant une fois atteint) :
@@ -594,7 +625,7 @@ pnpm desktop && pnpm --filter e2e test:exe   # exe Windows construit (Windows se
 | 2. E2E simulé ✅ | P-01 à P-19, A-01 à A-12 en mode simulé ; projets mobile et multi-navigateurs ; axe-core | parcours écran couverts |
 | 3. Stack réelle ✅ | `e2e/compose.yaml`, fixtures API, `specs-stack/`, **WS-01 à WS-11**, X-01 à X-04, A-02 ; job `e2e-stack` | intégration réelle et temps réel couverts |
 | 4. Application Windows ✅ | D-01 à D-08 (Electron sur la stack, Linux), E-01 et E-02 (exe construit, Windows) ; jobs `e2e-stack` et `desktop` | exe testé avant publication |
-| 5. Application Android | M-01 à M-05 ; job `e2e-mobile` sur émulateur | APK testé avant publication |
+| 5. Application Android ✍️ | M-01 à M-05 (Playwright Android) ; job `e2e-mobile` sur émulateur, qui conditionne la publication de l'APK. Écrit, **première exécution au prochain push** | APK testé avant publication |
 | 6. Compléments | unitaires manquants (§ 7), couverture et seuils, contrat OpenAPI, k6, sécurité de nuit | qualité mesurée |
 
 ## 19. Matrice de traçabilité

@@ -9,7 +9,8 @@
 #   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
 #   4. Windows   : l'exe de l'application (apps/desktop) en artefact, hors PR ;
 #                  Release GitHub sur un tag v*
-#   5. Android   : l'APK de l'application (apps/mobile), de la même façon
+#   5. Android   : l'APK de l'application (apps/mobile), de la même façon,
+#                  après ses tests sur émulateur
 #
 # La release validée est déployée par le workflow deploy-aws.yml du dépôt infra.
 # Aucun accès AWS dans ce dépôt ; voir docs/ci-cd.md.
@@ -477,6 +478,73 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
+  # Tests de l'application Android (e2e/specs-android) : deux APK de debug
+  # (démo, et site injoignable) testés sur un émulateur Android 14 avec
+  # Playwright Android. Le job mobile l'attend : un APK n'est publié que si ses
+  # tests passent. Hors PR : construction Gradle et émulateur prennent du temps.
+  # ---------------------------------------------------------------------------
+  e2e-mobile:
+    name: E2E (application Android)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      # APK de debug (sans les secrets de signature) : leur WebView est inspectable.
+      - name: Construire les APK de test
+        run: pnpm --filter e2e run build:android
+
+      # L'émulateur a besoin de l'accélération matérielle du runner.
+      - name: Activer KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Tests sur émulateur
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: pnpm --filter e2e run test:android
+
+      - name: Publier le rapport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-android-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report-android/
+            e2e/reports/
+            e2e/test-results-android/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # Application Android (apps/mobile) : APK en artefact, et ajouté à la Release
   # GitHub sur un tag v* de la même version. Adresse du site : variable
   # CUSTOM_DOMAIN de l'environnement production, comme pour l'exe ; sans elle,
@@ -485,7 +553,8 @@ jobs:
   # ---------------------------------------------------------------------------
   mobile:
     name: Application Android
-    needs: frontend
+    # L'APK n'est construit et publié que si les tests de l'application ont réussi.
+    needs: [frontend, e2e-mobile]
     # Pas sur les PR : plusieurs minutes de Gradle à chaque mise à jour.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest

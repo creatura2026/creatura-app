@@ -3,6 +3,9 @@ test-results/
 test-results-stack/
 test-results-exe/
 .desktop-apps/
+.android-apps/
+test-results-android/
+playwright-report-android/
 playwright-report/
 playwright-report-stack/
 reports/
