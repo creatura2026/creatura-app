@@ -106,9 +106,8 @@ function placeOf(i: number): Place {
   return showing.value === i ? 'show' : 'mat'
 }
 
-const SHOW_MS = 900 // retournement (500 ms) puis un temps pour lire la carte
-const SHOW_LIFT = 0.14 // la carte présentée se soulève d'une fraction de sa hauteur…
-const SHOW_GROW = 1.08 // …et s'approche un peu
+const SHOW_LIFT = 0.3 // la carte présentée se soulève vers la zone libre du tapis…
+const SHOW_GROW = 1.35 // …et s'affiche nettement plus grande, puis rétrécit en rejoignant sa place
 const DEAL_MS = 130 // cadence de « Tout révéler »
 
 /**
@@ -195,12 +194,10 @@ async function onTorn() {
   }
 }
 
-let showTimer: ReturnType<typeof setTimeout> | undefined
 let dealTimer: ReturnType<typeof setTimeout> | undefined
 
 /** Une nouvelle pile, face cachée. */
 function resetPile() {
-  clearTimeout(showTimer)
   clearTimeout(dealTimer)
   flipped.value = 0
   showing.value = null
@@ -247,22 +244,26 @@ async function openWithoutTearing() {
 }
 
 /**
- * Retourne la carte du dessus : elle se soulève et se retourne au-dessus de la pile, le temps de la
- * lire, puis va se poser à son emplacement sur le tapis. Retourner la suivante sans attendre envoie
- * tout de suite la précédente à sa place.
+ * Retourne la carte du dessus : elle se soulève et se retourne au-dessus de la pile. Elle reste
+ * présentée en grand jusqu'à ce que le joueur clique dessus (`settleShown`), ce qui la pose à son
+ * emplacement et libère la carte suivante. En mouvement réduit, elle se pose directement.
  */
 function reveal(index: number) {
   if (index !== flipped.value) return
-  clearTimeout(showTimer)
   flipped.value = index + 1
   showing.value = reduced ? null : index
-  if (!reduced) showTimer = setTimeout(() => (showing.value = null), SHOW_MS)
+  void keepFocus()
+}
+
+/** Clic sur la carte présentée : elle rejoint son emplacement, la pile redevient active. */
+function settleShown() {
+  if (showing.value === null) return
+  showing.value = null
   void keepFocus()
 }
 
 /** Distribue le reste de la pile sur le tapis, une carte après l'autre. */
 function revealAll() {
-  clearTimeout(showTimer)
   clearTimeout(dealTimer)
   showing.value = null
   if (reduced) {
@@ -288,6 +289,7 @@ async function keepFocus() {
     !active || active === document.body || (active instanceof HTMLButtonElement && active.disabled)
   if (!lost) return
   const next =
+    panel.value?.querySelector<HTMLElement>('[data-show-veil]') ??
     grid.value?.querySelector<HTMLElement>('button:not(:disabled)') ??
     panel.value?.querySelector<HTMLElement>('[data-after-reveal]')
   next?.focus({ preventScroll: true })
@@ -374,6 +376,20 @@ const remaining = computed(() =>
                     />
                   </div>
 
+                  <!--
+                    Carte présentée : un voile plein cadre, sous la carte agrandie (z-index 25) mais
+                    au-dessus du tapis. Un clic n'importe où la pose à son emplacement et libère la
+                    suivante. La carte ne part donc jamais toute seule : le joueur la regarde à son rythme.
+                  -->
+                  <button
+                    v-if="showing !== null"
+                    type="button"
+                    class="show-veil absolute inset-0"
+                    aria-label="Poser la carte et continuer"
+                    data-show-veil
+                    @click="settleShown"
+                  />
+
                   <ul ref="grid" aria-label="Cartes du booster">
                     <li
                       v-for="(card, i) in booster.cards"
@@ -390,7 +406,7 @@ const remaining = computed(() =>
                           :intro="!bursting"
                           :compact="table.card.value.compact"
                           :revealed="!opened || i < flipped"
-                          :interactive="settled && i === flipped"
+                          :interactive="settled && showing === null && i === flipped"
                           :glow="settled && showing === null && i === flipped"
                           @reveal="reveal(i)"
                         />
@@ -512,6 +528,15 @@ const remaining = computed(() =>
 }
 .mat-slot.is-shown {
   opacity: 1;
+}
+/*
+ * Voile transparent sous la carte présentée : capte le clic « continuer » sur toute la scène, sans
+ * rien assombrir. Z-index entre le tapis (11+) et la carte agrandie (25).
+ */
+.show-veil {
+  z-index: 20;
+  cursor: pointer;
+  background: transparent;
 }
 @media (prefers-reduced-motion: reduce) {
   .booster-card,
