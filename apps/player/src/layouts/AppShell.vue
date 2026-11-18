@@ -77,16 +77,15 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
           <span class="max-w-28 truncate sm:max-w-40">{{ pseudo }}</span>
         </RouterLink>
 
-        <a
-          href="/guides/joueur/index.html"
-          target="_blank"
-          rel="noopener noreferrer"
+        <RouterLink
+          to="/guide"
           class="flex min-h-10 items-center gap-2 border-2 border-cream/40 px-2.5 text-sm font-semibold hover:border-cream sm:px-3"
-          aria-label="Guide du joueur (nouvelle fenêtre)"
+          active-class="!border-cream bg-cream/10"
+          aria-label="Guide du joueur"
         >
           <PixelIcon name="help" :size="18" />
           <span class="hidden sm:inline">Guide</span>
-        </a>
+        </RouterLink>
       </div>
     </header>
 
@@ -137,16 +136,15 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
           </RouterLink>
         </li>
         <li>
-          <a
-            href="/guides/joueur/index.html"
-            target="_blank"
-            rel="noopener noreferrer"
+          <RouterLink
+            to="/guide"
             class="flex min-h-16 flex-col items-center justify-center gap-1 px-1 text-[0.7rem] font-semibold"
-            aria-label="Guide du joueur (nouvelle fenêtre)"
+            active-class="bg-ink text-cream"
+            aria-label="Guide du joueur"
           >
             <PixelIcon name="help" :size="22" />
             <span class="truncate">Guide</span>
-          </a>
+          </RouterLink>
         </li>
       </ul>
     </nav>

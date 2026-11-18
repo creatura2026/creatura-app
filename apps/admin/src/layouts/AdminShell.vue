@@ -104,17 +104,15 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
 
         <div class="my-2 border-t border-cream/20" />
 
-        <a
-          href="/guides/admin/index.html"
-          target="_blank"
-          rel="noopener noreferrer"
+        <RouterLink
+          :to="{ name: 'guide' }"
           class="flex min-h-12 items-center gap-3 border-2 border-transparent px-3 font-semibold hover:border-cream/40"
-          aria-label="Guide administrateur (nouvelle fenêtre)"
+          exact-active-class="!border-cream bg-cream text-ink"
+          aria-label="Guide administrateur"
         >
           <PixelIcon name="help" :size="20" />
           <span class="flex-1">Guide</span>
-          <span class="text-xs opacity-70">↗</span>
-        </a>
+        </RouterLink>
       </nav>
       <div class="border-t-2 border-cream/20 p-4">
         <p class="flex items-center gap-2 text-sm">

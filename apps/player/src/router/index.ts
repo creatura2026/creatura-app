@@ -96,6 +96,12 @@ const router = createRouter({
           component: () => import('@/views/ProfileView.vue'),
           meta: { title: 'Mon profil' },
         },
+        {
+          path: 'guide',
+          name: 'guide',
+          component: () => import('@/views/GuideView.vue'),
+          meta: { title: 'Guide du joueur' },
+        },
       ],
     },
     {

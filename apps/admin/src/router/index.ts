@@ -95,6 +95,12 @@ const router = createRouter({
           component: () => import('@/views/AdminsView.vue'),
           meta: { title: 'Administrateurs' },
         },
+        {
+          path: 'guide',
+          name: 'guide',
+          component: () => import('@/views/GuideView.vue'),
+          meta: { title: 'Guide administrateur' },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
