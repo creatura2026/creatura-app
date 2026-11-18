@@ -320,6 +320,7 @@ watch(editing, (id) => {
           <!-- Dépose d'image : zone cliquable avec aperçu, clé CDN affichée. -->
           <div class="text-sm font-semibold sm:col-span-2">
             Image de la carte (PNG)
+            <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- le label contient le champ fichier ; le glisser-déposer n'en est qu'un raccourci -->
             <label
               class="dropzone mt-1"
               :class="{ 'dropzone--filled': newFile }"
@@ -379,7 +380,13 @@ watch(editing, (id) => {
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
       <div class="mt-6 flex items-center justify-between gap-3">
         <h2 class="font-sans text-lg font-bold">{{ creatures?.length ?? 0 }} cartes</h2>
-        <input v-model="search" type="search" placeholder="Rechercher" class="field max-w-60" />
+        <input
+          v-model="search"
+          type="search"
+          placeholder="Rechercher"
+          aria-label="Rechercher une carte"
+          class="field max-w-60"
+        />
       </div>
       <ul class="mt-3 grid gap-3">
         <li
@@ -468,6 +475,7 @@ watch(editing, (id) => {
 
               <div class="text-sm font-semibold sm:col-span-2">
                 Image de la carte (PNG)
+                <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- le label contient le champ fichier ; le glisser-déposer n'en est qu'un raccourci -->
                 <label
                   class="dropzone mt-1"
                   :class="{ 'dropzone--filled': editFile }"
