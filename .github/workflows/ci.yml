@@ -898,7 +898,13 @@ jobs:
   notify-infra:
     name: Déclencher le déploiement AWS
     needs: release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # GitHub propage le « skipped » de façon transitive : sans fonction de statut, ce job héritait du
+    # saut des e2e (via release → images → e2e) même quand release réussissait. Le `!cancelled()`
+    # retire le success() implicite ; on déclenche le déploiement dès que release a réussi.
+    if: >-
+      ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop'
+      && !cancelled()
+      && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Attendre la conclusion CI puis demander le déploiement
