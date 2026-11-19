@@ -101,6 +101,12 @@ const router = createRouter({
           component: () => import('@/views/GuideView.vue'),
           meta: { title: 'Guide administrateur' },
         },
+        {
+          path: 'mentions-legales',
+          name: 'legal',
+          component: () => import('@/views/LegalView.vue'),
+          meta: { title: 'Mentions légales' },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

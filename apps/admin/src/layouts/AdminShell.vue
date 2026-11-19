@@ -123,6 +123,15 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           <PixelIcon name="help" :size="20" />
           <span class="flex-1">Guide</span>
         </RouterLink>
+
+        <RouterLink
+          :to="{ name: 'legal' }"
+          class="flex min-h-12 items-center gap-3 border-2 border-transparent px-3 font-semibold hover:border-cream/40"
+          exact-active-class="!border-cream bg-cream text-ink"
+        >
+          <PixelIcon name="lock" :size="20" />
+          <span class="flex-1">Mentions légales</span>
+        </RouterLink>
       </nav>
       <div class="border-t-2 border-cream/20 p-4">
         <p class="flex items-center gap-2 text-sm">
