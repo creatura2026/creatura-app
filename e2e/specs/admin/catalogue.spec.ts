@@ -50,11 +50,21 @@ test.describe('cartes (A-08)', () => {
 
   test('modifier une carte existante', async ({ page, creaturesPage }) => {
     const moussou = creaturesPage.item('Moussou')
+    await expect(moussou).toBeVisible()
+    const countBefore = await creaturesPage.list.count()
     await moussou.getByRole('button', { name: 'Modifier la créature' }).click()
+    await moussou.getByLabel('Nom', { exact: true }).fill('Mousse magique')
     await moussou.getByLabel('Description', { exact: true }).fill('Une boule de mousse très calme.')
     await moussou.getByRole('button', { name: 'Enregistrer' }).click()
 
-    await expect(toast(page, 'Moussou mise à jour.')).toBeVisible()
+    await expect(toast(page, 'Mousse magique mise à jour.')).toBeVisible()
+    await expect(creaturesPage.list).toHaveCount(countBefore)
+    await expect(
+      creaturesPage.list.filter({ has: page.getByText('Moussou', { exact: true }) }),
+    ).toHaveCount(0)
+    await expect(
+      creaturesPage.list.filter({ has: page.getByText('Mousse magique', { exact: true }) }),
+    ).toHaveCount(1)
   })
 })
 
