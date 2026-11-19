@@ -49,6 +49,12 @@ const router = createRouter({
       meta: { title: 'Guide du joueur' },
     },
     {
+      path: '/mentions-legales',
+      name: 'legal',
+      component: () => import('@/views/LegalView.vue'),
+      meta: { title: 'Mentions légales' },
+    },
+    {
       path: '/',
       component: AppShell,
       meta: { requiresAuth: true },
