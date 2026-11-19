@@ -53,7 +53,7 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
     <header
       class="sticky top-0 z-30 flex h-14 items-center justify-between border-b-2 border-ink bg-ink px-4 text-cream lg:hidden"
     >
-      <BrandMark tone="light" suffix="Admin" />
+      <BrandMark tone="light" />
       <button
         type="button"
         class="flex size-11 cursor-pointer items-center justify-center border-2 border-cream/50"
@@ -80,7 +80,7 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
       :class="menuOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex h-14 items-center px-5 lg:h-20">
-        <BrandMark tone="light" suffix="Admin" />
+        <BrandMark tone="light" />
       </div>
       <nav class="flex flex-1 flex-col gap-1.5 px-3 py-4" aria-label="Navigation du dashboard">
         <p class="px-2 pb-2 font-pixel text-xs tracking-widest text-sun uppercase">
@@ -122,7 +122,6 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
         <p class="flex items-center gap-2 text-sm">
           <PixelIcon name="user" :size="18" />
           <span class="truncate font-semibold">{{ auth.user?.pseudo }}</span>
-          <span class="ml-auto border border-sun px-1.5 text-xs text-sun">ADMIN</span>
         </p>
         <RouterLink :to="{ name: 'account' }" class="btn btn-dark mt-3 w-full">
           <PixelIcon name="lock" :size="18" /> Mon compte

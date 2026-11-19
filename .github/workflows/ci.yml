@@ -271,7 +271,8 @@ jobs:
   e2e-mock:
     name: E2E (API simulée)
     needs: detect
-    if: needs.detect.outputs.frontend == 'true'
+    # Variable de dépôt SKIP_E2E=true pour désactiver tous les tests e2e (mock + stack).
+    if: needs.detect.outputs.frontend == 'true' && vars.SKIP_E2E != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -339,7 +340,7 @@ jobs:
   e2e-stack:
     name: E2E (stack réelle)
     needs: detect
-    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request'
+    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request' && vars.SKIP_E2E != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
