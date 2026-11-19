@@ -4,6 +4,12 @@
  */
 import { test, expect } from '../../fixtures/player.ts'
 
+// axe-core fait planter le process Firefox (« Page crashed ») pendant l'analyse des pages chargées
+// (booster révélé, salle d'échange). L'accessibilité porte sur le markup, identique d'un moteur à
+// l'autre, et reste vérifiée sur Chromium et WebKit : on saute donc l'analyse axe sur Firefox.
+// eslint-disable-next-line playwright/no-skipped-test -- saut conditionnel assumé (crash Firefox)
+test.skip(({ browserName }) => browserName === 'firefox', 'axe-core instable sur Firefox (crash du process)')
+
 const PUBLIC_PAGES = [
   { name: 'accueil du site', path: '/' },
   { name: 'connexion', path: '/connexion' },
