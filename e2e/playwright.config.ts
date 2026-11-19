@@ -62,15 +62,22 @@ export default defineConfig({
     ...(['chromium', 'firefox', 'webkit'] as const).flatMap((browser) => {
       const device = { chromium: 'Desktop Chrome', firefox: 'Desktop Firefox', webkit: 'Desktop Safari' }[browser]
       const suffix = browser === 'chromium' ? '' : `-${browser}`
+      // L'analyse axe fait planter l'onglet de Firefox (« Page crashed ») sur les écrans chargés de
+      // cartes (booster, salle d'échange) : un plantage du navigateur, pas un défaut de la page. Le
+      // résultat d'axe ne dépend pas du moteur : l'accessibilité est vérifiée sous Chromium et
+      // WebKit, Firefox garde tous les parcours.
+      const testIgnore = browser === 'firefox' ? /accessibilite\.spec\.ts/ : undefined
       return [
         {
           name: `player-mock${suffix}`,
           testDir: './specs/player',
+          testIgnore,
           use: { ...devices[device], baseURL: PLAYER_URL },
         },
         {
           name: `admin-mock${suffix}`,
           testDir: './specs/admin',
+          testIgnore,
           use: { ...devices[device], baseURL: ADMIN_URL },
         },
       ]
