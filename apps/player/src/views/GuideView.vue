@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const base = import.meta.env.BASE_URL
 const img = (name: string) => base + 'guide-images/' + name
+const vid = (name: string) => base + 'guide-vidéo/' + name
 
 // Le guide est public : le retour mène à l'accueil connecté si une session existe, sinon à
 // l'accueil public (`/`). Sans ça, un visiteur serait renvoyé vers la connexion (requiresAuth).
@@ -51,6 +52,7 @@ function scrollToId(id: string) {
         <img :src="img('01-accueil-public.png')" alt="Page d'accueil publique de Créatura" />
         <figcaption>Page d'accueil — boutons de création de compte et de connexion</figcaption>
       </figure>
+      <video class="guide-video" :src="vid('01-accueil.webm')" controls muted playsinline></video>
       <p>Cliquez sur <strong>Créer un compte</strong>, puis remplissez le formulaire :</p>
       <ol class="steps">
         <li>Choisissez un <strong>pseudonyme</strong> — il sera visible par les autres joueurs lors des échanges.</li>
@@ -62,6 +64,7 @@ function scrollToId(id: string) {
         <img :src="img('02-inscription.png')" alt="Formulaire d'inscription" />
         <figcaption>Formulaire d'inscription — remplissez tous les champs puis validez</figcaption>
       </figure>
+      <video class="guide-video" :src="vid('02-inscription.webm')" controls muted playsinline></video>
       <div class="tip mint">
         <span class="tip-icon">&#x2139;&#xfe0f;</span>
         <p>Votre pseudonyme est public et ne peut pas être modifié après création.</p>
@@ -182,6 +185,7 @@ function scrollToId(id: string) {
         <img :src="img('10-nouvel-echange-joueur.png')" alt="Ouvrir un échange par joueur" />
         <figcaption>Mode « Par joueur » — cartes du joueur cible</figcaption>
       </figure>
+      <video class="guide-video" :src="vid('04-echange-alice.webm')" controls muted playsinline></video>
       <h3>Ouvrir un nouvel échange — par carte</h3>
       <ol class="steps">
         <li>Utilisez les filtres pour trouver la créature souhaitée dans le catalogue.</li>
@@ -192,6 +196,7 @@ function scrollToId(id: string) {
         <img :src="img('11-nouvel-echange-carte.png')" alt="Ouvrir un échange par carte" />
         <figcaption>Mode « Par carte » — joueurs possédant la créature souhaitée</figcaption>
       </figure>
+      <video class="guide-video" :src="vid('03-alice.webm')" controls muted playsinline></video>
     </section>
 
     <section id="salle-echange">
@@ -289,6 +294,13 @@ function scrollToId(id: string) {
 <style>
 .guide {
   --guide-accent: var(--color-sun, #fcd34d);
+}
+.guide-video {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  border-radius: 8px;
+  margin: 1rem 0;
 }
 /* Entrées du sommaire : boutons rendus comme les anciens liens (défilement direct). */
 .guide .toc-link {

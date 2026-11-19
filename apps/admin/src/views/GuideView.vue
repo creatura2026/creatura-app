@@ -14,6 +14,9 @@ import imgBooster from '@/assets/guide-images/modif_booster.png'
 
 import { api } from '@/api'
 
+const base = import.meta.env.BASE_URL
+const vid = (name: string) => base + 'guide-vidéo/' + name
+
 // Valide la session au chargement : un token expiré → 401 → refresh échoue → UNAUTHENTICATED
 // → le gestionnaire global (main.ts queryCache.onError) efface la session et redirige vers login.
 useQuery({ queryKey: ['me'], queryFn: () => api.getMe() })
@@ -67,6 +70,7 @@ function scrollToId(id: string) {
         <img :src="imgLogin" alt="Page de connexion admin" />
         <figcaption>Page de connexion de l'interface d'administration</figcaption>
       </figure>
+      <video class="guide-video" :src="vid('05-admin.webm')" controls muted playsinline></video>
       <div class="tip butter">
         <span class="tip-icon">&#x1f511;</span>
         <p>Si vous vous connectez pour la première fois avec un mot de passe provisoire, vous serez
@@ -305,6 +309,13 @@ function scrollToId(id: string) {
 <style>
 .guide {
   --guide-accent: var(--color-salmon, #fecaca);
+}
+.guide-video {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  border-radius: 8px;
+  margin: 1rem 0;
 }
 /* Entrées du sommaire : boutons rendus comme les anciens liens (défilement direct). */
 .guide .toc-link {
