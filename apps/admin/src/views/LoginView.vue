@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { toTypedSchema } from '@creatura/shared/forms'
 import { useRoute, useRouter } from 'vue-router'
 import { errorMessage } from '@creatura/shared/api/types'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
@@ -16,11 +16,11 @@ import { useAuthStore } from '@/stores/auth'
 const schema = toTypedSchema(
   z.object({
     login: z
-      .string({ required_error: 'Saisissez votre identifiant.' })
+      .string({ error: 'Saisissez votre identifiant.' })
       .trim()
       .min(1, 'Saisissez votre identifiant.'),
     password: z
-      .string({ required_error: 'Saisissez votre mot de passe.' })
+      .string({ error: 'Saisissez votre mot de passe.' })
       .min(1, 'Saisissez votre mot de passe.'),
   }),
 )
@@ -34,7 +34,11 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const formError = ref<string | null>(
-  route.query.expired ? 'Votre session a expiré, reconnectez-vous.' : null,
+  route.query.expired === 'idle'
+    ? `Vous avez été déconnecté après ${route.query.minutes ?? '20'} min sans activité. Reconnectez-vous.`
+    : route.query.expired
+      ? 'Votre session a expiré, reconnectez-vous.'
+      : null,
 )
 
 const onSubmit = handleSubmit(async (values) => {
@@ -42,6 +46,7 @@ const onSubmit = handleSubmit(async (values) => {
   try {
     const user = await auth.login(values)
     if (user.role !== 'ADMIN') return router.replace({ name: 'forbidden' })
+    if (user.mustChangePassword) return router.replace({ name: 'change-password' })
     const redirect =
       typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
         ? route.query.redirect
@@ -97,6 +102,9 @@ const onSubmit = handleSubmit(async (values) => {
           <div class="mt-2 flex flex-wrap gap-2">
             <button type="button" class="chip" @click="setValues(DEMO_ACCOUNTS.admin)">
               Administrateur
+            </button>
+            <button type="button" class="chip" @click="setValues(DEMO_ACCOUNTS.admin2)">
+              2e administrateur
             </button>
             <button type="button" class="chip" @click="setValues(DEMO_ACCOUNTS.player)">
               Joueur (refusé)

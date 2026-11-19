@@ -2,11 +2,15 @@
 # CREATURA - Intégration continue du repo app
 #
 #   1. Vérifier  : tests de la base (SQL), du back (pytest sur PostgreSQL),
-#                  du front (types, tests unitaires, build)
+#                  du front (lint, types, tests unitaires, build),
+#                  de bout en bout (Playwright sur l'API simulée, et hors PR
+#                  sur la stack réelle en Docker)
 #   2. Construire: une image Docker par composant
 #   3. Publier   : les images sur GHCR, seulement si tout est vert et hors PR
 #   4. Windows   : l'exe de l'application (apps/desktop) en artefact, hors PR ;
 #                  Release GitHub sur un tag v*
+#   5. Android   : l'APK de l'application (apps/mobile), de la même façon,
+#                  après ses tests sur émulateur
 #
 # La release validée est déployée par le workflow deploy-aws.yml du dépôt infra.
 # Aucun accès AWS dans ce dépôt ; voir docs/ci-cd.md.
@@ -134,15 +138,33 @@ jobs:
       - name: Installer les dépendances
         run: uv sync --frozen
 
+      # Règles dans pyproject.toml ([tool.ruff]).
+      - name: Lint (Ruff)
+        run: uv run ruff check . --output-format=github
+
+      # Couverture : 92 % au lot 6 ; en dessous de 90 %, la CI échoue.
       - name: Tests
-        run: uv run pytest --junitxml=../reports/backend-tests.xml
+        run: |
+          mkdir -p ../reports
+          uv run pytest --junitxml=../reports/backend-tests.xml             --cov=app --cov-report=term --cov-report=xml:../reports/backend-coverage.xml             --cov-fail-under=90
+
+      - name: Couverture dans le résumé
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          rate = float(ET.parse('../reports/backend-coverage.xml').getroot().get('line-rate')) * 100
+          print(f"### Couverture du back : {rate:.1f} % des lignes (seuil : 90 %)")
+          PY
 
       - name: Publier le rapport de tests
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: tests-backend-${{ github.run_id }}-${{ github.run_attempt }}
-          path: reports/backend-tests.xml
+          path: |
+            reports/backend-tests.xml
+            reports/backend-coverage.xml
 
   # ---------------------------------------------------------------------------
   # Front : PWA joueur et dashboard admin (monorepo pnpm)
@@ -167,6 +189,22 @@ jobs:
       - name: Installer les dépendances
         run: pnpm install --frozen-lockfile
 
+      # Les scripts lint corrigent ce qui peut l'être (--fix) : une correction non commitée
+      # apparaît dans git diff et fait échouer l'étape, comme une erreur non corrigeable.
+      - name: Lint
+        run: |
+          pnpm -r run lint
+          git diff --exit-code
+
+      # Le contrat (creatura-api.openapi.yaml) fait foi : les types générés doivent le suivre.
+      - name: Contrat OpenAPI (types générés à jour)
+        run: |
+          pnpm --filter @creatura/shared run generate:api
+          if ! git diff --exit-code -- packages/shared/src/api/schema.d.ts; then
+            echo "::error file=packages/shared/src/api/schema.d.ts::Types générés en retard sur creatura-api.openapi.yaml : lancer pnpm --filter @creatura/shared generate:api et commiter."
+            exit 1
+          fi
+
       - name: Vérification des types et build déployable
         env:
           VITE_API_BASE_URL: /api/v1
@@ -182,8 +220,32 @@ jobs:
           test -f release-site/index.html
           test -f release-site/admin/index.html
 
-      - name: Tests unitaires
-        run: pnpm -r run test:unit --run
+      # Tests unitaires avec couverture ; seuils dans les vitest.config.ts (planchers du lot 6).
+      - name: Tests unitaires et couverture
+        run: pnpm -r run test:coverage
+
+      - name: Couverture dans le résumé
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### Couverture du front (logique .ts, lignes)"
+            for pkg in apps/player apps/admin packages/shared; do
+              f="$pkg/coverage/coverage-summary.json"
+              [ -f "$f" ] && echo "- \`$pkg\` : $(jq -r '.total.lines.pct' "$f") %"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier la couverture du front
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-frontend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/player/coverage/
+            apps/admin/coverage/
+            packages/shared/coverage/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Emballer et identifier le frontend testé
         run: python scripts/ci/package-frontend.py
@@ -202,6 +264,162 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
+  # Interrupteur des tests e2e : la variable de dépôt SKIP_E2E=true désactive les jobs
+  # e2e-mock et e2e-stack (Settings → Secrets and variables → Actions → Variables).
+  # Ce job ne sert qu'à le signaler dans l'exécution, pour éviter un skip silencieux.
+  # ---------------------------------------------------------------------------
+  e2e-skip-notice:
+    name: E2E désactivés (SKIP_E2E)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && vars.SKIP_E2E == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "::notice title=Tests e2e désactivés::vars.SKIP_E2E=true — les jobs e2e-mock et e2e-stack sont sautés pour cette exécution."
+
+  # ---------------------------------------------------------------------------
+  # Tests de bout en bout (e2e/) : site joueur et dashboard admin sur l'API
+  # simulée. PR : Chromium. Push : Chromium, Firefox, WebKit et mobile.
+  # Stratégie et scénarios : docs/tests/README.md
+  # ---------------------------------------------------------------------------
+  e2e-mock:
+    name: E2E (API simulée)
+    needs: detect
+    # SKIP_E2E=true désactive ce job (voir e2e-skip-notice). La synthèse tolère l'état « skipped ».
+    if: needs.detect.outputs.frontend == 'true' && vars.SKIP_E2E != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # PR : retour rapide. Push : tous les navigateurs.
+      E2E_BROWSERS: ${{ github.event_name == 'pull_request' && 'chromium' || 'chromium firefox webkit' }}
+      E2E_SCRIPT: ${{ github.event_name == 'pull_request' && 'test:mock' || 'test:mock:all' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Vérification des types des tests
+        run: pnpm --filter e2e run type-check
+
+      - name: Version de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter e2e exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache des navigateurs
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ env.E2E_BROWSERS }}
+
+      - name: Installer les navigateurs
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter e2e exec playwright install --with-deps $E2E_BROWSERS
+
+      - name: Dépendances système des navigateurs
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter e2e exec playwright install-deps $E2E_BROWSERS
+
+      # Les apps sont construites en mode simulé puis servies par vite preview (playwright.config.ts).
+      - name: Tests
+        run: pnpm --filter e2e run $E2E_SCRIPT
+
+      - name: Publier le rapport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-mock-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report/
+            e2e/reports/
+            e2e/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Tests de bout en bout sur la stack réelle : base et API en Docker
+  # (e2e/compose.yaml), site et dashboard construits sans API simulée, vrai
+  # WebSocket entre deux navigateurs. Hors PR : construit les images à chaque fois.
+  # ---------------------------------------------------------------------------
+  e2e-stack:
+    name: E2E (stack réelle)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request' && vars.SKIP_E2E != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # La stack reste en place après les tests : ses journaux sont publiés en cas d'échec.
+      E2E_KEEP_STACK: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Version de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter e2e exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache des navigateurs
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+
+      - name: Installer Chromium
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+
+      - name: Dépendances système de Chromium
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter e2e exec playwright install-deps chromium
+
+      # L'application Windows (Electron) est testée ici aussi, sous Linux : il lui faut un écran.
+      - name: Écran virtuel pour Electron
+        run: sudo apt-get install -y --no-install-recommends xvfb
+
+      # Démarre la stack (stack/global-setup.ts), construit les apps, lance les tests.
+      - name: Tests
+        run: xvfb-run -a pnpm --filter e2e run test:stack
+
+      - name: Journaux de la stack
+        if: failure()
+        run: |
+          mkdir -p e2e/reports
+          docker compose -f e2e/compose.yaml logs --no-color > e2e/reports/stack.log 2>&1 || true
+
+      - name: Publier le rapport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-stack-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report-stack/
+            e2e/reports/
+            e2e/test-results-stack/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # Application Windows (apps/desktop) : exe en artefact, et Release GitHub sur
   # un tag v*. Adresse du backend : variable CUSTOM_DOMAIN de l'environnement
   # production (domaine du site, devant CloudFront) ; sans elle, exe de
@@ -211,7 +429,8 @@ jobs:
     name: Application Windows
     needs: frontend
     # Pas sur les PR : plusieurs minutes de runner Windows à chaque mise à jour.
-    if: github.event_name != 'pull_request'
+    # SKIP_NATIVE_APPS=true : passe aussi bien l'exe que l'APK (CI accélérée).
+    if: github.event_name != 'pull_request' && vars.SKIP_NATIVE_APPS != 'true'
     runs-on: windows-latest
     # Donne accès aux variables de l'environnement production (CUSTOM_DOMAIN).
     environment: production
@@ -273,6 +492,23 @@ jobs:
           fi
           test -f apps/desktop/release/latest.json
 
+      # L'exe construit démarre, sert le site qu'il embarque et lit l'adresse du backend dans
+      # l'ordre prévu (e2e/specs-desktop/exe). En cas d'échec, l'exe n'est ni publié ni ajouté à
+      # la Release (les étapes suivantes sont sautées).
+      - name: Tests de l'exe
+        run: pnpm --filter e2e run test:exe
+
+      - name: Rapport des tests de l'exe
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-exe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/reports/
+            e2e/test-results-exe/
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Publier l'exe
         uses: actions/upload-artifact@v4
         with:
@@ -308,17 +544,224 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
+  # Tests de l'application Android (e2e/specs-android) : deux APK de debug
+  # (démo, et site injoignable) testés sur un émulateur Android 14 avec
+  # Playwright Android. Le job mobile l'attend : un APK n'est publié que si ses
+  # tests passent. Hors PR : construction Gradle et émulateur prennent du temps.
+  # ---------------------------------------------------------------------------
+  e2e-mobile:
+    name: E2E (application Android)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request' && vars.SKIP_E2E != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      # APK de debug (sans les secrets de signature) : leur WebView est inspectable.
+      - name: Construire les APK de test
+        run: pnpm --filter e2e run build:android
+
+      # L'émulateur a besoin de l'accélération matérielle du runner.
+      - name: Activer KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Tests sur émulateur
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: pnpm --filter e2e run test:android
+
+      - name: Publier le rapport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-android-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report-android/
+            e2e/reports/
+            e2e/test-results-android/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Application Android (apps/mobile) : APK en artefact, et ajouté à la Release
+  # GitHub sur un tag v* de la même version. Adresse du site : variable
+  # CUSTOM_DOMAIN de l'environnement production, comme pour l'exe ; sans elle,
+  # APK de démonstration sur l'API simulée. Signature : secrets ANDROID_* ;
+  # sans eux, APK signé avec une clé de debug.
+  # ---------------------------------------------------------------------------
+  mobile:
+    name: Application Android
+    # L'APK n'est construit et publié que si les tests de l'application ont réussi.
+    needs: [frontend, e2e-mobile]
+    # Pas sur les PR : plusieurs minutes de Gradle à chaque mise à jour.
+    # SKIP_NATIVE_APPS=true : passe aussi bien l'exe que l'APK (CI accélérée).
+    if: github.event_name != 'pull_request' && vars.SKIP_NATIVE_APPS != 'true'
+    runs-on: ubuntu-latest
+    # Donne accès aux variables et secrets de l'environnement production.
+    environment: production
+    # Facultatif, comme l'exe : un échec est signalé sur ce job sans faire échouer la CI.
+    continue-on-error: true
+    timeout-minutes: 30
+    permissions:
+      contents: write # Release GitHub sur un tag v*
+    env:
+      CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Capacitor 8 demande Java 21 ; le SDK Android est déjà installé sur le runner.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Version
+        id: version
+        run: |
+          version=$(node -p "require('./apps/mobile/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Un tag v1.2.3 ne reçoit l'APK que si apps/mobile/package.json est aussi en 1.2.3.
+          publish=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            if [ "${GITHUB_REF_NAME#v}" = "$version" ]; then
+              publish=true
+            else
+              echo "::notice::Tag $GITHUB_REF_NAME, APK en version $version : il n'est pas ajouté à la Release."
+            fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Clé de signature
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::Secret ANDROID_KEYSTORE_BASE64 absent : APK signé avec une clé de debug. Chaque run a sa propre clé : pour mettre à jour l'application, il faudra la désinstaller d'abord."
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/creatura.jks"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            echo "ANDROID_KEYSTORE_FILE=$keystore"
+            echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+      - name: Construire l'APK
+        run: |
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            # « creatura.fr » ou « https://creatura.fr/ » : l'APK veut une adresse https:// sans / final.
+            domain="${CUSTOM_DOMAIN%/}"
+            case "$domain" in http://*|https://*) site_url="$domain" ;; *) site_url="https://$domain" ;; esac
+            echo "SITE_URL=$site_url" >> "$GITHUB_ENV"
+            pnpm mobile --url "$site_url"
+          else
+            echo "::warning::Variable CUSTOM_DOMAIN absente de l'environnement production : APK de démonstration (API simulée)."
+            pnpm mobile:demo
+          fi
+          test -f apps/mobile/release/android.json
+
+      - name: Publier l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: creatura-android-${{ steps.version.outputs.version }}
+          path: |
+            apps/mobile/release/Creatura-*.apk
+            apps/mobile/release/android.json
+          if-no-files-found: error
+          compression-level: 0 # un APK est déjà compressé
+
+      - name: Release GitHub
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          files=(apps/mobile/release/Creatura-*.apk apps/mobile/release/android.json)
+          # Le job Windows peut créer la même Release au même moment : on réessaie l'envoi.
+          for attempt in 1 2 3; do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber && exit 0
+            else
+              gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "Créatura $VERSION" --generate-notes && exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Résumé
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Application Android $VERSION"
+            if [ -n "$SITE_URL" ]; then echo "Site : \`$SITE_URL\`"; else echo "Démonstration (API simulée)"; fi
+            if [ -n "$ANDROID_KEYSTORE_FILE" ]; then echo "Signé avec la clé de publication"; else echo "Signé avec une clé de debug"; fi
+            echo
+            echo "Artefact : \`creatura-android-$VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
   # Images Docker : construites à chaque fois, publiées si tout est vert
   # ---------------------------------------------------------------------------
   images:
     name: Image ${{ matrix.image.name }}
-    needs: [detect, db, backend, frontend]
-    # Le front peut être absent (job ignoré) ; tout le reste doit avoir réussi.
+    needs: [detect, db, backend, frontend, e2e-mock, e2e-stack]
+    # Le front peut être absent (job ignoré), l'E2E sur stack réelle ne tourne pas sur les PR ;
+    # tout le reste doit avoir réussi.
     if: >-
       ${{ !cancelled()
       && needs.db.result == 'success'
       && needs.backend.result == 'success'
-      && contains(fromJSON('["success", "skipped"]'), needs.frontend.result) }}
+      && contains(fromJSON('["success", "skipped"]'), needs.frontend.result)
+      && contains(fromJSON('["success", "skipped"]'), needs['e2e-mock'].result)
+      && contains(fromJSON('["success", "skipped"]'), needs['e2e-stack'].result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -412,7 +855,16 @@ jobs:
   release:
     name: Release et déploiement develop
     needs: [db, backend, frontend, images]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # On livre dès que le build est prêt, même si les e2e sont sautés (SKIP_E2E) ou ignorés : le
+    # `!cancelled()` retire le success() implicite, puis on exige seulement les jobs qui produisent
+    # la release (base, back, front, images).
+    if: >-
+      ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop'
+      && !cancelled()
+      && needs.db.result == 'success'
+      && needs.backend.result == 'success'
+      && needs.frontend.result == 'success'
+      && needs.images.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -446,7 +898,13 @@ jobs:
   notify-infra:
     name: Déclencher le déploiement AWS
     needs: release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # GitHub propage le « skipped » de façon transitive : sans fonction de statut, ce job héritait du
+    # saut des e2e (via release → images → e2e) même quand release réussissait. Le `!cancelled()`
+    # retire le success() implicite ; on déclenche le déploiement dès que release a réussi.
+    if: >-
+      ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop'
+      && !cancelled()
+      && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Attendre la conclusion CI puis demander le déploiement

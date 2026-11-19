@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /** UC-01 · Créer un compte (pseudonyme, identifiant, mot de passe). */
 import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { toTypedSchema } from '@creatura/shared/forms'
 import { useRouter } from 'vue-router'
 import { errorMessage, isApiError } from '@creatura/shared/api/types'
 import FormField from '@creatura/shared/ui/FormField.vue'
@@ -15,18 +15,18 @@ import { useAuthStore } from '@/stores/auth'
 const schema = toTypedSchema(
   z.object({
     pseudo: z
-      .string({ required_error: 'Choisissez un pseudonyme.' })
+      .string({ error: 'Choisissez un pseudonyme.' })
       .trim()
       .min(3, 'Au moins 3 caractères.')
       .max(20, '20 caractères au maximum.')
       .regex(/^[A-Za-z0-9_-]+$/, 'Lettres sans accent, chiffres, « _ » et « - » uniquement.'),
     login: z
-      .string({ required_error: 'Choisissez un identifiant.' })
+      .string({ error: 'Choisissez un identifiant.' })
       .trim()
       .min(3, 'Au moins 3 caractères.')
       .max(50, '50 caractères au maximum.'),
     password: z
-      .string({ required_error: 'Choisissez un mot de passe.' })
+      .string({ error: 'Choisissez un mot de passe.' })
       .min(12, 'Au moins 12 caractères.')
       .max(128, '128 caractères au maximum.'),
   }),

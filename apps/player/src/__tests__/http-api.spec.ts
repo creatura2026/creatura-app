@@ -8,6 +8,7 @@ const USER = {
   pseudo: 'Alice',
   role: 'PLAYER',
   createdAt: '2026-11-10T08:00:00Z',
+  mustChangePassword: false,
 } as const
 
 function memorySession(accessToken = 'access-1'): SessionStore & { current: Session | null } {
@@ -109,6 +110,7 @@ describe('API HTTP du joueur', () => {
         refreshToken: 'refresh-2',
         tokenType: 'Bearer',
         expiresIn: 900,
+        sessionIdleSeconds: 1200,
         user: USER,
       }),
       json(200, { ...USER, progress: {}, boosterAvailableToday: true }),

@@ -64,6 +64,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Réinitialiser son mot de passe avec un lien d'administrateur (AS-75)
+         * @description Sans jeton d'accès. `token` est le paramètre `jeton` du lien généré par un admin
+         *     (`POST /admin/players/{playerId}/password-reset`). Le lien vaut 5 minutes et ne sert qu'une fois.
+         *     Lien inconnu, expiré, déjà utilisé ou remplacé : `400 RESET_LINK_INVALID`, sans dire lequel.
+         *     Les sessions ouvertes du joueur sont fermées.
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -114,6 +137,40 @@ export interface paths {
         /** Consulter son profil et sa progression (UC-02, AS-2) */
         get: operations["getMe"];
         put?: never;
+        post?: never;
+        /**
+         * Supprimer son compte
+         * @description Le mot de passe actuel est demandé. Le compte est anonymisé : pseudo « Joueur supprimé #… »
+         *     dans l'historique des autres joueurs, identifiant libéré, plus aucune connexion possible.
+         *     La collection est effacée (les légendaires retournent au stock) et les échanges en cours
+         *     sont abandonnés. Un administrateur ne peut supprimer son compte que s'il reste un autre
+         *     administrateur (`LAST_ADMIN`).
+         */
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Changer son mot de passe
+         * @description Le mot de passe actuel est demandé (`VALIDATION_ERROR` sur `currentPassword` s'il est
+         *     faux). Le nouveau suit les règles de l'inscription et doit différer de l'actuel. Les autres
+         *     sessions sont fermées ; celle-ci reçoit de nouveaux jetons.
+         *
+         *     AS-71 : un admin créé depuis le dashboard doit le faire avant d'accéder au dashboard (son
+         *     mot de passe provisoire comme mot de passe actuel). Toute route `/admin/*` lui répond
+         *     `403 PASSWORD_CHANGE_REQUIRED` tant que `user.mustChangePassword` est vrai.
+         */
+        put: operations["changePassword"];
         post?: never;
         delete?: never;
         options?: never;
@@ -447,6 +504,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/gifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mes dons, reçus et/ou envoyés */
+        get: operations["listMyGifts"];
+        put?: never;
+        /**
+         * Offrir une carte possédée à un autre joueur
+         * @description Crée un don en attente (`PENDING`). Le destinataire l'accepte ou le refuse ; le donneur peut l'annuler.
+         */
+        post: operations["createGift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gifts/{giftId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accepter un don reçu
+         * @description Les cartes passent dans la collection du destinataire, tout ou rien. Si le donneur ne les possède plus, le don passe `FAILED` (aucun transfert).
+         */
+        post: operations["acceptGift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gifts/{giftId}/refuse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refuser un don reçu */
+        post: operations["refuseGift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gifts/{giftId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Annuler un don envoyé (tant qu'il est en attente) */
+        post: operations["cancelGift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/trades": {
         parameters: {
             query?: never;
@@ -512,6 +650,282 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/creatures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Toutes les cartes, y compris celles qui n'apparaissent qu'au prochain minuit */
+        get: operations["listAdminCreatures"];
+        put?: never;
+        /**
+         * Ajoute une carte, visible et tirable au prochain minuit (heure de Paris)
+         * @description Une légendaire est une édition limitée - `stock` (nombre d'exemplaires) est alors obligatoire, et interdit pour les autres raretés.
+         */
+        post: operations["createAdminCreature"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/creatures/{creatureId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creatureId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modifier une carte (nom, description, famille, rareté immédiats ; stock à minuit)
+         * @description Nom, description, famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une
+         *     édition limitée (légendaire) est différé au prochain minuit et ne peut qu'augmenter : il est
+         *     immédiat seulement quand la carte devient légendaire. Champs omis inchangés ; l'image par `/sprite`.
+         */
+        patch: operations["updateCreature"];
+        trace?: never;
+    };
+    "/admin/creatures/{creatureId}/rarity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creatureId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Annule la hausse d'exemplaires prévue au prochain minuit */
+        delete: operations["cancelRarityChange"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les joueurs avec leurs connexions et leurs cartes (AS-71)
+         * @description Une ligne par joueur : dernière connexion, connexions sur la période (`from`, `to`), cartes possédées et
+         *     demande de suppression en attente. Une connexion = un login réussi ; le renouvellement du jeton ne compte pas.
+         *     L'historique des connexions est gardé 13 mois.
+         */
+        get: operations["listAdminPlayers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/players/{playerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fiche d'un joueur (AS-71)
+         * @description Cartes par rareté et par famille, connexions par jour ou par mois sur la période.
+         */
+        get: operations["getAdminPlayer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/players/{playerId}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Générer un lien de réinitialisation du mot de passe d'un joueur (AS-75)
+         * @description Le lien (`{appli joueur}/reinitialiser?jeton=…`) vaut 5 minutes et ne sert qu'une fois. L'admin le copie et
+         *     l'envoie au joueur ; il n'est renvoyé qu'ici. Le lien précédent du joueur, s'il n'a pas servi, est annulé.
+         *     La base ne garde que l'empreinte SHA-256 du jeton. Joueurs uniquement (404 pour un admin).
+         */
+        post: operations["createPasswordResetLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les demandes de suppression (AS-71)
+         * @description Toutes les demandes, journal compris, de la plus récente à la plus ancienne. Une demande en attente depuis plus de 7 jours expire.
+         */
+        get: operations["listDeletionRequests"];
+        put?: never;
+        /**
+         * Demander la suppression de joueurs (AS-71)
+         * @description Seul l'admin choisi (`validatorId`, un autre admin actif) pourra valider ou refuser. Un joueur ne peut être
+         *     que dans une seule demande en attente (`409 PLAYER_ALREADY_REQUESTED`). Seuls des comptes joueurs peuvent
+         *     être supprimés.
+         */
+        post: operations["createDeletionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/deletion-requests/{requestId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant d'une demande de suppression */
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Valider une demande de suppression (AS-71)
+         * @description Réservé au validateur choisi. Les joueurs sont supprimés tout de suite : compte, collection, connexions,
+         *     boosters, messages et échanges en attente. Leurs légendaires retournent dans le stock. Leurs échanges
+         *     terminés restent pour l'autre joueur, avec « Joueur supprimé » à leur place.
+         */
+        post: operations["approveDeletionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/deletion-requests/{requestId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant d'une demande de suppression */
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refuser une demande de suppression (AS-71)
+         * @description Réservé au validateur choisi. Personne n'est supprimé.
+         */
+        post: operations["rejectDeletionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/deletion-requests/{requestId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant d'une demande de suppression */
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Annuler sa demande de suppression (AS-71)
+         * @description Réservé à l'admin qui a fait la demande, tant qu'elle est en attente.
+         */
+        post: operations["cancelDeletionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les comptes admin (AS-71)
+         * @description Actifs d'abord. Sert aussi à choisir le validateur d'une demande de suppression.
+         */
+        get: operations["listAdmins"];
+        put?: never;
+        /**
+         * Créer un compte admin (AS-71)
+         * @description Le serveur génère un mot de passe provisoire (16 caractères en 4 groupes, ex. `k7mq-x2vd-9tfp-a4ne`) et le
+         *     renvoie cette seule fois dans `temporaryPassword` ; seul son hash est stocké. À sa première connexion,
+         *     `user.mustChangePassword` est vrai : le nouvel admin doit le remplacer (`PUT /me/password`) avant
+         *     d'accéder au dashboard.
+         */
+        post: operations["createAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/admins/{adminId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Désactiver un autre compte admin (AS-71)
+         * @description Jamais son propre compte (400), et jamais s'il resterait moins de deux admins actifs (400) : une demande
+         *     de suppression a besoin d'un demandeur et d'un validateur. L'admin désactivé ne peut plus se connecter (`403 ACCOUNT_DISABLED`),
+         *     ses jetons sont refusés et ses demandes de suppression en attente (faites ou à valider) sont annulées.
+         */
+        post: operations["deactivateAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -544,7 +958,7 @@ export interface components {
             boosterId?: string;
         };
         /** @enum {string} */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "RATE_LIMITED" | "INTERNAL_ERROR";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "LOGIN_ALREADY_USED" | "PSEUDO_ALREADY_USED" | "BOOSTER_ALREADY_CLAIMED" | "TRADE_NOT_PENDING" | "CARDS_UNAVAILABLE" | "CARDS_NOT_OWNED" | "TRADE_WITH_SELF" | "GIFT_WITH_SELF" | "GIFT_NOT_PENDING" | "GIFT_ALREADY_PENDING" | "LAST_ADMIN" | "RATE_LIMITED" | "ACCOUNT_DISABLED" | "PASSWORD_CHANGE_REQUIRED" | "PLAYER_ALREADY_REQUESTED" | "REQUEST_NOT_PENDING" | "RESET_LINK_INVALID" | "INTERNAL_ERROR";
         PageMeta: {
             page: number;
             pageSize: number;
@@ -570,6 +984,19 @@ export interface components {
             /** Format: password */
             password: string;
         };
+        PasswordChangeRequest: {
+            /** Format: password */
+            currentPassword: string;
+            /** Format: password */
+            newPassword: string;
+        };
+        AccountDeleteRequest: {
+            /**
+             * Format: password
+             * @description Mot de passe actuel, pour confirmer
+             */
+            password: string;
+        };
         RefreshRequest: {
             refreshToken: string;
         };
@@ -585,6 +1012,14 @@ export interface components {
              * @example 900
              */
             expiresIn: number;
+            /**
+             * @description Inactivité (sans action de l'utilisateur) au bout de laquelle la session expire, en
+             *     secondes. Le client avertit 30 s avant puis déconnecte ; il renouvelle les jetons
+             *     (`POST /auth/refresh`) tant que l'utilisateur agit. Le refresh token ne vit que
+             *     1,25 × cette durée : une session abandonnée ne peut plus être prolongée.
+             * @example 1200
+             */
+            sessionIdleSeconds: number;
             user: components["schemas"]["User"];
         };
         /** @enum {string} */
@@ -596,6 +1031,8 @@ export interface components {
             role: components["schemas"]["Role"];
             /** Format: date-time */
             createdAt: string;
+            /** @description Admin créé depuis le dashboard qui n'a pas encore remplacé son mot de passe provisoire (`PUT /me/password`). Toujours faux pour un joueur. */
+            mustChangePassword: boolean;
         };
         Me: components["schemas"]["User"] & {
             progress: components["schemas"]["CollectionProgress"];
@@ -699,6 +1136,7 @@ export interface components {
             items: components["schemas"]["CollectionEntry"][];
             progress: components["schemas"]["CollectionProgress"];
         };
+        /** @description Un joueur supprimé (AS-71) apparaît dans les échanges terminés avec l'identifiant `00000000-0000-0000-0000-000000000000` et le pseudo « Joueur supprimé ». */
         PlayerSummary: {
             /** Format: uuid */
             id: string;
@@ -901,19 +1339,30 @@ export interface components {
         ScheduledBoosterSettings: {
             cardsPerBooster: number;
             rarityWeights: components["schemas"]["RarityWeights"];
-            /** Format: date */
+            /**
+             * Format: date
+             * @description Jour (heure de Paris) où les réglages s'appliquent
+             */
             effectiveFrom: string;
         };
         AdminCreature: components["schemas"]["Creature"] & {
-            /** @description Clé du fichier sur le CDN (sprites/….png) */
+            /**
+             * @description Clé du fichier sur le CDN
+             * @example sprites/moss_puff.png
+             */
             image: string;
-            /** @description Légendaire : exemplaires de l'édition limitée ; null = illimité */
+            /** @description Légendaire - exemplaires de l'édition limitée ; null = illimitée */
             stockTotal: number | null;
             stockRemaining: number | null;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description Jour où la carte devient visible et tirable
+             */
             availableFrom: string;
+            /** @description Hausse d'exemplaires d'une édition limitée prévue au prochain minuit, sinon null */
             scheduledChange: {
                 rarity: components["schemas"]["RaritySummary"];
+                /** @description Nouveau total d'exemplaires visé */
                 stock: number | null;
                 /** Format: date */
                 effectiveFrom: string;
@@ -922,13 +1371,58 @@ export interface components {
         AdminCreatureInput: {
             name: string;
             description?: string;
-            family: string;
-            rarity: string;
+            /** @enum {string} */
+            family: "NATURE" | "CRISTAL" | "BRUME" | "LUEUR";
+            /** @enum {string} */
+            rarity: "COMMON" | "UNCOMMON" | "RARE" | "LEGENDARY";
+            /** @description Fichier déjà présent sur le CDN */
             image: string;
+            /** @description Obligatoire pour une légendaire (édition limitée) */
             stock?: number | null;
         };
-        RarityChangeInput: {
-            rarity: string;
+        /**
+         * @description PENDING : en attente de la décision du destinataire. ACCEPTED : accepté, cartes transférées. REFUSED : refusé par le destinataire. CANCELLED : annulé par le donneur. FAILED : le donneur ne possédait plus la carte au moment d'accepter ; aucun transfert.
+         * @enum {string}
+         */
+        GiftStatus: "PENDING" | "ACCEPTED" | "REFUSED" | "CANCELLED" | "FAILED";
+        CreateGiftRequest: {
+            /** Format: uuid */
+            recipientId: string;
+            /** @description Identifiant de la carte dans le catalogue */
+            creatureId: string;
+            /** @default 1 */
+            quantity: number;
+        };
+        Gift: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["GiftStatus"];
+            giver: components["schemas"]["PlayerSummary"];
+            recipient: components["schemas"]["PlayerSummary"];
+            creature: components["schemas"]["CreatureSummary"];
+            quantity: number;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Date de la décision ; null tant que le don est en attente
+             */
+            decidedAt: string | null;
+            /** @description Raison quand le statut vaut FAILED */
+            failureReason?: string | null;
+        };
+        GiftPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["Gift"][];
+        };
+        /** @description Modification d'une carte ; chaque champ est facultatif (omis = inchangé). Nom, description, famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une édition limitée est immédiat quand la carte devient légendaire, puis différé au prochain minuit et en hausse seulement (une baisse est refusée). */
+        AdminCreatureUpdate: {
+            name?: string;
+            description?: string;
+            /** @enum {string} */
+            family?: "NATURE" | "CRISTAL" | "BRUME" | "LUEUR";
+            /** @enum {string} */
+            rarity?: "COMMON" | "UNCOMMON" | "RARE" | "LEGENDARY";
+            /** @description Total d'exemplaires de l'édition limitée (légendaire) */
             stock?: number | null;
         };
         /** @description Poids de tirage de chaque rareté (de 0 à 1000, 0 retire la rareté du tirage). Les quatre sont obligatoires ; commune et peu commune ne peuvent pas être toutes deux à 0. */
@@ -954,8 +1448,146 @@ export interface components {
                 observedRate: number;
             }[];
         };
+        /**
+         * @default DAY
+         * @enum {string}
+         */
+        Granularity: "DAY" | "MONTH";
+        AdminSummary: {
+            /** Format: uuid */
+            id: string;
+            pseudo: string;
+        };
+        AdminPlayer: {
+            /** Format: uuid */
+            id: string;
+            pseudo: string;
+            login: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description null si aucune connexion depuis 13 mois
+             */
+            lastLoginAt: string | null;
+            loginsInPeriod: number;
+            /** @description Exemplaires possédés, doublons compris */
+            totalCards: number;
+            /**
+             * Format: uuid
+             * @description Demande de suppression en attente qui concerne ce joueur
+             */
+            pendingDeletionRequestId: string | null;
+        };
+        AdminPlayerPage: components["schemas"]["PageMeta"] & {
+            period: components["schemas"]["Period"];
+            items: components["schemas"]["AdminPlayer"][];
+        };
+        CardCount: {
+            /** @description Exemplaires, doublons compris */
+            cards: number;
+            distinctCreatures: number;
+        };
+        AdminPlayerDetail: {
+            player: components["schemas"]["AdminPlayer"];
+            /** @description Les quatre raretés, de la plus commune à la plus rare, 0 compris */
+            cardsByRarity: (components["schemas"]["CardCount"] & {
+                rarity: components["schemas"]["RaritySummary"];
+            })[];
+            /** @description Les quatre familles, 0 compris */
+            cardsByFamily: (components["schemas"]["CardCount"] & {
+                family: components["schemas"]["Family"];
+            })[];
+            logins: {
+                granularity: components["schemas"]["Granularity"];
+                /** @description Un point par jour (DAY) ou par mois (MONTH, date du 1er du mois) de la période, 0 compris */
+                points: components["schemas"]["DailyCount"][];
+            };
+        };
+        /** @enum {string} */
+        DeletionRequestStatus: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+        DeletionRequest: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DeletionRequestStatus"];
+            requestedBy: components["schemas"]["AdminSummary"];
+            validator: components["schemas"]["AdminSummary"];
+            reason: string | null;
+            accountCount: number;
+            /** @description Vide une fois la demande validée (les joueurs supprimés ne sont pas gardés dans le journal) */
+            players: components["schemas"]["PlayerSummary"][];
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description 7 jours après la création
+             */
+            expiresAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+        };
+        DeletionRequestPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["DeletionRequest"][];
+        };
+        DeletionRequestInput: {
+            playerIds: string[];
+            /**
+             * Format: uuid
+             * @description Autre admin actif, seul à pouvoir valider ou refuser
+             */
+            validatorId: string;
+            reason?: string | null;
+        };
+        AdminAccount: {
+            /** Format: uuid */
+            id: string;
+            pseudo: string;
+            login: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description null pour le premier admin, créé au démarrage du serveur */
+            createdBy: components["schemas"]["AdminSummary"] | null;
+            /** Format: date-time */
+            lastLoginAt: string | null;
+            mustChangePassword: boolean;
+            active: boolean;
+            /** Format: date-time */
+            deactivatedAt: string | null;
+            deactivatedBy: components["schemas"]["AdminSummary"] | null;
+        };
+        AdminAccountInput: {
+            pseudo: string;
+            login: string;
+        };
+        AdminAccountCreated: components["schemas"]["AdminAccount"] & {
+            /** @description Mot de passe provisoire généré par le serveur, renvoyé cette seule fois */
+            temporaryPassword: string;
+        };
+        PasswordResetLink: {
+            /**
+             * Format: uri
+             * @description Lien à copier et envoyer au joueur ; il ne sera plus affiché
+             */
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        PasswordResetRequest: {
+            /** @description Jeton du lien (paramètre `jeton`) */
+            token: string;
+            newPassword: string;
+        };
     };
     responses: {
+        /** @description Conflit avec l'état actuel (voir `code`) */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Requête invalide (`VALIDATION_ERROR`) */
         BadRequest: {
             headers: {
@@ -1045,6 +1677,8 @@ export interface components {
         /** @description Identifiant renvoyé par le catalogue (numéro en texte) */
         CreatureId: string;
         PlayerId: string;
+        /** @description Identifiant d'une demande de suppression */
+        RequestId: string;
         TradeId: string;
     };
     requestBodies: never;
@@ -1146,6 +1780,29 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Mot de passe changé */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
     refreshTokens: {
         parameters: {
             query?: never;
@@ -1213,6 +1870,65 @@ export interface operations {
                     "application/json": components["schemas"]["Me"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Compte supprimé ; le client oublie ses jetons */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Dernier administrateur (`LAST_ADMIN`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Mot de passe changé, nouveaux jetons pour cette session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokens"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -1748,6 +2464,183 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listMyGifts: {
+        parameters: {
+            query?: {
+                /** @description Dons envoyés, reçus, ou les deux */
+                role?: "all" | "sent" | "received";
+                status?: components["schemas"]["GiftStatus"];
+                /** @description Numéro de page, à partir de 1 */
+                page?: components["parameters"]["Page"];
+                /** @description Nombre d'éléments par page */
+                pageSize?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dons du joueur connecté, du plus récent au plus ancien */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createGift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGiftRequest"];
+            };
+        };
+        responses: {
+            /** @description Don créé, en attente de la décision du destinataire */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Gift"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Don identique déjà en attente (`GIFT_ALREADY_PENDING`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Don à soi-même (`GIFT_WITH_SELF`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    acceptGift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Don accepté (ou `FAILED` si la carte n'était plus disponible) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Gift"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Don déjà traité (`GIFT_NOT_PENDING`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    refuseGift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Don refusé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Gift"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Don déjà traité (`GIFT_NOT_PENDING`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cancelGift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Don annulé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Gift"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Don déjà traité (`GIFT_NOT_PENDING`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listAdminTrades: {
         parameters: {
             query?: {
@@ -1863,6 +2756,419 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listAdminCreatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cartes, avec stock, date de disponibilité et changement de rareté prévu */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreature"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAdminCreature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreatureInput"];
+            };
+        };
+        responses: {
+            /** @description Carte créée */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreature"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateCreature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creatureId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreatureUpdate"];
+            };
+        };
+        responses: {
+            /** @description Carte mise à jour */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreature"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelRarityChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creatureId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Carte sans changement prévu */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreature"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAdminPlayers: {
+        parameters: {
+            query?: {
+                /** @description Premier jour inclus de la période (30 jours avant `to` par défaut) */
+                from?: components["parameters"]["From"];
+                /** @description Dernier jour inclus de la période (aujourd'hui par défaut). Période de 366 jours au maximum. */
+                to?: components["parameters"]["To"];
+                /** @description Partie du pseudonyme, sans tenir compte des majuscules ni des accents */
+                search?: string;
+                sort?: "pseudo" | "createdAt" | "lastLoginAt" | "logins" | "totalCards";
+                order?: "asc" | "desc";
+                /** @description Numéro de page, à partir de 1 */
+                page?: components["parameters"]["Page"];
+                /** @description Nombre d'éléments par page */
+                pageSize?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Joueurs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlayerPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAdminPlayer: {
+        parameters: {
+            query?: {
+                /** @description Premier jour inclus de la période (30 jours avant `to` par défaut) */
+                from?: components["parameters"]["From"];
+                /** @description Dernier jour inclus de la période (aujourd'hui par défaut). Période de 366 jours au maximum. */
+                to?: components["parameters"]["To"];
+                granularity?: components["schemas"]["Granularity"];
+            };
+            header?: never;
+            path: {
+                playerId: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fiche du joueur */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlayerDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPasswordResetLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playerId: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lien généré */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetLink"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listDeletionRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["DeletionRequestStatus"];
+                /** @description Seulement les demandes dont l'admin connecté est le validateur */
+                toValidate?: boolean;
+                /** @description Numéro de page, à partir de 1 */
+                page?: components["parameters"]["Page"];
+                /** @description Nombre d'éléments par page */
+                pageSize?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Demandes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequestPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createDeletionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeletionRequestInput"];
+            };
+        };
+        responses: {
+            /** @description Demande en attente */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    approveDeletionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant d'une demande de suppression */
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Demande validée */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    rejectDeletionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant d'une demande de suppression */
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Demande refusée */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelDeletionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant d'une demande de suppression */
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Demande annulée */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listAdmins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Comptes admin */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccount"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminAccountInput"];
+            };
+        };
+        responses: {
+            /** @description Compte admin créé, avec son mot de passe provisoire (affiché une seule fois) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccountCreated"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deactivateAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compte désactivé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccount"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

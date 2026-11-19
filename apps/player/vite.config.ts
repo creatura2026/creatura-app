@@ -27,18 +27,23 @@ export default defineConfig({
     vue(),
     vueDevTools(),
     tailwindcss(),
-    // Exe de l'application Windows servis depuis apps/desktop/release/ (pnpm desktop).
-    localDownloads(fileURLToPath(new URL('../desktop/release', import.meta.url))),
+    // Exe de l'application Windows (apps/desktop/release/, pnpm desktop) et APK Android
+    // (apps/mobile/release/) servis sous /telechargements/.
+    localDownloads([
+      fileURLToPath(new URL('../desktop/release', import.meta.url)),
+      fileURLToPath(new URL('../mobile/release', import.meta.url)),
+    ]),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
       workbox: {
         // Illustrations et polices (sous-ensembles latins) disponibles hors ligne.
         globPatterns: ['**/*.{js,css,html,ico,svg}', 'assets/*.png', 'assets/*-latin-*.woff2'],
+        globIgnores: ['guide-images/**'],
         navigateFallback: '/index.html',
         // Le dashboard admin est servi sous /admin/ sur le même domaine : le service worker
-        // du joueur ne doit pas répondre à sa place.
-        navigateFallbackDenylist: [/^\/admin(\/|$)/, /^\/api\//],
+        // du joueur ne doit pas répondre à sa place, ni à celle des fichiers à télécharger.
+        navigateFallbackDenylist: [/^\/admin(\/|$)/, /^\/api\//, /^\/telechargements\//],
       },
       manifest: {
         name: 'Créatura',

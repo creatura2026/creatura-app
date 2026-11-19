@@ -15,9 +15,11 @@ import EmptyState from '@creatura/shared/ui/EmptyState.vue'
 import CreatureCard from '@creatura/shared/ui/CreatureCard.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
 import { useDebounced } from '@creatura/shared/composables'
+import { useTabs } from '@creatura/shared/tabs'
 
 import CreatureFilters from '@/components/CreatureFilters.vue'
 import CreatureOwners from '@/components/CreatureOwners.vue'
+import GiftCreatureForm from '@/components/GiftCreatureForm.vue'
 import { useCollection, useCreatures, usePlayerCards, useSearchPlayers } from '@/api/queries'
 import { useOpenTrade } from '@/composables/useOpenTrade'
 
@@ -32,6 +34,7 @@ const MODES: { value: Mode; label: string }[] = [
   { value: 'player', label: 'Par joueur' },
   { value: 'card', label: 'Par carte' },
 ]
+const modeTabs = useTabs(mode, () => MODES.map((m) => m.value))
 
 // ── Par joueur : ses cartes, toutes échangeables ─────────────────────────────
 const search = ref('')
@@ -79,8 +82,18 @@ const wanted = computed<CreatureSummary | null>(
   () => catalogue.data.value?.items.find((c) => c.id === wantedId.value) ?? null,
 )
 
+type CardAction = 'trade' | 'gift'
+const cardAction = ref<CardAction>('trade')
+const CARD_ACTIONS: { value: CardAction; label: string }[] = [
+  { value: 'trade', label: 'Échanger' },
+  { value: 'gift', label: 'Faire un don' },
+]
+const actionTabs = useTabs(cardAction, () => CARD_ACTIONS.map((a) => a.value))
+const ownedOfWanted = computed(() => (wantedId.value ? (owned.value.get(wantedId.value) ?? 0) : 0))
+
 function chooseCard(id: string | null) {
   wantedId.value = id
+  cardAction.value = 'trade'
   void router.replace({ query: id ? { carte: id } : {} })
 }
 
@@ -98,18 +111,16 @@ watch(mode, (m) => {
     <PageHeader title="Ouvrir un échange" />
 
     <div
-      role="tablist"
+      v-bind="modeTabs.listProps"
       aria-label="Chercher un échange"
       class="mb-5 grid grid-cols-2 border-2 border-ink bg-white sm:inline-grid"
     >
       <button
         v-for="m in MODES"
         :key="m.value"
-        type="button"
-        role="tab"
+        v-bind="modeTabs.tabProps(m.value)"
         class="min-h-11 cursor-pointer px-4 font-semibold not-last:border-r-2 not-last:border-ink sm:px-6"
         :class="mode === m.value ? 'bg-ink text-cream' : 'hover:bg-mist'"
-        :aria-selected="mode === m.value"
         @click="mode = m.value"
       >
         {{ m.label }}
@@ -117,7 +128,11 @@ watch(mode, (m) => {
     </div>
 
     <!-- Par joueur -->
-    <div v-if="mode === 'player'" class="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
+    <div
+      v-if="mode === 'player'"
+      v-bind="modeTabs.panelProps()"
+      class="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]"
+    >
       <div class="card-pixel self-start bg-sky p-5">
         <label for="player-search" class="field-label">Pseudonyme du joueur</label>
         <div class="relative">
@@ -198,9 +213,9 @@ watch(mode, (m) => {
                   type="button"
                   class="block h-full w-full cursor-pointer text-left transition-transform enabled:hover:-translate-y-1"
                   :disabled="opening"
-                  :aria-label="`Échanger avec ${player.pseudo} pour obtenir ${c.creature.name}`"
                   @click="openWith(player.id, c.creature.id)"
                 >
+                  <span class="sr-only">Échanger avec {{ player.pseudo }} pour obtenir </span>
                   <CreatureCard :creature="c.creature" :quantity="c.availableQuantity" />
                 </button>
                 <span
@@ -222,21 +237,62 @@ watch(mode, (m) => {
     </div>
 
     <!-- Par carte -->
-    <div v-else>
+    <div v-else v-bind="modeTabs.panelProps()">
       <div v-if="wantedId" class="grid gap-5 md:grid-cols-[12rem_minmax(0,1fr)]">
-        <div class="mx-auto w-44 md:w-auto">
+        <div class="mx-auto w-44 self-start">
           <CreatureCard v-if="wanted" :creature="wanted" />
         </div>
         <div>
           <button
             type="button"
-            class="mb-3 inline-flex min-h-10 cursor-pointer items-center gap-2 font-semibold"
+            class="mb-4 flex min-h-10 w-fit cursor-pointer items-center gap-2 font-semibold"
             @click="chooseCard(null)"
           >
             <PixelIcon name="arrow-left" :size="18" /> Choisir une autre carte
           </button>
-          <h2 class="mb-3 text-2xl font-bold">Qui possède {{ wanted?.name ?? 'cette carte' }} ?</h2>
-          <CreatureOwners :creature-id="wantedId" :creature-name="wanted?.name ?? 'cette carte'" />
+
+          <!-- Échange normal pour obtenir la carte, ou don si on la possède. -->
+          <div
+            v-bind="actionTabs.listProps"
+            aria-label="Que faire avec cette carte ?"
+            class="mb-4 grid grid-cols-2 border-2 border-ink bg-white sm:inline-grid"
+          >
+            <button
+              v-for="a in CARD_ACTIONS"
+              :key="a.value"
+              v-bind="actionTabs.tabProps(a.value)"
+              class="min-h-11 cursor-pointer px-4 font-semibold not-last:border-r-2 not-last:border-ink sm:px-6"
+              :class="cardAction === a.value ? 'bg-ink text-cream' : 'hover:bg-mist'"
+              @click="cardAction = a.value"
+            >
+              {{ a.label }}
+            </button>
+          </div>
+
+          <div v-bind="actionTabs.panelProps()">
+            <template v-if="cardAction === 'trade'">
+              <h2 class="mb-3 text-2xl font-bold">
+                Qui possède {{ wanted?.name ?? 'cette carte' }} ?
+              </h2>
+              <CreatureOwners
+                :creature-id="wantedId"
+                :creature-name="wanted?.name ?? 'cette carte'"
+              />
+            </template>
+            <template v-else>
+              <h2 class="mb-3 text-2xl font-bold">Offrir {{ wanted?.name ?? 'cette carte' }}</h2>
+              <GiftCreatureForm
+                v-if="ownedOfWanted > 0"
+                :creature-id="wantedId"
+                :creature-name="wanted?.name ?? 'cette carte'"
+                :owned="ownedOfWanted"
+              />
+              <p v-else class="border-2 border-dashed border-ink/40 px-3 py-4 text-sm">
+                Vous ne possédez pas {{ wanted?.name ?? 'cette carte' }} : vous ne pouvez l’offrir
+                qu’une fois obtenue (ouvrez un échange ou un booster).
+              </p>
+            </template>
+          </div>
         </div>
       </div>
 
@@ -258,9 +314,9 @@ watch(mode, (m) => {
                 <button
                   type="button"
                   class="block h-full w-full cursor-pointer text-left transition-transform hover:-translate-y-1"
-                  :aria-label="`Trouver les joueurs qui possèdent ${c.name}`"
                   @click="chooseCard(c.id)"
                 >
+                  <span class="sr-only">Trouver les joueurs qui possèdent </span>
                   <CreatureCard
                     :creature="c"
                     :missing="!owned.get(c.id)"

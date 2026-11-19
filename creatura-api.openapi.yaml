@@ -37,7 +37,15 @@ info:
     | `CARDS_UNAVAILABLE` | 409 | Une carte posée n'est plus disponible au moment de conclure ; les validations sont retirées |
     | `CARDS_NOT_OWNED` | 422 | Cartes posées sur le tapis que le joueur ne possède pas (ou pas en quantité suffisante) |
     | `TRADE_WITH_SELF` | 422 | Échange proposé à soi-même |
+    | `GIFT_WITH_SELF` | 422 | Don d'une carte à soi-même |
+    | `GIFT_NOT_PENDING` | 409 | Don déjà accepté, refusé, annulé ou échoué |
+    | `GIFT_ALREADY_PENDING` | 409 | Un don de cette carte à ce joueur est déjà en attente |
     | `RATE_LIMITED` | 429 | Trop de tentatives ; réessayer après le délai `Retry-After` |
+    | `ACCOUNT_DISABLED` | 403 | Compte administrateur désactivé par un autre admin (après un mot de passe correct) |
+    | `PASSWORD_CHANGE_REQUIRED` | 403 | Admin créé depuis le dashboard : changer d'abord le mot de passe provisoire (`PUT /me/password`) |
+    | `PLAYER_ALREADY_REQUESTED` | 409 | Un des joueurs fait déjà l'objet d'une demande de suppression en attente |
+    | `REQUEST_NOT_PENDING` | 409 | Demande de suppression déjà validée, refusée, annulée ou expirée |
+    | `RESET_LINK_INVALID` | 400 | Lien de réinitialisation du mot de passe inconnu, expiré, déjà utilisé ou remplacé |
     | `INTERNAL_ERROR` | 500 | Erreur inattendue du serveur |
 
     ## Écarts connus de la V1
@@ -55,7 +63,8 @@ info:
     - Tirage : rareté selon les poids (`rarityWeights`, réglables), puis créature au hasard ; au plus une rare ou une
       légendaire par booster ; rare garantie au premier booster ; la carte la plus rare est la dernière de `cards`.
       `dropRate` est la probabilité exacte qu'une carte soit de cette rareté, règle d'exclusion comprise.
-    - Pas de rotation ni de révocation des refresh tokens : ils restent valides jusqu'à leur expiration.
+    - Pas de rotation ni de révocation des refresh tokens : ils restent valides jusqu'à leur expiration
+      (1,25 × `sessionIdleSeconds`, renouvelée tant que l'utilisateur agit).
     - Pas encore de limitation des tentatives (`RATE_LIMITED`).
     - La salle d'échange (WebSocket) fonctionne avec plusieurs répliques de l'API : les répliques se préviennent
       par PostgreSQL LISTEN/NOTIFY. Deux actions simultanées des deux joueurs, traitées par deux répliques,
@@ -101,6 +110,10 @@ tags:
     description: Salle d'échange en temps réel, abandon et historique (UC-09, UC-10, UC-11)
   - name: Administration
     description: Dashboard et réglages, réservés au rôle ADMIN (UC-12, UC-13, UC-14)
+  - name: Joueurs et admins
+    description: |
+      Suivi des joueurs, suppression de joueurs validée par un deuxième admin, création et désactivation
+      des comptes admin (AS-71). Réservé au rôle ADMIN.
 
 paths:
   /health:
@@ -185,6 +198,29 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /auth/password-reset:
+    post:
+      tags: [Authentification]
+      summary: Réinitialiser son mot de passe avec un lien d'administrateur (AS-75)
+      description: |
+        Sans jeton d'accès. `token` est le paramètre `jeton` du lien généré par un admin
+        (`POST /admin/players/{playerId}/password-reset`). Le lien vaut 5 minutes et ne sert qu'une fois.
+        Lien inconnu, expiré, déjà utilisé ou remplacé : `400 RESET_LINK_INVALID`, sans dire lequel.
+        Les sessions ouvertes du joueur sont fermées.
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '204':
+          description: Mot de passe changé
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   /auth/refresh:
     post:
       tags: [Authentification]
@@ -240,6 +276,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Authentification]
+      summary: Supprimer son compte
+      description: |
+        Le mot de passe actuel est demandé. Le compte est anonymisé : pseudo « Joueur supprimé #… »
+        dans l'historique des autres joueurs, identifiant libéré, plus aucune connexion possible.
+        La collection est effacée (les légendaires retournent au stock) et les échanges en cours
+        sont abandonnés. Un administrateur ne peut supprimer son compte que s'il reste un autre
+        administrateur (`LAST_ADMIN`).
+      operationId: deleteAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountDeleteRequest'
+      responses:
+        '204':
+          description: Compte supprimé ; le client oublie ses jetons
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Dernier administrateur (`LAST_ADMIN`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /me/password:
+    put:
+      tags: [Authentification]
+      summary: Changer son mot de passe
+      description: |
+        Le mot de passe actuel est demandé (`VALIDATION_ERROR` sur `currentPassword` s'il est
+        faux). Le nouveau suit les règles de l'inscription et doit différer de l'actuel. Les autres
+        sessions sont fermées ; celle-ci reçoit de nouveaux jetons.
+
+        AS-71 : un admin créé depuis le dashboard doit le faire avant d'accéder au dashboard (son
+        mot de passe provisoire comme mot de passe actuel). Toute route `/admin/*` lui répond
+        `403 PASSWORD_CHANGE_REQUIRED` tant que `user.mustChangePassword` est vrai.
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '200':
+          description: Mot de passe changé, nouveaux jetons pour cette session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -702,6 +798,131 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /gifts:
+    post:
+      tags: [Dons]
+      operationId: createGift
+      summary: Offrir une carte possédée à un autre joueur
+      description: Crée un don en attente (`PENDING`). Le destinataire l'accepte ou le refuse ; le donneur peut l'annuler.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateGiftRequest'}
+      responses:
+        '201':
+          description: Don créé, en attente de la décision du destinataire
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don identique déjà en attente (`GIFT_ALREADY_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '422':
+          description: Don à soi-même (`GIFT_WITH_SELF`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    get:
+      tags: [Dons]
+      operationId: listMyGifts
+      summary: Mes dons, reçus et/ou envoyés
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: role
+          in: query
+          description: Dons envoyés, reçus, ou les deux
+          schema: {type: string, enum: [all, sent, received], default: all}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/GiftStatus'}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Dons du joueur connecté, du plus récent au plus ancien
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /gifts/{giftId}/accept:
+    parameters:
+      - {name: giftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Dons]
+      operationId: acceptGift
+      summary: Accepter un don reçu
+      description: Les cartes passent dans la collection du destinataire, tout ou rien. Si le donneur ne les possède plus, le don passe `FAILED` (aucun transfert).
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Don accepté (ou `FAILED` si la carte n'était plus disponible)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don déjà traité (`GIFT_NOT_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+
+  /gifts/{giftId}/refuse:
+    parameters:
+      - {name: giftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Dons]
+      operationId: refuseGift
+      summary: Refuser un don reçu
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Don refusé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don déjà traité (`GIFT_NOT_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+
+  /gifts/{giftId}/cancel:
+    parameters:
+      - {name: giftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Dons]
+      operationId: cancelGift
+      summary: Annuler un don envoyé (tant qu'il est en attente)
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Don annulé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Gift'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Don déjà traité (`GIFT_NOT_PENDING`)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+
   /admin/trades:
     get:
       tags: [Administration]
@@ -840,23 +1061,26 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /admin/creatures/{creatureId}/rarity:
+  /admin/creatures/{creatureId}:
     parameters:
       - {name: creatureId, in: path, required: true, schema: {type: string}}
-    put:
+    patch:
       tags: [Administration]
-      operationId: scheduleRarityChange
-      summary: Change la rareté d'une carte au prochain minuit
-      description: Les exemplaires déjà possédés restent dans les collections. Vers légendaire, `stock` nouveaux exemplaires sont à tirer ; une légendaire qui change de rareté devient illimitée.
+      operationId: updateCreature
+      summary: Modifier une carte (nom, description, famille, rareté immédiats ; stock à minuit)
+      description: |
+        Nom, description, famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une
+        édition limitée (légendaire) est différé au prochain minuit et ne peut qu'augmenter : il est
+        immédiat seulement quand la carte devient légendaire. Champs omis inchangés ; l'image par `/sprite`.
       security: [{bearerAuth: []}]
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/RarityChangeInput'}
+            schema: {$ref: '#/components/schemas/AdminCreatureUpdate'}
       responses:
         '200':
-          description: Changement prévu (`scheduledChange`)
+          description: Carte mise à jour
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AdminCreature'}
@@ -864,10 +1088,13 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /admin/creatures/{creatureId}/rarity:
+    parameters:
+      - {name: creatureId, in: path, required: true, schema: {type: string}}
     delete:
       tags: [Administration]
       operationId: cancelRarityChange
-      summary: Annule le changement de rareté prévu
+      summary: Annule la hausse d'exemplaires prévue au prochain minuit
       security: [{bearerAuth: []}]
       responses:
         '200':
@@ -875,6 +1102,254 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AdminCreature'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /admin/players:
+    get:
+      tags: [Joueurs et admins]
+      summary: Lister les joueurs avec leurs connexions et leurs cartes (AS-71)
+      description: |
+        Une ligne par joueur : dernière connexion, connexions sur la période (`from`, `to`), cartes possédées et
+        demande de suppression en attente. Une connexion = un login réussi ; le renouvellement du jeton ne compte pas.
+        L'historique des connexions est gardé 13 mois.
+      operationId: listAdminPlayers
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: search
+          in: query
+          description: Partie du pseudonyme, sans tenir compte des majuscules ni des accents
+          schema: {type: string, maxLength: 30}
+        - name: sort
+          in: query
+          schema: {type: string, enum: [pseudo, createdAt, lastLoginAt, logins, totalCards], default: pseudo}
+        - name: order
+          in: query
+          schema: {type: string, enum: [asc, desc], default: asc}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Joueurs
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminPlayerPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  /admin/players/{playerId}:
+    get:
+      tags: [Joueurs et admins]
+      summary: Fiche d'un joueur (AS-71)
+      description: Cartes par rareté et par famille, connexions par jour ou par mois sur la période.
+      operationId: getAdminPlayer
+      parameters:
+        - $ref: '#/components/parameters/PlayerId'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: granularity
+          in: query
+          schema: {$ref: '#/components/schemas/Granularity'}
+      responses:
+        '200':
+          description: Fiche du joueur
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminPlayerDetail'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /admin/players/{playerId}/password-reset:
+    post:
+      tags: [Joueurs et admins]
+      summary: Générer un lien de réinitialisation du mot de passe d'un joueur (AS-75)
+      description: |
+        Le lien (`{appli joueur}/reinitialiser?jeton=…`) vaut 5 minutes et ne sert qu'une fois. L'admin le copie et
+        l'envoie au joueur ; il n'est renvoyé qu'ici. Le lien précédent du joueur, s'il n'a pas servi, est annulé.
+        La base ne garde que l'empreinte SHA-256 du jeton. Joueurs uniquement (404 pour un admin).
+      operationId: createPasswordResetLink
+      parameters:
+        - $ref: '#/components/parameters/PlayerId'
+      responses:
+        '201':
+          description: Lien généré
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PasswordResetLink'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /admin/deletion-requests:
+    get:
+      tags: [Joueurs et admins]
+      summary: Lister les demandes de suppression (AS-71)
+      description: Toutes les demandes, journal compris, de la plus récente à la plus ancienne. Une demande en attente depuis plus de 7 jours expire.
+      operationId: listDeletionRequests
+      parameters:
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/DeletionRequestStatus'}
+        - name: toValidate
+          in: query
+          description: Seulement les demandes dont l'admin connecté est le validateur
+          schema: {type: boolean, default: false}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Demandes
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequestPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Joueurs et admins]
+      summary: Demander la suppression de joueurs (AS-71)
+      description: |
+        Seul l'admin choisi (`validatorId`, un autre admin actif) pourra valider ou refuser. Un joueur ne peut être
+        que dans une seule demande en attente (`409 PLAYER_ALREADY_REQUESTED`). Seuls des comptes joueurs peuvent
+        être supprimés.
+      operationId: createDeletionRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeletionRequestInput'}
+      responses:
+        '201':
+          description: Demande en attente
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/deletion-requests/{requestId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [Joueurs et admins]
+      summary: Valider une demande de suppression (AS-71)
+      description: |
+        Réservé au validateur choisi. Les joueurs sont supprimés tout de suite : compte, collection, connexions,
+        boosters, messages et échanges en attente. Leurs légendaires retournent dans le stock. Leurs échanges
+        terminés restent pour l'autre joueur, avec « Joueur supprimé » à leur place.
+      operationId: approveDeletionRequest
+      responses:
+        '200':
+          description: Demande validée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/deletion-requests/{requestId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [Joueurs et admins]
+      summary: Refuser une demande de suppression (AS-71)
+      description: Réservé au validateur choisi. Personne n'est supprimé.
+      operationId: rejectDeletionRequest
+      responses:
+        '200':
+          description: Demande refusée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/deletion-requests/{requestId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [Joueurs et admins]
+      summary: Annuler sa demande de suppression (AS-71)
+      description: Réservé à l'admin qui a fait la demande, tant qu'elle est en attente.
+      operationId: cancelDeletionRequest
+      responses:
+        '200':
+          description: Demande annulée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/admins:
+    get:
+      tags: [Joueurs et admins]
+      summary: Lister les comptes admin (AS-71)
+      description: Actifs d'abord. Sert aussi à choisir le validateur d'une demande de suppression.
+      operationId: listAdmins
+      responses:
+        '200':
+          description: Comptes admin
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/AdminAccount'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Joueurs et admins]
+      summary: Créer un compte admin (AS-71)
+      description: |
+        Le serveur génère un mot de passe provisoire (16 caractères en 4 groupes, ex. `k7mq-x2vd-9tfp-a4ne`) et le
+        renvoie cette seule fois dans `temporaryPassword` ; seul son hash est stocké. À sa première connexion,
+        `user.mustChangePassword` est vrai : le nouvel admin doit le remplacer (`PUT /me/password`) avant
+        d'accéder au dashboard.
+      operationId: createAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminAccountInput'}
+      responses:
+        '201':
+          description: Compte admin créé, avec son mot de passe provisoire (affiché une seule fois)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAccountCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /admin/admins/{adminId}/deactivate:
+    parameters:
+      - {name: adminId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Joueurs et admins]
+      summary: Désactiver un autre compte admin (AS-71)
+      description: |
+        Jamais son propre compte (400), et jamais s'il resterait moins de deux admins actifs (400) : une demande
+        de suppression a besoin d'un demandeur et d'un validateur. L'admin désactivé ne peut plus se connecter (`403 ACCOUNT_DISABLED`),
+        ses jetons sont refusés et ses demandes de suppression en attente (faites ou à valider) sont annulées.
+      operationId: deactivateAdmin
+      responses:
+        '200':
+          description: Compte désactivé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAccount'}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -894,6 +1369,7 @@ components:
       schema:
         type: integer
         minimum: 1
+        maximum: 100000
         default: 1
     PageSize:
       name: pageSize
@@ -955,6 +1431,14 @@ components:
       schema:
         type: string
         format: uuid
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      description: Identifiant d'une demande de suppression
+      schema:
+        type: string
+        format: uuid
     TradeId:
       name: tradeId
       in: path
@@ -964,6 +1448,12 @@ components:
         format: uuid
 
   responses:
+    Conflict:
+      description: Conflit avec l'état actuel (voir `code`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     BadRequest:
       description: Requête invalide (`VALIDATION_ERROR`)
       content:
@@ -1070,7 +1560,16 @@ components:
         - CARDS_UNAVAILABLE
         - CARDS_NOT_OWNED
         - TRADE_WITH_SELF
+        - GIFT_WITH_SELF
+        - GIFT_NOT_PENDING
+        - GIFT_ALREADY_PENDING
+        - LAST_ADMIN
         - RATE_LIMITED
+        - ACCOUNT_DISABLED
+        - PASSWORD_CHANGE_REQUIRED
+        - PLAYER_ALREADY_REQUESTED
+        - REQUEST_NOT_PENDING
+        - RESET_LINK_INVALID
         - INTERNAL_ERROR
 
     PageMeta:
@@ -1130,6 +1629,35 @@ components:
           maxLength: 128
           writeOnly: true
 
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      additionalProperties: false
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          maxLength: 128
+          writeOnly: true
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 128
+          writeOnly: true
+
+    AccountDeleteRequest:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password:
+          type: string
+          format: password
+          maxLength: 128
+          writeOnly: true
+          description: Mot de passe actuel, pour confirmer
+
     RefreshRequest:
       type: object
       required: [refreshToken]
@@ -1140,7 +1668,7 @@ components:
 
     AuthTokens:
       type: object
-      required: [accessToken, refreshToken, tokenType, expiresIn, user]
+      required: [accessToken, refreshToken, tokenType, expiresIn, sessionIdleSeconds, user]
       properties:
         accessToken:
           type: string
@@ -1155,6 +1683,14 @@ components:
           type: integer
           description: Durée de validité du jeton d'accès, en secondes
           examples: [900]
+        sessionIdleSeconds:
+          type: integer
+          description: |
+            Inactivité (sans action de l'utilisateur) au bout de laquelle la session expire, en
+            secondes. Le client avertit 30 s avant puis déconnecte ; il renouvelle les jetons
+            (`POST /auth/refresh`) tant que l'utilisateur agit. Le refresh token ne vit que
+            1,25 × cette durée : une session abandonnée ne peut plus être prolongée.
+          examples: [1200]
         user:
           $ref: '#/components/schemas/User'
 
@@ -1164,7 +1700,7 @@ components:
 
     User:
       type: object
-      required: [id, pseudo, role, createdAt]
+      required: [id, pseudo, role, createdAt, mustChangePassword]
       properties:
         id:
           type: string
@@ -1176,6 +1712,9 @@ components:
         createdAt:
           type: string
           format: date-time
+        mustChangePassword:
+          type: boolean
+          description: Admin créé depuis le dashboard qui n'a pas encore remplacé son mot de passe provisoire (`PUT /me/password`). Toujours faux pour un joueur.
 
     Me:
       allOf:
@@ -1374,6 +1913,7 @@ components:
     PlayerSummary:
       type: object
       required: [id, pseudo]
+      description: Un joueur supprimé (AS-71) apparaît dans les échanges terminés avec l'identifiant `00000000-0000-0000-0000-000000000000` et le pseudo « Joueur supprimé ».
       properties:
         id:
           type: string
@@ -1795,12 +2335,13 @@ components:
             stockRemaining: {type: [integer, 'null']}
             availableFrom: {type: string, format: date, description: Jour où la carte devient visible et tirable}
             scheduledChange:
+              description: Hausse d'exemplaires d'une édition limitée prévue au prochain minuit, sinon null
               oneOf:
                 - type: object
                   required: [rarity, stock, effectiveFrom]
                   properties:
                     rarity: {$ref: '#/components/schemas/RaritySummary'}
-                    stock: {type: [integer, 'null']}
+                    stock: {type: [integer, 'null'], description: Nouveau total d'exemplaires visé}
                     effectiveFrom: {type: string, format: date}
                 - type: 'null'
 
@@ -1816,13 +2357,59 @@ components:
         image: {type: string, pattern: '^sprites/[a-z0-9_-]+\.png$', description: Fichier déjà présent sur le CDN}
         stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Obligatoire pour une légendaire (édition limitée), interdit sinon}
 
-    RarityChangeInput:
+    GiftStatus:
+      type: string
+      description: >-
+        PENDING : en attente de la décision du destinataire. ACCEPTED : accepté, cartes transférées.
+        REFUSED : refusé par le destinataire. CANCELLED : annulé par le donneur. FAILED : le donneur ne
+        possédait plus la carte au moment d'accepter ; aucun transfert.
+      enum: [PENDING, ACCEPTED, REFUSED, CANCELLED, FAILED]
+
+    CreateGiftRequest:
       type: object
-      required: [rarity]
+      required: [recipientId, creatureId]
       additionalProperties: false
       properties:
+        recipientId: {type: string, format: uuid}
+        creatureId: {type: string, description: Identifiant de la carte dans le catalogue}
+        quantity: {type: integer, minimum: 1, maximum: 10, default: 1}
+
+    Gift:
+      type: object
+      required: [id, status, giver, recipient, creature, quantity, createdAt, decidedAt]
+      properties:
+        id: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/GiftStatus'}
+        giver: {$ref: '#/components/schemas/PlayerSummary'}
+        recipient: {$ref: '#/components/schemas/PlayerSummary'}
+        creature: {$ref: '#/components/schemas/CreatureSummary'}
+        quantity: {type: integer, minimum: 1}
+        createdAt: {type: string, format: date-time}
+        decidedAt: {type: [string, 'null'], format: date-time, description: Date de la décision ; null tant que le don est en attente}
+        failureReason: {type: [string, 'null'], description: Raison quand le statut vaut FAILED}
+
+    GiftPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items: {type: array, items: {$ref: '#/components/schemas/Gift'}}
+
+    AdminCreatureUpdate:
+      type: object
+      additionalProperties: false
+      description: >-
+        Modification d'une carte ; chaque champ est facultatif (omis = inchangé). Nom, description,
+        famille et rareté s'appliquent tout de suite. Le nombre d'exemplaires d'une édition limitée
+        est immédiat quand la carte devient légendaire, puis différé au prochain minuit et en hausse
+        seulement (une baisse est refusée).
+      properties:
+        name: {type: string, minLength: 2, maxLength: 50}
+        description: {type: string, maxLength: 500}
+        family: {type: string, enum: [NATURE, CRISTAL, BRUME, LUEUR]}
         rarity: {type: string, enum: [COMMON, UNCOMMON, RARE, LEGENDARY]}
-        stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Exemplaires à tirer, obligatoire vers légendaire}
+        stock: {type: [integer, 'null'], minimum: 1, maximum: 100000, description: Total d'exemplaires de l'édition limitée (légendaire)}
 
     RarityWeights:
       type: object
@@ -1867,3 +2454,268 @@ components:
                 minimum: 0
                 maximum: 1
                 description: Part réellement observée sur la période
+
+    Granularity:
+      type: string
+      enum: [DAY, MONTH]
+      default: DAY
+
+    AdminSummary:
+      type: object
+      required: [id, pseudo]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+
+    AdminPlayer:
+      type: object
+      required: [id, pseudo, login, createdAt, lastLoginAt, loginsInPeriod, totalCards, pendingDeletionRequestId]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        login:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+          description: null si aucune connexion depuis 13 mois
+        loginsInPeriod:
+          type: integer
+          minimum: 0
+        totalCards:
+          type: integer
+          minimum: 0
+          description: Exemplaires possédés, doublons compris
+        pendingDeletionRequestId:
+          type: [string, 'null']
+          format: uuid
+          description: Demande de suppression en attente qui concerne ce joueur
+
+    AdminPlayerPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items, period]
+          properties:
+            period:
+              $ref: '#/components/schemas/Period'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminPlayer'
+
+    CardCount:
+      type: object
+      required: [cards, distinctCreatures]
+      properties:
+        cards:
+          type: integer
+          minimum: 0
+          description: Exemplaires, doublons compris
+        distinctCreatures:
+          type: integer
+          minimum: 0
+
+    AdminPlayerDetail:
+      type: object
+      required: [player, cardsByRarity, cardsByFamily, logins]
+      properties:
+        player:
+          $ref: '#/components/schemas/AdminPlayer'
+        cardsByRarity:
+          type: array
+          description: Les quatre raretés, de la plus commune à la plus rare, 0 compris
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CardCount'
+              - type: object
+                required: [rarity]
+                properties:
+                  rarity:
+                    $ref: '#/components/schemas/RaritySummary'
+        cardsByFamily:
+          type: array
+          description: Les quatre familles, 0 compris
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CardCount'
+              - type: object
+                required: [family]
+                properties:
+                  family:
+                    $ref: '#/components/schemas/Family'
+        logins:
+          type: object
+          required: [granularity, points]
+          properties:
+            granularity:
+              $ref: '#/components/schemas/Granularity'
+            points:
+              type: array
+              description: Un point par jour (DAY) ou par mois (MONTH, date du 1er du mois) de la période, 0 compris
+              items:
+                $ref: '#/components/schemas/DailyCount'
+
+    DeletionRequestStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED]
+
+    DeletionRequest:
+      type: object
+      required: [id, status, requestedBy, validator, reason, accountCount, players, createdAt, expiresAt, decidedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/DeletionRequestStatus'
+        requestedBy:
+          $ref: '#/components/schemas/AdminSummary'
+        validator:
+          $ref: '#/components/schemas/AdminSummary'
+        reason:
+          type: [string, 'null']
+        accountCount:
+          type: integer
+          minimum: 1
+        players:
+          type: array
+          description: Vide une fois la demande validée (les joueurs supprimés ne sont pas gardés dans le journal)
+          items:
+            $ref: '#/components/schemas/PlayerSummary'
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: 7 jours après la création
+        decidedAt:
+          type: [string, 'null']
+          format: date-time
+
+    DeletionRequestPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/DeletionRequest'
+
+    DeletionRequestInput:
+      type: object
+      additionalProperties: false
+      required: [playerIds, validatorId]
+      properties:
+        playerIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        validatorId:
+          type: string
+          format: uuid
+          description: Autre admin actif, seul à pouvoir valider ou refuser
+        reason:
+          type: [string, 'null']
+          maxLength: 500
+
+    AdminAccount:
+      type: object
+      required: [id, pseudo, login, createdAt, createdBy, lastLoginAt, mustChangePassword, active, deactivatedAt, deactivatedBy]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        login:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          description: null pour le premier admin, créé au démarrage du serveur
+          oneOf:
+            - $ref: '#/components/schemas/AdminSummary'
+            - type: 'null'
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+        mustChangePassword:
+          type: boolean
+        active:
+          type: boolean
+        deactivatedAt:
+          type: [string, 'null']
+          format: date-time
+        deactivatedBy:
+          oneOf:
+            - $ref: '#/components/schemas/AdminSummary'
+            - type: 'null'
+
+    AdminAccountInput:
+      type: object
+      additionalProperties: false
+      required: [pseudo, login]
+      properties:
+        pseudo:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: '^[A-Za-z0-9_-]+$'
+        login:
+          type: string
+          minLength: 3
+          maxLength: 50
+
+    AdminAccountCreated:
+      allOf:
+        - $ref: '#/components/schemas/AdminAccount'
+        - type: object
+          required: [temporaryPassword]
+          properties:
+            temporaryPassword:
+              type: string
+              pattern: '^[a-z2-9]{4}(-[a-z2-9]{4}){3}$'
+              description: Mot de passe provisoire généré par le serveur, renvoyé cette seule fois
+
+    PasswordResetLink:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Lien à copier et envoyer au joueur ; il ne sera plus affiché
+        expiresAt:
+          type: string
+          format: date-time
+
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          maxLength: 200
+          description: Jeton du lien (paramètre `jeton`)
+        newPassword:
+          type: string
+          minLength: 12
+          maxLength: 128

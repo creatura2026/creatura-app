@@ -13,6 +13,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "bcrypt>=5.0.0",
     "boto3>=1.35",
+    "python-multipart>=0.0.9",
 ]
 
 [dependency-groups]
@@ -20,8 +21,28 @@ dev = [
     "pytest>=8.3",
     "httpx>=0.27",
     "websockets>=15",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.5",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+# E/F : erreurs ; I : imports triés ; B : bugs probables ; N : nommage (PEP 8) ; UP : Python moderne.
+select = ["E4", "E7", "E9", "F", "I", "B", "N", "UP"]
+ignore = [
+    "B008",   # Depends()/Query() en valeur par défaut : la façon de faire de FastAPI
+    "UP042",  # (str, Enum) plutôt que StrEnum : choix de modèle, pas une erreur
+    "UP046",  # génériques à l'ancienne (TypeVar) : changement de style, pas une erreur
+    "UP047",
+    "N818",   # exceptions métier (Conflict, NotFound…) sans suffixe Error : noms du domaine
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

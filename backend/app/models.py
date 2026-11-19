@@ -1,4 +1,4 @@
-"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_ à 08_).
+"""Modèles ORM : correspondance exacte avec db/init/01_schema.sql et ses évolutions (04_ à 10_).
 
 Le schéma est la source de vérité : le back ne crée ni ne modifie aucune table
 (pas de `create_all`). Les noms suivent la base : français, snake_case, sans accents.
@@ -7,16 +7,16 @@ Les valeurs autorisées sont des varchar + CHECK côté SQL, des Enum côté Pyt
 
 import enum
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, SmallInteger, String, Text, Uuid
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, SmallInteger, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Role(str, enum.Enum):
@@ -66,6 +66,21 @@ class Utilisateur(Base):
     role: Mapped[Role] = mapped_column(_varchar_enum(Role, 10), default=Role.JOUEUR)
     dernier_booster: Mapped[date | None] = mapped_column(Date)
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Compte supprimé (et anonymisé) par son titulaire : plus aucune connexion (évolution 09).
+    supprime_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Les jetons émis avant cette date sont refusés (changement de mot de passe, évolution 09).
+    jetons_depuis: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def pseudo_public(self) -> str:
+        """Pseudo affiché aux joueurs : « Joueur supprimé » pour un compte supprimé (le suffixe
+        stocké en base ne sert qu'à garder les pseudos uniques)."""
+        return "Joueur supprimé" if self.supprime_le is not None else self.pseudo
+    # Comptes admin (10_evolution_joueurs_admin.sql)
+    cree_par: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
+    mot_de_passe_provisoire: Mapped[bool] = mapped_column(Boolean, default=False)
+    desactive_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    desactive_par: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
 
 
 class Creature(Base):
@@ -103,8 +118,9 @@ class Echange(Base):
     __tablename__ = "echange"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    proposeur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
-    destinataire_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    # NULL : joueur supprimé, l'échange terminé reste pour l'autre joueur (10_evolution_…)
+    proposeur_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
+    destinataire_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
     statut: Mapped[Statut] = mapped_column(_varchar_enum(Statut, 12), default=Statut.EN_ATTENTE)
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     decide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -114,8 +130,8 @@ class Echange(Base):
     destinataire_pret: Mapped[bool] = mapped_column(Boolean, default=False)
     creature_cherchee_id: Mapped[int | None] = mapped_column(ForeignKey("creature.id"))
 
-    proposeur: Mapped[Utilisateur] = relationship(foreign_keys=[proposeur_id], lazy="joined")
-    destinataire: Mapped[Utilisateur] = relationship(foreign_keys=[destinataire_id], lazy="joined")
+    proposeur: Mapped[Utilisateur | None] = relationship(foreign_keys=[proposeur_id], lazy="joined")
+    destinataire: Mapped[Utilisateur | None] = relationship(foreign_keys=[destinataire_id], lazy="joined")
     creature_cherchee: Mapped["Creature | None"] = relationship(lazy="joined")
     # Ordre de pose sur le tapis : pas de date dans echange_ligne, on garde l'ordre du catalogue.
     lignes: Mapped[list["EchangeLigne"]] = relationship(
@@ -145,6 +161,30 @@ class EchangeLigne(Base):
     sens: Mapped[Sens] = mapped_column(_varchar_enum(Sens, 8), primary_key=True)
     quantite: Mapped[int] = mapped_column(Integer)
 
+    creature: Mapped[Creature] = relationship(lazy="joined")
+
+
+class Don(Base):
+    """Don d'une carte d'un joueur à un autre (11_evolution_don_carte.sql).
+
+    Réutilise `Statut` : EN_ATTENTE jusqu'à la décision du destinataire, puis ACCEPTE
+    (cartes transférées), REFUSE, ANNULE (par le donneur) ou ECHOUE (carte indisponible).
+    """
+
+    __tablename__ = "don"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    donneur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id", ondelete="CASCADE"))
+    destinataire_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id", ondelete="CASCADE"))
+    creature_id: Mapped[int] = mapped_column(ForeignKey("creature.id"))
+    quantite: Mapped[int] = mapped_column(Integer)
+    statut: Mapped[Statut] = mapped_column(_varchar_enum(Statut, 12), default=Statut.EN_ATTENTE)
+    motif_echec: Mapped[str | None] = mapped_column(String(30))
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    donneur: Mapped[Utilisateur] = relationship(foreign_keys=[donneur_id], lazy="joined")
+    destinataire: Mapped[Utilisateur] = relationship(foreign_keys=[destinataire_id], lazy="joined")
     creature: Mapped[Creature] = relationship(lazy="joined")
 
 
@@ -194,3 +234,74 @@ class BoosterCarte(Base):
     creature_id: Mapped[int] = mapped_column(ForeignKey("creature.id"))
     rarete: Mapped[Rarete] = mapped_column(_varchar_enum(Rarete, 20))
     motif: Mapped[MotifTirage] = mapped_column(_varchar_enum(MotifTirage, 30))
+
+
+# ── Joueurs et administrateurs dans le dashboard (10_evolution_joueurs_admin.sql) ──
+
+
+class Connexion(Base):
+    """Une ligne par connexion réussie (login), gardée 13 mois."""
+
+    __tablename__ = "connexion"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    utilisateur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class StatutDemande(str, enum.Enum):
+    EN_ATTENTE = "EN_ATTENTE"
+    VALIDEE = "VALIDEE"
+    REFUSEE = "REFUSEE"
+    ANNULEE = "ANNULEE"
+    EXPIREE = "EXPIREE"
+
+
+class DemandeSuppressionJoueur(Base):
+    __tablename__ = "demande_suppression_joueur"
+
+    demande_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("demande_suppression.id"), primary_key=True)
+    utilisateur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"), primary_key=True)
+
+    joueur: Mapped[Utilisateur] = relationship(lazy="joined")
+
+
+class DemandeSuppression(Base):
+    """Suppression de joueurs demandée par un admin, validée ou refusée par l'admin choisi.
+
+    Créée, traitée et annulée par les fonctions SQL creatura_*_demande : le back ne l'écrit pas
+    directement.
+    """
+
+    __tablename__ = "demande_suppression"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    demande_par: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    valideur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    motif: Mapped[str | None] = mapped_column(String(500))
+    statut: Mapped[StatutDemande] = mapped_column(_varchar_enum(StatutDemande, 10))
+    nombre_comptes: Mapped[int] = mapped_column(Integer)
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    traite_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    demandeur: Mapped[Utilisateur] = relationship(foreign_keys=[demande_par], lazy="joined")
+    valideur: Mapped[Utilisateur] = relationship(foreign_keys=[valideur_id], lazy="joined")
+    joueurs: Mapped[list[DemandeSuppressionJoueur]] = relationship(lazy="selectin")
+
+
+class ReinitialisationMdp(Base):
+    """Lien de réinitialisation du mot de passe généré par un admin (12_evolution_…, AS-75).
+
+    Seule l'empreinte SHA-256 du jeton est stockée. 5 minutes, usage unique.
+    """
+
+    __tablename__ = "reinitialisation_mdp"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    utilisateur_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("utilisateur.id"))
+    jeton_hash: Mapped[str] = mapped_column(String(64))
+    cree_par: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("utilisateur.id"))
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expire_le: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    utilise_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    annule_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

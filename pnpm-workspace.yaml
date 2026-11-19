@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Tests de bout en bout (Playwright), voir docs/tests/README.md
+  - "e2e"
 allowBuilds:
   vue-demi: true
   # Télécharge le binaire Electron (application de bureau, apps/desktop)
@@ -11,3 +13,10 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     openapi-typescript>typescript: "6"
+
+# Audit des dépendances (pnpm audit, workflow de nuit) : failles connues, examinées et acceptées.
+# À revoir à chaque mise à jour ; les retirer dès qu'un correctif est appliqué (docs/tests/README.md, § 12).
+auditConfig:
+  ignoreGhsas:
+    # picomatch : ReDoS, aucun correctif publié ; utilisé au build par vue-router, pas dans le site servi.
+    - GHSA-fc5q-39xc-vjpf

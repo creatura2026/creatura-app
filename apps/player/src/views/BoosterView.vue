@@ -6,29 +6,30 @@ import { errorMessage, isApiError } from '@creatura/shared/api/types'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
-import { formatDuration, formatPercent } from '@creatura/shared/format'
+import { formatDuration } from '@creatura/shared/format'
 import { toast } from '@creatura/shared/toast'
-import { rarityColor } from '@creatura/shared/rarity'
 
 import BoosterTear, { type TearResult } from '@/components/BoosterTear.vue'
 import FlipCard from '@/components/FlipCard.vue'
-import { useClaimBooster, useRarities, useTodayBooster } from '@/api/queries'
+import { useClaimBooster, useTodayBooster } from '@/api/queries'
 import { burstFromPack, GHOST_Z_INDEX } from '@/composables/cardBurst'
 import { useCardTable, type Spot } from '@/composables/useCardTable'
 
 const { data: today, isPending, error, refetch } = useTodayBooster()
-const { data: rarities } = useRarities()
 const claim = useClaimBooster()
 
 /** Booster ouvert pendant cette visite : on joue la découverte carte par carte. */
 const opened = ref<Booster | null>(null)
 /**
- * Nombre de cartes déjà retournées. La pile se vide dans l'ordre : la carte 0 est au-dessus, et la
- * carte `flipped` est la prochaine à retourner.
+ * Nombre de cartes déjà envoyées sur le tapis. La pile se vide dans l'ordre : la carte 0 est
+ * au-dessus, et la carte `flipped` est la prochaine à retourner.
  */
 const flipped = ref(0)
-/** Carte tout juste retournée, présentée au-dessus de la pile avant de rejoindre le tapis. */
-const showing = ref<number | null>(null)
+/**
+ * La carte du dessus (`flipped`) est retournée sur place, face visible, en attente d'être envoyée
+ * sur le tapis : un premier clic la retourne, un second l'envoie.
+ */
+const revealedTop = ref(false)
 /** Les cartes sont posées en pile (faux pendant qu'elles jaillissent du sachet). */
 const settled = ref(true)
 
@@ -85,30 +86,29 @@ const cardArea = ref<HTMLDivElement | null>(null)
 const table = useCardTable(cardArea, total)
 // Booster disponible : sachet à déchirer. Déjà ouvert sans son contenu (le serveur ne le
 // conserve pas) : simple rappel, les cartes sont dans la collection.
+// Pendant l'ouverture, le sachet reste affiché : les données du jour sont rechargées avant que la
+// réponse arrive ici, et montreraient un instant le booster déjà ouvert au lieu de la pile.
 const showTear = computed(
-  () => animating.value || (!booster.value && today.value?.available !== false),
+  () => animating.value || claiming.value || (!booster.value && today.value?.available !== false),
 )
 const allRevealed = computed(() => !opened.value || flipped.value >= total.value)
 /**
  * Pile vide (ou booster déjà ouvert avant cette visite) : plus rien à retourner, les cartes
  * s'étalent en grand dans tout le cadre.
  */
-const spreadOut = computed(() => allRevealed.value && showing.value === null)
+const spreadOut = computed(() => allRevealed.value && !revealedTop.value)
 const stageHeight = computed(() =>
   spreadOut.value && table.scroll.value ? table.spreadHeight.value : table.areaHeight.value,
 )
 
-/** Où se trouve une carte : dans la pile, présentée au-dessus, sur le tapis, ou étalée à la fin. */
-type Place = 'pile' | 'show' | 'mat' | 'spread'
+/** Où se trouve une carte : dans la pile (y compris celle retournée sur place), sur le tapis, ou étalée. */
+type Place = 'pile' | 'mat' | 'spread'
 function placeOf(i: number): Place {
   if (spreadOut.value) return 'spread'
   if (i >= flipped.value) return 'pile'
-  return showing.value === i ? 'show' : 'mat'
+  return 'mat'
 }
 
-const SHOW_MS = 900 // retournement (500 ms) puis un temps pour lire la carte
-const SHOW_LIFT = 0.14 // la carte présentée se soulève d'une fraction de sa hauteur…
-const SHOW_GROW = 1.08 // …et s'approche un peu
 const DEAL_MS = 130 // cadence de « Tout révéler »
 
 /**
@@ -122,10 +122,7 @@ function cardStyle(i: number) {
   const pile = table.stack.value
   let spot: Spot = pile
   let z = total.value - (i - flipped.value) // pile : la prochaine carte au-dessus
-  if (place === 'show') {
-    spot = { x: pile.x, y: pile.y - h * pile.scale * SHOW_LIFT, scale: pile.scale * SHOW_GROW }
-    z = 25
-  } else if (place !== 'pile') {
+  if (place !== 'pile') {
     spot = (place === 'mat' ? table.mat.value[i] : table.spread.value[i]) ?? pile
     z = 11 + i // posée après les précédentes : elle passe au-dessus pendant son trajet
   }
@@ -135,7 +132,6 @@ function cardStyle(i: number) {
     translate: `${Math.round(spot.x - w / 2)}px ${Math.round(spot.y - h / 2)}px`,
     scale: String(spot.scale),
     zIndex: z,
-    transitionDuration: place === 'show' ? '300ms' : undefined,
   }
 }
 
@@ -171,10 +167,12 @@ function slotStyle(spot: Spot) {
 
 /** Annonce de la dernière carte retournée, pour les lecteurs d'écran. */
 const announcement = computed(() => {
-  const card = opened.value?.cards[flipped.value - 1]
+  // La carte retournée sur place (flipped) sinon la dernière envoyée (flipped - 1).
+  const i = revealedTop.value ? flipped.value : flipped.value - 1
+  const card = opened.value?.cards[i]
   if (!card) return ''
   const { name, rarity } = card.creature
-  return `Carte ${flipped.value} sur ${total.value} : ${name}, ${rarity.label}${card.isNew ? ', nouvelle' : ''}.`
+  return `Carte ${i + 1} sur ${total.value} : ${name}, ${rarity.label}${card.isNew ? ', nouvelle' : ''}.`
 })
 
 function claimFailed(e: unknown) {
@@ -195,15 +193,13 @@ async function onTorn() {
   }
 }
 
-let showTimer: ReturnType<typeof setTimeout> | undefined
 let dealTimer: ReturnType<typeof setTimeout> | undefined
 
 /** Une nouvelle pile, face cachée. */
 function resetPile() {
-  clearTimeout(showTimer)
   clearTimeout(dealTimer)
   flipped.value = 0
-  showing.value = null
+  revealedTop.value = false
 }
 onBeforeUnmount(resetPile)
 
@@ -247,24 +243,27 @@ async function openWithoutTearing() {
 }
 
 /**
- * Retourne la carte du dessus : elle se soulève et se retourne au-dessus de la pile, le temps de la
- * lire, puis va se poser à son emplacement sur le tapis. Retourner la suivante sans attendre envoie
- * tout de suite la précédente à sa place.
+ * Premier clic sur la carte du dessus : elle se retourne sur place (face visible), sans quitter la
+ * pile. Le bouton d'envoi la pose ensuite sur le tapis et libère la suivante.
  */
 function reveal(index: number) {
-  if (index !== flipped.value) return
-  clearTimeout(showTimer)
-  flipped.value = index + 1
-  showing.value = reduced ? null : index
-  if (!reduced) showTimer = setTimeout(() => (showing.value = null), SHOW_MS)
+  if (index !== flipped.value || revealedTop.value) return
+  revealedTop.value = true
+  void keepFocus()
+}
+
+/** Second clic : la carte retournée est envoyée à son emplacement sur le tapis. */
+function sendToMat() {
+  if (!revealedTop.value) return
+  revealedTop.value = false
+  flipped.value++
   void keepFocus()
 }
 
 /** Distribue le reste de la pile sur le tapis, une carte après l'autre. */
 function revealAll() {
-  clearTimeout(showTimer)
   clearTimeout(dealTimer)
-  showing.value = null
+  revealedTop.value = false
   if (reduced) {
     flipped.value = total.value
     return
@@ -278,8 +277,8 @@ function revealAll() {
 }
 
 /**
- * Le bouton qui vient de servir se désactive ou disparaît : le focus passe à la prochaine carte à
- * retourner, puis au lien vers la collection quand la pile est vide.
+ * Le contrôle qui vient de servir se désactive ou disparaît : le focus passe à l'action suivante,
+ * puis au lien vers la collection quand la pile est vide.
  */
 async function keepFocus() {
   await nextTick()
@@ -310,7 +309,7 @@ const remaining = computed(() =>
     <PageHeader title="Un booster quotidien" />
 
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
-      <div v-if="today" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div v-if="today" class="mx-auto w-full max-w-2xl">
         <div>
           <!-- Cadre jaune unique : ouverture puis découverte des cartes, toujours à la taille de l'écran -->
           <div
@@ -379,7 +378,6 @@ const remaining = computed(() =>
                       v-for="(card, i) in booster.cards"
                       :key="`${booster.id}-${i}`"
                       class="booster-card"
-                      :class="{ 'pointer-events-none': placeOf(i) === 'show' }"
                       :data-card-index="i"
                       :style="cardStyle(i)"
                     >
@@ -389,10 +387,11 @@ const remaining = computed(() =>
                           :index="i"
                           :intro="!bursting"
                           :compact="table.card.value.compact"
-                          :revealed="!opened || i < flipped"
+                          :revealed="!opened || i < flipped || (i === flipped && revealedTop)"
                           :interactive="settled && i === flipped"
-                          :glow="settled && showing === null && i === flipped"
+                          :glow="settled && !revealedTop && i === flipped"
                           @reveal="reveal(i)"
+                          @send="sendToMat"
                         />
                       </div>
                     </li>
@@ -428,29 +427,6 @@ const remaining = computed(() =>
             </template>
           </div>
         </div>
-
-        <aside class="flex flex-col gap-5">
-          <div class="card-pixel-sm bg-white p-4">
-            <p class="font-bold">Probabilités de tirage</p>
-            <ul class="mt-2 flex flex-col gap-1.5 text-sm">
-              <li
-                v-for="r in rarities"
-                :key="r.code"
-                class="flex items-center justify-between gap-2"
-              >
-                <span class="flex items-center gap-2">
-                  <span
-                    class="size-4 border-2 border-ink"
-                    :style="{ backgroundColor: rarityColor(r.code) }"
-                    aria-hidden="true"
-                  />
-                  {{ r.label }}
-                </span>
-                <strong>{{ formatPercent(r.dropRate * 100) }}</strong>
-              </li>
-            </ul>
-          </div>
-        </aside>
       </div>
     </AsyncState>
 

@@ -102,8 +102,10 @@ MAX_LIMITED_STOCK = 100_000
 
 
 class ScheduledRarityChange(ApiModel):
-    rarity: RaritySummaryOut
-    stock: int | None  # exemplaires de l'édition limitée (légendaire), sinon null
+    """Changement en attente d'une carte : désormais uniquement une hausse de stock à minuit."""
+
+    rarity: RaritySummaryOut  # rareté actuelle (légendaire) ; la rareté elle-même ne change plus à minuit
+    stock: int | None  # nouveau total d'exemplaires visé pour l'édition limitée
     effective_from: dt.date
 
 
@@ -117,9 +119,10 @@ class AdminCreatureOut(CreatureOut):
     @classmethod
     def of(cls, c: Creature) -> "AdminCreatureOut":
         change = None
-        if c.changement_le is not None and c.rarete_suivante is not None:
+        if c.changement_le is not None and c.stock_suivant is not None:
+            # Seule une hausse de stock est désormais programmée ; la rareté reste celle du jour.
             change = ScheduledRarityChange(
-                rarity=RaritySummaryOut.of(c.rarete_suivante), stock=c.stock_suivant, effective_from=c.changement_le
+                rarity=RaritySummaryOut.of(c.rarete), stock=c.stock_suivant, effective_from=c.changement_le
             )
         return cls(
             **cls._fields(c),
@@ -144,8 +147,15 @@ class AdminCreatureIn(ApiInput):
     stock: int | None = Field(default=None, ge=1, le=MAX_LIMITED_STOCK)
 
 
-class RarityChangeIn(ApiInput):
-    """Nouvelle rareté d'une carte existante, appliquée au prochain minuit."""
+class AdminCreatureUpdateIn(ApiInput):
+    """Modifie une carte existante. Nom, description, famille et rareté s'appliquent tout de suite ;
+    le nombre d'exemplaires d'une édition limitée est différé au prochain minuit et ne peut
+    qu'augmenter. Champs omis inchangés ; l'image passe par `/sprite`."""
 
-    rarity: RarityCode
+    name: str | None = Field(default=None, min_length=2, max_length=50)
+    description: str | None = Field(default=None, max_length=500)
+    family: Famille | None = None
+    rarity: RarityCode | None = None
+    # Édition limitée (légendaire) : total d'exemplaires. Initial immédiat quand la carte devient
+    # légendaire ; ensuite, toute hausse prend effet au prochain minuit (baisse interdite).
     stock: int | None = Field(default=None, ge=1, le=MAX_LIMITED_STOCK)

@@ -30,10 +30,29 @@ const router = createRouter({
       meta: { guestOnly: true, title: 'Connexion' },
     },
     {
+      // AS-75 : lien envoyé par un administrateur, accessible connecté ou non.
+      path: '/reinitialiser',
+      name: 'reset-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      meta: { title: 'Nouveau mot de passe' },
+    },
+    {
       path: '/inscription',
       name: 'register',
       component: () => import('@/views/RegisterView.vue'),
       meta: { guestOnly: true, title: 'Créer un compte' },
+    },
+    {
+      path: '/guide',
+      name: 'guide',
+      component: () => import('@/views/GuideView.vue'),
+      meta: { title: 'Guide du joueur' },
+    },
+    {
+      path: '/mentions-legales',
+      name: 'legal',
+      component: () => import('@/views/LegalView.vue'),
+      meta: { title: 'Mentions légales' },
     },
     {
       path: '/',

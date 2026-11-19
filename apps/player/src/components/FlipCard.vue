@@ -19,14 +19,14 @@ withDefaults(
     intro?: boolean
     /** Version compacte (petite illustration), quand la place manque. */
     compact?: boolean
-    /** La carte peut être retournée (carte du dessus de la pile). */
+    /** Carte active (dessus de la pile) : un clic la retourne, un second l'envoie sur le tapis. */
     interactive?: boolean
     /** Le dos affiche l'aura de rareté (prochaine carte à retourner). */
     glow?: boolean
   }>(),
   { intro: true, compact: false, interactive: true, glow: true },
 )
-defineEmits<{ reveal: [] }>()
+const emit = defineEmits<{ reveal: []; send: [] }>()
 </script>
 
 <template>
@@ -41,18 +41,21 @@ defineEmits<{ reveal: [] }>()
       :style="{ minHeight: compact ? '190px' : '240px' }"
       :class="[
         revealed ? 'rotate-y-180' : '',
-        !revealed && interactive ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default',
+        interactive ? 'cursor-pointer' : 'cursor-default',
+        !revealed && interactive ? 'hover:-translate-y-1' : '',
       ]"
-      :aria-label="
-        revealed
-          ? card.creature.name
-          : interactive
+      :disabled="!interactive"
+      :aria-label="revealed && interactive ? 'Envoyer la carte sur le tapis' : undefined"
+      @click="revealed ? emit('send') : emit('reveal')"
+    >
+      <!-- Nom de la carte face cachée ; une fois retournée, c'est celui de la créature -->
+      <span v-if="!revealed" class="sr-only">
+        {{
+          interactive
             ? `Retourner la carte ${index + 1}, rareté ${card.creature.rarity.label}`
             : `Carte ${index + 1}, face cachée dans la pile`
-      "
-      :disabled="revealed || !interactive"
-      @click="$emit('reveal')"
-    >
+        }}
+      </span>
       <!-- Dos de carte -->
       <span
         class="card-back card-pixel-sm rarity-frame absolute inset-0 flex flex-col items-center justify-center gap-2 border-ink bg-ink backface-hidden"
@@ -68,7 +71,10 @@ defineEmits<{ reveal: [] }>()
         <span class="font-pixel text-xs tracking-widest text-cream/80 uppercase">Toucher</span>
       </span>
       <!-- Face -->
-      <span class="absolute inset-0 rotate-y-180 backface-hidden">
+      <span
+        class="absolute inset-0 rotate-y-180 backface-hidden"
+        :aria-hidden="!revealed || undefined"
+      >
         <CreatureCard
           :creature="card.creature"
           :highlight="card.isNew"

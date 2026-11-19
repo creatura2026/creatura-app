@@ -73,9 +73,9 @@ class TradeOut(ApiModel):
     def of(cls, e: Echange) -> "TradeOut":
         def items(sens: Sens) -> list[TradeItemOut]:
             return [
-                TradeItemOut(creature=CreatureSummaryOut.of(l.creature), quantity=l.quantite)
-                for l in e.lignes
-                if l.sens == sens
+                TradeItemOut(creature=CreatureSummaryOut.of(ligne.creature), quantity=ligne.quantite)
+                for ligne in e.lignes
+                if ligne.sens == sens
             ]
 
         return cls(

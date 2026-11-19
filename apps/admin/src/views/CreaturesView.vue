@@ -1,14 +1,21 @@
 <script setup lang="ts">
 /**
- * Cartes du catalogue : ajout d'une carte et changement de rareté, appliqués au prochain minuit.
- * Une légendaire est une édition limitée : son nombre d'exemplaires est obligatoire.
+ * Cartes du catalogue : ajout d'une carte et modification d'une carte existante.
+ *
+ * L'image est toujours publiée sur le CDN sous une clé dérivée du nom (`sprites/<slug>.png`) :
+ * la clé du bucket est donc forcément celle de la créature. Une prévisualisation montre la carte
+ * telle que la verront les joueurs.
+ *
+ * « Modifier la créature » change tout en une fois : nom, description et famille (tout de suite),
+ * image (upload immédiat), et rareté + nombre d'exemplaires (appliqués au prochain minuit).
  */
-import { computed, reactive, ref } from 'vue'
-import { errorMessage, type AdminCreature } from '@creatura/shared/api/types'
+import { computed, reactive, ref, watch } from 'vue'
+import { errorMessage, type AdminCreature, type AdminCreatureUpdate } from '@creatura/shared/api/types'
+import type { AdminCreatureInput, CreatureSummary } from '@creatura/shared/api/types'
 import PageHeader from '@creatura/shared/ui/PageHeader.vue'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
-import RarityGems from '@creatura/shared/ui/RarityGems.vue'
+import CreatureCard from '@creatura/shared/ui/CreatureCard.vue'
 import { formatDate } from '@creatura/shared/format'
 import { toast } from '@creatura/shared/toast'
 
@@ -16,26 +23,39 @@ import {
   useAdminCreatures,
   useCancelRarityChange,
   useCreateCreature,
-  useScheduleRarityChange,
+  useUpdateCreature,
+  useUploadSprite,
 } from '@/api/queries'
 
-const FAMILIES = [
+/** Codes acceptés par le contrat (creatura-api.openapi.yaml). */
+type FamilyCode = AdminCreatureInput['family']
+type RarityCode = AdminCreatureInput['rarity']
+
+const FAMILIES: { code: FamilyCode; label: string }[] = [
   { code: 'NATURE', label: 'Nature' },
   { code: 'CRISTAL', label: 'Cristal' },
   { code: 'BRUME', label: 'Brume' },
   { code: 'LUEUR', label: 'Lueur' },
 ]
-const RARITIES = [
+const RARITIES: { code: RarityCode; label: string }[] = [
   { code: 'COMMON', label: 'Commune' },
   { code: 'UNCOMMON', label: 'Peu commune' },
   { code: 'RARE', label: 'Rare' },
   { code: 'LEGENDARY', label: 'Légendaire (édition limitée)' },
 ]
+/** Libellé court pour la prévisualisation (le libellé long déborderait la carte). */
+const RARITY_SHORT: Record<string, string> = {
+  COMMON: 'Commune',
+  UNCOMMON: 'Peu commune',
+  RARE: 'Rare',
+  LEGENDARY: 'Légendaire',
+}
 
 const { data: creatures, isPending, error, refetch } = useAdminCreatures()
 const create = useCreateCreature()
-const schedule = useScheduleRarityChange()
+const update = useUpdateCreature()
 const cancel = useCancelRarityChange()
+const uploadSprite = useUploadSprite()
 
 const today = new Date().toISOString().slice(0, 10)
 const search = ref('')
@@ -44,32 +64,96 @@ const shown = computed(() => {
   return (creatures.value ?? []).filter((c) => !needle || c.name.toLowerCase().includes(needle))
 })
 
+/** Nom de carte → clé de fichier : minuscules, accents retirés, snake_case. « Léo Brume » → leo_brume */
+function slugify(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function familyOf(code: string) {
+  return FAMILIES.find((f) => f.code === code) ?? FAMILIES[0]!
+}
+
+/** Objet attendu par CreatureCard pour la prévisualisation. */
+function preview(opts: {
+  name: string
+  family: string
+  rarity: string
+  imageUrl: string | null
+}): CreatureSummary {
+  const fam = familyOf(opts.family)
+  return {
+    id: 'preview',
+    name: opts.name.trim() || 'Nouvelle carte',
+    family: { code: fam.code, label: fam.label },
+    rarity: { code: opts.rarity, label: RARITY_SHORT[opts.rarity] ?? opts.rarity },
+    imageUrl: opts.imageUrl ?? '',
+  }
+}
+
 // ── Ajout d'une carte ────────────────────────────────────────────────────
 const blank = () => ({
   name: '',
   description: '',
-  family: 'NATURE',
-  rarity: 'LEGENDARY',
-  image: 'sprites/',
+  family: 'NATURE' as FamilyCode,
+  // Par défaut une carte illimitée (exemplaires infinis) ; seule une légendaire a un stock.
+  rarity: 'COMMON' as RarityCode,
   stock: 50 as number | null,
 })
 const form = reactive(blank())
 const formErrors = ref<Record<string, string>>({})
-const imagePreview = computed(() =>
-  /^sprites\/[a-z0-9_-]+\.png$/.test(form.image)
-    ? `${creatures.value?.[0]?.imageUrl.replace(/sprites\/.*$/, '') ?? '/'}${form.image}`
-    : null,
+const newFile = ref<File | null>(null)
+const newFileUrl = ref<string | null>(null)
+const newFileInput = ref<HTMLInputElement | null>(null)
+
+const spriteKey = computed(() => slugify(form.name))
+const newPreview = computed(() =>
+  preview({ name: form.name, family: form.family, rarity: form.rarity, imageUrl: newFileUrl.value }),
 )
+
+function setNewFile(file: File | null) {
+  if (newFileUrl.value) URL.revokeObjectURL(newFileUrl.value)
+  newFile.value = file
+  newFileUrl.value = file ? URL.createObjectURL(file) : null
+}
+
+function onNewFile(event: Event) {
+  setNewFile((event.target as HTMLInputElement).files?.[0] ?? null)
+}
 
 async function addCard() {
   formErrors.value = {}
+  const file = newFile.value
+  const key = spriteKey.value
+  if (!file) {
+    formErrors.value = { file: 'Choisissez une image PNG pour la carte.' }
+    return
+  }
+  if (!key) {
+    formErrors.value = { name: 'Le nom doit contenir des lettres ou des chiffres.' }
+    return
+  }
   try {
     const card = await create.mutateAsync({
       ...form,
+      image: `sprites/${key}.png`,
       stock: form.rarity === 'LEGENDARY' ? form.stock : null,
     })
+    // La carte existe : on y attache le sprite (clé dérivée du nom). Un échec ici n'annule pas
+    // la carte (le back n'a pas de suppression) : on le signale et le sprite reste à reprendre.
+    try {
+      await uploadSprite.mutateAsync({ id: card.id, file, filename: key })
+    } catch (e) {
+      toast(`${card.name} créée, mais l'image a échoué : ${errorMessage(e)} Reprenez l'image dans la liste.`, 'error')
+      resetForm()
+      return
+    }
     toast(`${card.name} sera disponible le ${formatDate(card.availableFrom)}, à minuit.`, 'success')
-    Object.assign(form, blank())
+    resetForm()
   } catch (e) {
     const fields = (e as { problem?: { errors?: { field: string; message: string }[] } }).problem
       ?.errors
@@ -78,29 +162,103 @@ async function addCard() {
   }
 }
 
-// ── Changement de rareté ──────────────────────────────────────────────────
+function resetForm() {
+  Object.assign(form, blank())
+  setNewFile(null)
+  if (newFileInput.value) newFileInput.value.value = ''
+}
+
+// ── Modifier une carte existante (nom, description, famille, image, rareté) ──
 const editing = ref<string | null>(null)
-const change = reactive({ rarity: 'RARE', stock: 50 as number | null })
+const edit = reactive({
+  name: '',
+  description: '',
+  family: 'NATURE' as FamilyCode,
+  rarity: 'COMMON' as RarityCode,
+  stock: 50 as number | null,
+})
+const editFile = ref<File | null>(null)
+const editFileUrl = ref<string | null>(null)
+const editInput = ref<HTMLInputElement | null>(null)
+const saving = ref(false)
+
+const editKey = computed(() => slugify(edit.name))
+const editPreview = computed(() => {
+  const c = shown.value.find((x) => x.id === editing.value)
+  return preview({
+    name: edit.name,
+    family: edit.family,
+    rarity: edit.rarity,
+    imageUrl: editFileUrl.value ?? c?.imageUrl ?? null,
+  })
+})
+
+function setEditFile(file: File | null) {
+  if (editFileUrl.value) URL.revokeObjectURL(editFileUrl.value)
+  editFile.value = file
+  editFileUrl.value = file ? URL.createObjectURL(file) : null
+}
 
 function startEdit(c: AdminCreature) {
   editing.value = c.id
-  change.rarity = c.scheduledChange?.rarity.code ?? c.rarity.code
-  change.stock = c.scheduledChange?.stock ?? c.stockRemaining ?? 50
+  edit.name = c.name
+  edit.description = c.description ?? ''
+  edit.family = c.family.code as FamilyCode
+  // La rareté est désormais immédiate ; on repart de la rareté actuelle. Le stock part de la hausse
+  // prévue s'il y en a une, sinon du stock actuel.
+  edit.rarity = c.rarity.code as RarityCode
+  edit.stock = c.scheduledChange?.stock ?? c.stockTotal ?? 50
+  setEditFile(null)
+  if (editInput.value) editInput.value.value = ''
 }
 
-async function saveChange(c: AdminCreature) {
+/** Stock minimum saisissable : une édition limitée existante ne peut qu'augmenter. */
+const editStockMin = computed(() => {
+  const c = shown.value.find((x) => x.id === editing.value)
+  return c && c.rarity.code === 'LEGENDARY' ? (c.stockTotal ?? 1) : 1
+})
+
+function closeEdit() {
+  editing.value = null
+  setEditFile(null)
+}
+
+function onEditFile(event: Event) {
+  setEditFile((event.target as HTMLInputElement).files?.[0] ?? null)
+}
+
+async function saveEdit(c: AdminCreature) {
+  saving.value = true
   try {
-    const updated = await schedule.mutateAsync({
-      id: c.id,
-      body: { rarity: change.rarity, stock: change.rarity === 'LEGENDARY' ? change.stock : null },
-    })
-    editing.value = null
-    toast(
-      `${updated.name} : ${updated.scheduledChange?.rarity.label} à partir du ${formatDate(updated.scheduledChange!.effectiveFrom)}.`,
-      'success',
-    )
+    // Un seul PATCH : nom, description, famille et rareté s'appliquent tout de suite ; une hausse
+    // du nombre d'exemplaires est différée au prochain minuit (le back ne garde que ce qui change).
+    const body: AdminCreatureUpdate = {}
+    if (edit.name.trim() !== c.name) body.name = edit.name.trim()
+    if ((edit.description ?? '').trim() !== (c.description ?? '')) body.description = edit.description
+    if (edit.family !== c.family.code) body.family = edit.family
+
+    const currentStock = c.scheduledChange?.stock ?? c.stockTotal
+    if (edit.rarity !== c.rarity.code) {
+      body.rarity = edit.rarity
+      // Devient légendaire : stock initial (immédiat). Vers une illimitée : pas de stock.
+      if (edit.rarity === 'LEGENDARY') body.stock = edit.stock
+    } else if (edit.rarity === 'LEGENDARY' && edit.stock !== currentStock) {
+      body.stock = edit.stock // déjà légendaire : hausse programmée à minuit
+    }
+    if (Object.keys(body).length) await update.mutateAsync({ id: c.id, body })
+
+    // Nouvelle image : clé forcée au slug du nom (même clé que la créature).
+    if (editFile.value) {
+      if (!editKey.value) throw new Error('Le nom doit contenir des lettres ou des chiffres.')
+      await uploadSprite.mutateAsync({ id: c.id, file: editFile.value, filename: editKey.value })
+    }
+
+    toast(`${edit.name.trim() || c.name} mise à jour.`, 'success')
+    closeEdit()
   } catch (e) {
     toast(errorMessage(e), 'error')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -112,69 +270,117 @@ async function cancelChange(c: AdminCreature) {
     toast(errorMessage(e), 'error')
   }
 }
+
+watch(editing, (id) => {
+  if (!id) setEditFile(null)
+})
 </script>
 
 <template>
   <section>
     <PageHeader eyebrow="Catalogue" title="Cartes" />
 
+    <!-- Ajouter une carte : formulaire à gauche, prévisualisation de la carte à droite. -->
     <form class="card-pixel bg-butter p-5 sm:p-6" @submit.prevent="addCard">
       <h2 class="font-sans text-lg font-bold">Ajouter une carte</h2>
-      <p class="mt-1 text-sm">
-        Visible et tirable à partir du prochain minuit (heure de Paris). L’image doit déjà être sur
-        le CDN, dans le dossier <code>sprites/</code>.
-      </p>
-      <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <label class="text-sm font-semibold">
-          Nom
-          <input v-model="form.name" required minlength="2" maxlength="50" class="field" />
-          <span v-if="formErrors.name" class="text-xs text-brick">{{ formErrors.name }}</span>
-        </label>
-        <label class="text-sm font-semibold">
-          Famille
-          <select v-model="form.family" class="field">
-            <option v-for="f in FAMILIES" :key="f.code" :value="f.code">{{ f.label }}</option>
-          </select>
-        </label>
-        <label class="text-sm font-semibold">
-          Rareté
-          <select v-model="form.rarity" class="field">
-            <option v-for="r in RARITIES" :key="r.code" :value="r.code">{{ r.label }}</option>
-          </select>
-        </label>
-        <label v-if="form.rarity === 'LEGENDARY'" class="text-sm font-semibold">
-          Nombre d’exemplaires
-          <input
-            v-model.number="form.stock"
-            type="number"
-            min="1"
-            max="100000"
-            required
-            class="field"
+      <div class="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_12rem]">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="text-sm font-semibold">
+            Nom
+            <input v-model="form.name" required minlength="2" maxlength="50" class="field" />
+            <span v-if="formErrors.name" class="text-xs text-brick">{{ formErrors.name }}</span>
+          </label>
+          <label class="text-sm font-semibold">
+            Famille
+            <select v-model="form.family" class="field">
+              <option v-for="f in FAMILIES" :key="f.code" :value="f.code">{{ f.label }}</option>
+            </select>
+          </label>
+          <label class="text-sm font-semibold">
+            Rareté
+            <select v-model="form.rarity" class="field">
+              <option v-for="r in RARITIES" :key="r.code" :value="r.code">{{ r.label }}</option>
+            </select>
+          </label>
+          <label v-if="form.rarity === 'LEGENDARY'" class="text-sm font-semibold">
+            Nombre d'exemplaires
+            <input
+              v-model.number="form.stock"
+              type="number"
+              min="1"
+              max="100000"
+              required
+              class="field"
+            />
+            <span v-if="formErrors.stock" class="text-xs text-brick">{{ formErrors.stock }}</span>
+          </label>
+          <div v-else class="text-sm font-semibold">
+            Nombre d'exemplaires
+            <p class="field flex items-center gap-2 !bg-cream">
+              <span class="text-lg leading-none">∞</span> Illimité
+            </p>
+          </div>
+          <label class="text-sm font-semibold sm:col-span-2">
+            Description
+            <textarea v-model="form.description" maxlength="500" rows="2" class="field" />
+          </label>
+
+          <!-- Dépose d'image : zone cliquable avec aperçu, clé CDN affichée. -->
+          <div class="text-sm font-semibold sm:col-span-2">
+            Image de la carte (PNG)
+            <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- le label contient le champ fichier ; le glisser-déposer n'en est qu'un raccourci -->
+            <label
+              class="dropzone mt-1"
+              :class="{ 'dropzone--filled': newFile }"
+              @dragover.prevent
+              @drop.prevent="setNewFile(($event.dataTransfer?.files?.[0] as File) ?? null)"
+            >
+              <img
+                v-if="newFileUrl"
+                :src="newFileUrl"
+                alt=""
+                class="pixelated size-14 shrink-0 border-2 border-ink bg-white"
+              />
+              <PixelIcon v-else name="booster" :size="28" class="shrink-0 opacity-60" />
+              <span class="min-w-0 font-normal">
+                <span class="block font-semibold">
+                  {{ newFile ? newFile.name : 'Choisir un PNG ou le glisser ici' }}
+                </span>
+                <span v-if="spriteKey" class="block truncate text-xs">
+                  Clé sur le CDN : <code>sprites/{{ spriteKey }}.png</code>
+                </span>
+                <span v-else class="block text-xs text-ink/80">La clé suit le nom de la carte.</span>
+              </span>
+              <input
+                ref="newFileInput"
+                type="file"
+                accept="image/png"
+                class="sr-only"
+                @change="onNewFile"
+              />
+            </label>
+            <span v-if="formErrors.file" class="text-xs text-brick">{{ formErrors.file }}</span>
+          </div>
+        </div>
+
+        <!-- Prévisualisation -->
+        <div class="mx-auto w-44 self-start lg:w-full">
+          <p class="mb-1 text-xs font-bold tracking-wider uppercase">Aperçu</p>
+          <CreatureCard
+            :creature="newPreview"
+            :missing="!newFileUrl"
+            :description="form.description"
           />
-          <span v-if="formErrors.stock" class="text-xs text-brick">{{ formErrors.stock }}</span>
-        </label>
-        <label class="text-sm font-semibold">
-          Image (clé sur le CDN)
-          <input v-model="form.image" required pattern="sprites/[a-z0-9_\-]+\.png" class="field" />
-          <span v-if="formErrors.image" class="text-xs text-brick">{{ formErrors.image }}</span>
-        </label>
-        <label class="text-sm font-semibold sm:col-span-2 lg:col-span-3">
-          Description
-          <textarea v-model="form.description" maxlength="500" rows="2" class="field" />
-        </label>
+        </div>
       </div>
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <img
-          v-if="imagePreview"
-          :src="imagePreview"
-          alt="Aperçu de l’image"
-          class="pixelated size-16 border-2 border-ink bg-white"
-        />
-        <span v-else />
-        <button type="submit" class="btn btn-primary bg-white" :disabled="create.isPending.value">
+      <div class="mt-4 flex justify-end">
+        <button
+          type="submit"
+          class="btn btn-primary bg-white"
+          :disabled="create.isPending.value || uploadSprite.isPending.value"
+        >
           <PixelIcon name="check" :size="18" />
-          {{ create.isPending.value ? 'Ajout…' : 'Ajouter au prochain minuit' }}
+          {{ create.isPending.value || uploadSprite.isPending.value ? 'Ajout…' : 'Ajouter au prochain minuit' }}
         </button>
       </div>
     </form>
@@ -182,7 +388,13 @@ async function cancelChange(c: AdminCreature) {
     <AsyncState :loading="isPending" :error="error" @retry="refetch()">
       <div class="mt-6 flex items-center justify-between gap-3">
         <h2 class="font-sans text-lg font-bold">{{ creatures?.length ?? 0 }} cartes</h2>
-        <input v-model="search" type="search" placeholder="Rechercher" class="field max-w-60" />
+        <input
+          v-model="search"
+          type="search"
+          placeholder="Rechercher"
+          aria-label="Rechercher une carte"
+          class="field max-w-60"
+        />
       </div>
       <ul class="mt-3 grid gap-3">
         <li
@@ -214,38 +426,120 @@ async function cancelChange(c: AdminCreature) {
               <button type="button" class="ml-2 underline" @click="cancelChange(c)">Annuler</button>
             </p>
           </div>
-          <RarityGems :code="c.rarity.code" :label="c.rarity.label" :size="14" />
 
-          <form
-            v-if="editing === c.id"
-            class="flex w-full flex-wrap items-end gap-2 border-t-2 border-ink/20 pt-3"
-            @submit.prevent="saveChange(c)"
+          <button
+            v-if="editing !== c.id"
+            type="button"
+            class="btn btn-secondary"
+            @click="startEdit(c)"
           >
-            <label class="text-xs font-semibold">
-              Nouvelle rareté
-              <select v-model="change.rarity" class="field">
-                <option v-for="r in RARITIES" :key="r.code" :value="r.code">{{ r.label }}</option>
-              </select>
-            </label>
-            <label v-if="change.rarity === 'LEGENDARY'" class="text-xs font-semibold">
-              Exemplaires à tirer
-              <input
-                v-model.number="change.stock"
-                type="number"
-                min="1"
-                max="100000"
-                required
-                class="field w-28"
-              />
-            </label>
-            <button type="submit" class="btn btn-primary" :disabled="schedule.isPending.value">
-              Prévoir à minuit
-            </button>
-            <button type="button" class="btn btn-secondary" @click="editing = null">Fermer</button>
-          </form>
-          <button v-else type="button" class="btn btn-secondary" @click="startEdit(c)">
-            Changer la rareté
+            Modifier la créature
           </button>
+
+          <!-- Éditeur : tout se modifie ici, avec un aperçu de la carte. -->
+          <form
+            v-else
+            class="grid w-full gap-5 border-t-2 border-ink/20 pt-4 lg:grid-cols-[minmax(0,1fr)_12rem]"
+            @submit.prevent="saveEdit(c)"
+          >
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="text-sm font-semibold">
+                Nom
+                <input v-model="edit.name" required minlength="2" maxlength="50" class="field" />
+              </label>
+              <label class="text-sm font-semibold">
+                Famille
+                <select v-model="edit.family" class="field">
+                  <option v-for="f in FAMILIES" :key="f.code" :value="f.code">{{ f.label }}</option>
+                </select>
+              </label>
+              <label class="text-sm font-semibold sm:col-span-2">
+                Description
+                <textarea v-model="edit.description" maxlength="500" rows="2" class="field" />
+              </label>
+              <label class="text-sm font-semibold">
+                Rareté
+                <select v-model="edit.rarity" class="field">
+                  <option v-for="r in RARITIES" :key="r.code" :value="r.code">{{ r.label }}</option>
+                </select>
+              </label>
+              <label v-if="edit.rarity === 'LEGENDARY'" class="text-sm font-semibold">
+                Nombre d'exemplaires
+                <input
+                  v-model.number="edit.stock"
+                  type="number"
+                  :min="editStockMin"
+                  max="100000"
+                  required
+                  class="field"
+                />
+                <span class="mt-1 block text-xs font-normal text-ink/80">
+                  Une hausse prend effet au prochain minuit · le stock ne peut qu'augmenter.
+                </span>
+              </label>
+              <div v-else class="text-sm font-semibold">
+                Nombre d'exemplaires
+                <p class="field flex items-center gap-2 !bg-cream">
+                  <span class="text-lg leading-none">∞</span> Illimité
+                </p>
+              </div>
+
+              <div class="text-sm font-semibold sm:col-span-2">
+                Image de la carte (PNG)
+                <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- le label contient le champ fichier ; le glisser-déposer n'en est qu'un raccourci -->
+                <label
+                  class="dropzone mt-1"
+                  :class="{ 'dropzone--filled': editFile }"
+                  @dragover.prevent
+                  @drop.prevent="setEditFile(($event.dataTransfer?.files?.[0] as File) ?? null)"
+                >
+                  <img
+                    :src="editFileUrl ?? c.imageUrl"
+                    alt=""
+                    class="pixelated size-14 shrink-0 border-2 border-ink bg-white"
+                  />
+                  <span class="min-w-0 font-normal">
+                    <span class="block font-semibold">
+                      {{ editFile ? editFile.name : 'Remplacer l’image (optionnel)' }}
+                    </span>
+                    <span v-if="editKey" class="block truncate text-xs">
+                      Clé sur le CDN : <code>sprites/{{ editKey }}.png</code>
+                    </span>
+                  </span>
+                  <input
+                    ref="editInput"
+                    type="file"
+                    accept="image/png"
+                    class="sr-only"
+                    @change="onEditFile"
+                  />
+                </label>
+              </div>
+
+              <div class="flex flex-wrap gap-2 sm:col-span-2">
+                <button type="submit" class="btn btn-primary" :disabled="saving">
+                  <PixelIcon name="check" :size="16" />
+                  {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
+                </button>
+                <button type="button" class="btn btn-secondary" :disabled="saving" @click="closeEdit">
+                  Fermer
+                </button>
+                <button
+                  v-if="c.scheduledChange"
+                  type="button"
+                  class="btn btn-secondary"
+                  @click="cancelChange(c)"
+                >
+                  Annuler la hausse prévue
+                </button>
+              </div>
+            </div>
+
+            <div class="mx-auto w-44 self-start lg:w-full">
+              <p class="mb-1 text-xs font-bold tracking-wider uppercase">Aperçu</p>
+              <CreatureCard :creature="editPreview" :description="edit.description" />
+            </div>
+          </form>
         </li>
       </ul>
     </AsyncState>
@@ -261,5 +555,21 @@ async function cancelChange(c: AdminCreature) {
   background: white;
   padding: 0.375rem 0.5rem;
   font-weight: 400;
+}
+/* Zone de dépôt d'image : cliquable, avec aperçu. */
+.dropzone {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  border: 2px dashed var(--color-ink);
+  background: white;
+  padding: 0.625rem;
+}
+.dropzone--filled {
+  border-style: solid;
+}
+.dropzone:hover {
+  background: var(--color-mist, #f1f1f1);
 }
 </style>

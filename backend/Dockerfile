@@ -22,6 +22,10 @@ COPY app ./app
 # ---- Runtime : image minimale, utilisateur non root ----
 FROM python:3.13-slim
 
+# Correctifs de sécurité Debian parus depuis la construction de l'image de base (scan Trivy de
+# nuit) ; pip retiré : l'image n'installe rien à l'exécution, et il embarque ses propres paquets.
+RUN apt-get update  && apt-get upgrade -y --no-install-recommends  && rm -rf /var/lib/apt/lists/*  && python -m pip uninstall -y pip
+
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin creatura
 
 WORKDIR /app

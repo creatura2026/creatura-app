@@ -26,4 +26,4 @@ Les PR exécutent les tests/builds sans publier ni déployer. Un push main ou un
 
 Contrôler le workflow avec actionlint. Après fusion, vérifier la CI applicative complète et la chaîne AWS réelle ; les contrôles locaux des YAML ne remplacent pas les tests SQL, pytest, frontend et le déploiement du compte cible.
 
-Les artefacts de chaque tentative ont des noms uniques. Une relance partielle dont il manque des artefacts est refusée : relancer tous les jobs. Aucun choix silencieux d'une autre version, aucun tag flottant pour le déploiement. Le marqueur de déploiement S3 empêche une ancienne release de remplacer une release plus récente, même si celle-ci a partiellement échoué.
+Les artefacts de chaque tentative ont des noms uniques. Une relance partielle dont il manque des artefacts est refusée : relancer tous les jobs. Aucun choix silencieux d'une autre version, aucun tag flottant pour le déploiement. Le marqueur de déploiement S3 empêche une ancienne release de remplacer une release plus récente, même si celle-ci a partiellement échoué. 

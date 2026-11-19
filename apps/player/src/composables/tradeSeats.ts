@@ -36,6 +36,16 @@ export function seatsOf(trade: Trade, meId: string): TradeSeats {
 }
 
 /**
+ * Échange abandonné : est-ce le joueur connecté qui l'a abandonné ? Le statut le dit : le proposant
+ * annule (CANCELLED), le destinataire refuse (REFUSED). Null si l'échange n'est pas abandonné.
+ */
+export function abandonedByMe(trade: Trade, meId: string): boolean | null {
+  if (trade.status !== 'CANCELLED' && trade.status !== 'REFUSED') return null
+  const proposerLeft = trade.status === 'CANCELLED'
+  return proposerLeft === (trade.proposer.id === meId)
+}
+
+/**
  * L'échange attend-il une action du joueur connecté ? Oui si l'autre joueur a validé et pas lui,
  * ou s'il vient d'être invité et n'a encore rien posé.
  */

@@ -56,9 +56,9 @@ const total = computed(() => cardCount(props.cards))
         <span
           v-if="item.quantity > 1"
           class="absolute -top-2 -left-2 border-2 border-ink bg-sun px-1.5 font-pixel text-sm font-bold"
-          :aria-label="`${item.quantity} exemplaires`"
         >
-          × {{ item.quantity }}
+          <span aria-hidden="true">× {{ item.quantity }}</span>
+          <span class="sr-only">{{ item.quantity }} exemplaires</span>
         </span>
         <button
           v-if="editable"

@@ -14,7 +14,16 @@ const TITLES: Record<ErrorCode, string> = {
   CARDS_UNAVAILABLE: 'Cartes indisponibles',
   CARDS_NOT_OWNED: 'Cartes non possédées',
   TRADE_WITH_SELF: 'Échange avec soi-même',
+  GIFT_WITH_SELF: 'Don à soi-même',
+  GIFT_NOT_PENDING: 'Don clos',
+  GIFT_ALREADY_PENDING: 'Don déjà en attente',
+  LAST_ADMIN: 'Dernier administrateur',
   RATE_LIMITED: 'Trop de tentatives',
+  ACCOUNT_DISABLED: 'Compte désactivé',
+  PASSWORD_CHANGE_REQUIRED: 'Mot de passe à changer',
+  PLAYER_ALREADY_REQUESTED: 'Suppression déjà demandée',
+  REQUEST_NOT_PENDING: 'Demande close',
+  RESET_LINK_INVALID: 'Lien de réinitialisation invalide',
   INTERNAL_ERROR: 'Erreur interne',
 }
 
@@ -31,7 +40,16 @@ const STATUS: Record<ErrorCode, number> = {
   CARDS_UNAVAILABLE: 409,
   CARDS_NOT_OWNED: 422,
   TRADE_WITH_SELF: 422,
+  GIFT_WITH_SELF: 422,
+  GIFT_NOT_PENDING: 409,
+  GIFT_ALREADY_PENDING: 409,
+  LAST_ADMIN: 409,
   RATE_LIMITED: 429,
+  ACCOUNT_DISABLED: 403,
+  PASSWORD_CHANGE_REQUIRED: 403,
+  PLAYER_ALREADY_REQUESTED: 409,
+  REQUEST_NOT_PENDING: 409,
+  RESET_LINK_INVALID: 400,
   INTERNAL_ERROR: 500,
 }
 

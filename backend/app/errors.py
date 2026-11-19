@@ -22,7 +22,16 @@ ERROR_CODES: dict[str, tuple[int, str]] = {
     "CARDS_UNAVAILABLE": (409, "Cartes indisponibles"),
     "CARDS_NOT_OWNED": (422, "Cartes non possédées"),
     "TRADE_WITH_SELF": (422, "Échange avec soi-même"),
+    "GIFT_WITH_SELF": (422, "Don à soi-même"),
+    "GIFT_NOT_PENDING": (409, "Don clos"),
+    "GIFT_ALREADY_PENDING": (409, "Don déjà en attente"),
+    "LAST_ADMIN": (409, "Dernier administrateur"),
     "RATE_LIMITED": (429, "Trop de tentatives"),
+    "ACCOUNT_DISABLED": (403, "Compte désactivé"),
+    "PASSWORD_CHANGE_REQUIRED": (403, "Mot de passe à changer"),
+    "PLAYER_ALREADY_REQUESTED": (409, "Suppression déjà demandée"),
+    "REQUEST_NOT_PENDING": (409, "Demande close"),
+    "RESET_LINK_INVALID": (400, "Lien de réinitialisation invalide"),
     "INTERNAL_ERROR": (500, "Erreur interne"),
 }
 
@@ -102,6 +111,8 @@ _CONSTRAINTS: dict[str, DomainError] = {
     "ck_collection_quantite": Conflict("Une carte n'est plus disponible. Aucune carte n'a été transférée."),
     "ck_creature_stock_restant": Conflict("Stock épuisé : réessayez."),
     "ck_echange_participants": DomainError("Vous ne pouvez pas échanger avec vous-même.", "TRADE_WITH_SELF"),
+    "uq_don_en_attente": Conflict("Un don de cette carte à ce joueur est déjà en attente.", "GIFT_ALREADY_PENDING"),
+    "ck_don_participants": DomainError("Vous ne pouvez pas vous offrir une carte à vous-même.", "GIFT_WITH_SELF"),
     "ck_utilisateur_pseudo": field_error("VALIDATION_ERROR", "pseudo", "Le pseudonyme ne peut pas être vide."),
     "ck_utilisateur_identifiant": field_error("VALIDATION_ERROR", "login", "L'identifiant ne peut pas être vide."),
     "pk_echange_ligne": BadRequest("Une même créature apparaît deux fois du même côté de l'échange."),
@@ -112,6 +123,33 @@ _CONSTRAINTS: dict[str, DomainError] = {
     "ck_rarete_tirage_poids": field_error(
         "VALIDATION_ERROR", "rarityWeights", "Le poids d'une rareté va de 0 à 1000."
     ),
+    # Joueurs et administrateurs (AS-71) : refus des fonctions SQL de 10_evolution_joueurs_admin.sql
+    "ck_demande_suppression_demandeur": Forbidden("Seul un administrateur actif peut demander une suppression."),
+    "ck_demande_suppression_valideur": field_error(
+        "VALIDATION_ERROR", "validatorId", "Choisissez un autre administrateur que vous pour valider."
+    ),
+    "ck_demande_suppression_valideur_actif": field_error(
+        "VALIDATION_ERROR", "validatorId", "Le validateur doit être un administrateur actif."
+    ),
+    "ck_demande_suppression_nombre": field_error("VALIDATION_ERROR", "playerIds", "Choisissez au moins un joueur."),
+    "ck_demande_suppression_joueurs": field_error(
+        "VALIDATION_ERROR", "playerIds", "Seuls des comptes joueurs existants peuvent être supprimés."
+    ),
+    "ck_demande_suppression_deja_demandee": DomainError(
+        "Un des joueurs fait déjà l'objet d'une demande en attente.", "PLAYER_ALREADY_REQUESTED"
+    ),
+    "ck_demande_suppression_existe": NotFound("Cette demande n'existe pas."),
+    "ck_demande_suppression_valideur_seul": Forbidden("Seul l'administrateur choisi peut traiter cette demande."),
+    "ck_demande_suppression_demandeur_seul": Forbidden(
+        "Seul l'administrateur qui a fait la demande peut l'annuler."
+    ),
+    "ck_demande_suppression_en_attente": DomainError(
+        "Cette demande a déjà été traitée, annulée ou a expiré.", "REQUEST_NOT_PENDING"
+    ),
+    "ck_utilisateur_desactivation": BadRequest("Vous ne pouvez pas désactiver votre propre compte."),
+    "ck_desactivation_auteur": Forbidden("Seul un administrateur actif peut désactiver un compte."),
+    "ck_desactivation_cible": NotFound("Ce compte n'est pas un administrateur actif."),
+    "ck_desactivation_minimum": BadRequest("Impossible : il doit rester au moins deux administrateurs actifs."),
 }
 
 

@@ -1,0 +1,7 @@
+# Projet Android généré par Capacitor à chaque build, pages embarquées et APK produits
+android/
+web/
+release/
+# Adresse du site : réglage local (copie de config.example.json) et fichier généré au build
+config.json
+capacitor.config.json

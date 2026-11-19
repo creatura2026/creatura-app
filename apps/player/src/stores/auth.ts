@@ -1,6 +1,11 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { LoginRequest, RegisterRequest, User } from '@creatura/shared/api/types'
+import type {
+  LoginRequest,
+  PasswordChangeRequest,
+  RegisterRequest,
+  User,
+} from '@creatura/shared/api/types'
 
 import { api } from '@/api'
 import { readSession, writeSession } from '@/api/token'
@@ -41,11 +46,31 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /** Nouveau mot de passe : cette session reçoit de nouveaux jetons, les autres sont fermées. */
+  async function changePassword(body: PasswordChangeRequest) {
+    writeSession(await api.changePassword(body))
+  }
+
+  /** Compte supprimé (anonymisé) côté serveur : la session locale est oubliée. */
+  async function deleteAccount(password: string) {
+    await api.deleteAccount({ password })
+    clearSession()
+  }
+
   /** Session expirée ou invalide : on oublie l'utilisateur localement. */
   function clearSession() {
     writeSession(null)
     user.value = null
   }
 
-  return { user, isAuthenticated, login, register, logout, clearSession }
+  return {
+    user,
+    isAuthenticated,
+    login,
+    register,
+    logout,
+    changePassword,
+    deleteAccount,
+    clearSession,
+  }
 })

@@ -20,7 +20,7 @@ def test_notice_format_is_small_and_round_trips():
     assert bus.Notice.decode(bus.Notice(uuid.uuid4(), bus.TRADE, "autre").encode()).message_id is None
     # Illisible ou d'une autre version : ignorée.
     assert bus.Notice.decode("pas du JSON") is None
-    assert bus.Notice.decode('{"v": 2, "p": "x", "t": "%s", "e": "trade"}' % uuid.uuid4()) is None
+    assert bus.Notice.decode(f'{{"v": 2, "p": "x", "t": "{uuid.uuid4()}", "e": "trade"}}') is None
     assert bus.Notice.decode('{"v": 1, "p": "x", "t": "pas-un-uuid", "e": "trade"}') is None
 
 

@@ -36,7 +36,7 @@ const progress = computed(() => {
         <span class="font-pixel">{{ seats.theirs.player.pseudo }}</span>
       </p>
       <div class="flex items-center gap-2">
-        <time class="text-xs text-ink/75" :datetime="trade.decidedAt ?? trade.createdAt">
+        <time class="text-xs text-ink/80" :datetime="trade.decidedAt ?? trade.createdAt">
           {{ formatDateTime(trade.decidedAt ?? trade.createdAt) }}
         </time>
         <span

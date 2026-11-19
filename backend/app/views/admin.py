@@ -3,17 +3,18 @@
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, UploadFile, status
 
 from app.controllers import admin
 from app.dependencies import AdminUser, DbSession, Pagination, apply_scheduled_changes, require_admin
+from app.errors import BadRequest
 from app.schemas.admin import (
     AdminCreatureIn,
     AdminCreatureOut,
+    AdminCreatureUpdateIn,
     AdminStatsOut,
     BoosterSettingsIn,
     BoosterSettingsOut,
-    RarityChangeIn,
     RarityDistributionOut,
 )
 from app.schemas.base import Page
@@ -80,13 +81,25 @@ def create_creature(data: AdminCreatureIn, db: DbSession):
     return AdminCreatureOut.of(admin.create_creature(db, data))
 
 
-@router.put("/creatures/{creatureId}/rarity", response_model=AdminCreatureOut)
-def schedule_rarity_change(creatureId: str, data: RarityChangeIn, db: DbSession):  # noqa: N803 (nom du contrat)
-    """Nouvelle rareté d'une carte existante, appliquée au prochain minuit."""
-    return AdminCreatureOut.of(admin.schedule_rarity_change(db, creatureId, data))
+@router.patch("/creatures/{creatureId}", response_model=AdminCreatureOut)
+def update_creature(creatureId: str, data: AdminCreatureUpdateIn, db: DbSession):  # noqa: N803 (nom du contrat)
+    """Nom, description, famille et rareté d'une carte, tout de suite ; la hausse d'exemplaires
+    d'une édition limitée est différée au prochain minuit (champs omis inchangés)."""
+    return AdminCreatureOut.of(admin.update_creature(db, creatureId, data))
 
 
 @router.delete("/creatures/{creatureId}/rarity", response_model=AdminCreatureOut)
 def cancel_rarity_change(creatureId: str, db: DbSession):  # noqa: N803 (nom du contrat)
-    """Annule le changement de rareté prévu."""
+    """Annule la hausse d'exemplaires prévue au prochain minuit."""
     return AdminCreatureOut.of(admin.cancel_rarity_change(db, creatureId))
+
+
+@router.put("/creatures/{creatureId}/sprite", response_model=AdminCreatureOut)
+async def upload_sprite(creatureId: str, file: UploadFile, db: DbSession):  # noqa: N803
+    """Upload un sprite PNG sur S3 et met à jour creature.image. Invalide le cache CloudFront."""
+    if file.content_type not in ("image/png", "application/octet-stream"):
+        raise BadRequest("Le fichier doit être un PNG.")
+    data = await file.read()
+    if len(data) > 2 * 1024 * 1024:
+        raise BadRequest("Le fichier ne doit pas dépasser 2 Mo.")
+    return AdminCreatureOut.of(admin.upload_sprite(db, creatureId, file.filename, data))

@@ -25,6 +25,12 @@ const router = createRouter({
       meta: { guestOnly: true, title: 'Connexion' },
     },
     {
+      path: '/mot-de-passe',
+      name: 'change-password',
+      component: () => import('@/views/ChangePasswordView.vue'),
+      meta: { title: 'Nouveau mot de passe' },
+    },
+    {
       path: '/acces-refuse',
       name: 'forbidden',
       component: () => import('@/views/ForbiddenView.vue'),
@@ -40,6 +46,12 @@ const router = createRouter({
           name: 'dashboard',
           component: () => import('@/views/DashboardView.vue'),
           meta: { title: 'Statistiques' },
+        },
+        {
+          path: 'mon-compte',
+          name: 'account',
+          component: () => import('@/views/AccountView.vue'),
+          meta: { title: 'Mon compte' },
         },
         {
           path: 'echanges',
@@ -65,6 +77,36 @@ const router = createRouter({
           component: () => import('@/views/SettingsView.vue'),
           meta: { title: 'Réglages du booster' },
         },
+        {
+          path: 'joueurs',
+          name: 'players',
+          component: () => import('@/views/PlayersView.vue'),
+          meta: { title: 'Joueurs' },
+        },
+        {
+          path: 'joueurs/:playerId',
+          name: 'player',
+          component: () => import('@/views/PlayerDetailView.vue'),
+          meta: { title: 'Fiche joueur' },
+        },
+        {
+          path: 'administrateurs',
+          name: 'admins',
+          component: () => import('@/views/AdminsView.vue'),
+          meta: { title: 'Administrateurs' },
+        },
+        {
+          path: 'guide',
+          name: 'guide',
+          component: () => import('@/views/GuideView.vue'),
+          meta: { title: 'Guide administrateur' },
+        },
+        {
+          path: 'mentions-legales',
+          name: 'legal',
+          component: () => import('@/views/LegalView.vue'),
+          meta: { title: 'Mentions légales' },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -77,7 +119,11 @@ router.beforeEach((to) => {
     if (!auth.isAuthenticated) return { name: 'login', query: { redirect: to.fullPath } }
     // Preuve qualité 02 : un joueur se voit refuser l'accès administrateur.
     if (!auth.isAdmin) return { name: 'forbidden' }
+    // AS-71 : un admin au mot de passe provisoire le change avant tout.
+    if (auth.mustChangePassword) return { name: 'change-password' }
   }
+  if (to.name === 'change-password' && !auth.mustChangePassword)
+    return auth.isAuthenticated ? { name: 'dashboard' } : { name: 'login' }
   if (to.meta.guestOnly && auth.isAuthenticated)
     return auth.isAdmin ? { name: 'dashboard' } : { name: 'forbidden' }
 })

@@ -4,16 +4,20 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
 import BrandMark from '@creatura/shared/ui/BrandMark.vue'
 import PixelIcon, { type IconName } from '@creatura/shared/ui/PixelIcon.vue'
+import SkipLink from '@creatura/shared/ui/SkipLink.vue'
 
 import { USE_MOCK_API } from '@/api'
+import { useRequestsToValidate } from '@/api/queries'
 import { useAuthStore } from '@/stores/auth'
 
-const NAV: { name: string; label: string; uc: string; icon: IconName }[] = [
-  { name: 'dashboard', label: 'Statistiques', uc: 'UC-12', icon: 'chart' },
-  { name: 'trades', label: 'Échanges', uc: 'UC-13', icon: 'trade' },
-  { name: 'rarities', label: 'Raretés', uc: 'UC-14', icon: 'gem' },
-  { name: 'creatures', label: 'Cartes', uc: '', icon: 'collection' },
-  { name: 'settings', label: 'Réglages booster', uc: '', icon: 'booster' },
+const NAV: { name: string; label: string; icon: IconName }[] = [
+  { name: 'dashboard', label: 'Statistiques', icon: 'chart' },
+  { name: 'trades', label: 'Échanges', icon: 'trade' },
+  { name: 'rarities', label: 'Raretés', icon: 'gem' },
+  { name: 'creatures', label: 'Cartes', icon: 'collection' },
+  { name: 'settings', label: 'Réglages booster', icon: 'booster' },
+  { name: 'players', label: 'Joueurs', icon: 'user' },
+  { name: 'admins', label: 'Administrateurs', icon: 'lock' },
 ]
 
 const auth = useAuthStore()
@@ -21,6 +25,8 @@ const route = useRoute()
 const router = useRouter()
 const queryClient = useQueryClient()
 const menuOpen = ref(false)
+/** Demandes de suppression qui attendent ma décision (AS-71). */
+const toValidate = useRequestsToValidate()
 
 watch(
   () => route.fullPath,
@@ -41,11 +47,19 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
   <div
     class="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:bg-[linear-gradient(to_right,var(--color-ink)_16rem,transparent_16rem)]"
   >
+    <!-- Hors du flux (sr-only) : n'occupe aucune case de la grille -->
+    <SkipLink />
     <!-- Barre du haut (mobile / tablette) -->
     <header
       class="sticky top-0 z-30 flex h-14 items-center justify-between border-b-2 border-ink bg-ink px-4 text-cream lg:hidden"
     >
-      <BrandMark tone="light" suffix="Admin" />
+      <!-- Repère du contexte admin visible dès le haut de l'écran mobile (la nav est repliée). -->
+      <span class="flex min-w-0 items-center gap-2">
+        <BrandMark tone="light" />
+        <span class="truncate font-pixel text-[0.65rem] tracking-widest text-sun uppercase">
+          Administration
+        </span>
+      </span>
       <button
         type="button"
         class="flex size-11 cursor-pointer items-center justify-center border-2 border-cream/50"
@@ -72,7 +86,7 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
       :class="menuOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex h-14 items-center px-5 lg:h-20">
-        <BrandMark tone="light" suffix="Admin" />
+        <BrandMark tone="light" />
       </div>
       <nav class="flex flex-1 flex-col gap-1.5 px-3 py-4" aria-label="Navigation du dashboard">
         <p class="px-2 pb-2 font-pixel text-xs tracking-widest text-sun uppercase">
@@ -87,16 +101,47 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
         >
           <PixelIcon :name="item.icon" :size="20" />
           <span class="flex-1">{{ item.label }}</span>
-          <span class="text-xs opacity-70">{{ item.uc }}</span>
+          <span
+            v-if="item.name === 'players' && toValidate.data.value?.totalItems"
+            class="border-2 border-current bg-sun px-1.5 text-xs font-bold text-ink"
+          >
+            <span aria-hidden="true">{{ toValidate.data.value.totalItems }}</span>
+            <span class="sr-only">
+              {{ toValidate.data.value.totalItems }} demande(s) de suppression à valider
+            </span>
+          </span>
+        </RouterLink>
+
+        <div class="my-2 border-t border-cream/20" />
+
+        <RouterLink
+          :to="{ name: 'guide' }"
+          class="flex min-h-12 items-center gap-3 border-2 border-transparent px-3 font-semibold hover:border-cream/40"
+          exact-active-class="!border-cream bg-cream text-ink"
+          aria-label="Guide administrateur"
+        >
+          <PixelIcon name="help" :size="20" />
+          <span class="flex-1">Guide</span>
+        </RouterLink>
+
+        <RouterLink
+          :to="{ name: 'legal' }"
+          class="flex min-h-12 items-center gap-3 border-2 border-transparent px-3 font-semibold hover:border-cream/40"
+          exact-active-class="!border-cream bg-cream text-ink"
+        >
+          <PixelIcon name="lock" :size="20" />
+          <span class="flex-1">Mentions légales</span>
         </RouterLink>
       </nav>
       <div class="border-t-2 border-cream/20 p-4">
         <p class="flex items-center gap-2 text-sm">
           <PixelIcon name="user" :size="18" />
           <span class="truncate font-semibold">{{ auth.user?.pseudo }}</span>
-          <span class="ml-auto border border-sun px-1.5 text-xs text-sun">ADMIN</span>
         </p>
-        <button type="button" class="btn btn-dark mt-3 w-full" @click="logout">
+        <RouterLink :to="{ name: 'account' }" class="btn btn-dark mt-3 w-full">
+          <PixelIcon name="lock" :size="18" /> Mon compte
+        </RouterLink>
+        <button type="button" class="btn btn-dark mt-2 w-full" @click="logout">
           <PixelIcon name="logout" :size="18" /> Se déconnecter
         </button>
       </div>
@@ -112,7 +157,11 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
           >Données fictives</span
         >
       </div>
-      <main id="contenu" class="w-full max-w-7xl flex-1 px-4 py-6 sm:px-8 sm:py-8">
+      <main
+        id="contenu"
+        tabindex="-1"
+        class="w-full max-w-7xl flex-1 px-4 py-6 focus:shadow-none focus:outline-none sm:px-8 sm:py-8"
+      >
         <RouterView />
       </main>
     </div>

@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "playwright-report", "test-results"]
+}

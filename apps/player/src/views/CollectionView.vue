@@ -119,6 +119,8 @@ function toggleDuplicates() {
     </CreatureFilters>
 
     <div class="mt-6">
+      <!-- Titre de section des cartes (RGAA 9.1) : les noms des cartes sont des h3 -->
+      <h2 class="sr-only">Cartes de ma collection</h2>
       <AsyncState :loading="isPending" :error="error" @retry="refetch()">
         <template v-if="data">
           <p class="mb-3 text-sm" aria-live="polite" :class="isFetching ? 'opacity-60' : ''">

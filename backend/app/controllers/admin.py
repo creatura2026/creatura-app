@@ -9,21 +9,35 @@ Toute modification (réglages des boosters, nouvelle carte, rareté d'une carte)
 prochain minuit, heure de Paris (`app.controllers.planning`).
 """
 
+import re
 import uuid
 from datetime import date, timedelta
 
-from sqlalchemy import Date, cast, func, or_, select, update
+import boto3
+from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.controllers.booster import settings as booster_settings
 from app.controllers.booster import today
-from app.controllers.catalog import CATALOG_ORDER, parse_creature_id, paginate, rarity_drop_rates, rarity_weights
+from app.controllers.catalog import CATALOG_ORDER, paginate, parse_creature_id, rarity_drop_rates
 from app.controllers.planning import next_midnight_day
 from app.errors import BadRequest, NotFound, field_error
-from app.models import BoosterCarte, Creature, Echange, Rarete, RareteTirage, Reglage, Role, Statut, Utilisateur
-from app.schemas.admin import AdminCreatureIn, RarityChangeIn
+from app.models import (
+    BoosterCarte,
+    Collection,
+    Creature,
+    Echange,
+    Rarete,
+    RareteTirage,
+    Reglage,
+    Role,
+    Statut,
+    Utilisateur,
+)
 from app.schemas.admin import (
+    AdminCreatureIn,
+    AdminCreatureUpdateIn,
     AdminStatsOut,
     CompletedTrades,
     DailyCount,
@@ -34,6 +48,8 @@ from app.schemas.admin import (
 )
 from app.schemas.base import PageParams, PageResult
 from app.schemas.catalog import RARETE_OF, RarityCode, RaritySummaryOut
+
+_SPRITE_KEY_RE = re.compile(r"^sprites/[a-z0-9_-]+\.png$")
 
 DEFAULT_PERIOD_DAYS = 30
 MAX_PERIOD_DAYS = 366
@@ -226,29 +242,128 @@ def create_creature(db: Session, data: AdminCreatureIn) -> Creature:
     return creature
 
 
-def schedule_rarity_change(db: Session, creature_id: str, data: RarityChangeIn) -> Creature:
-    """Nouvelle rareté (et stock si légendaire) appliquée au prochain minuit.
+def update_creature(db: Session, creature_id: str, data: AdminCreatureUpdateIn) -> Creature:
+    """Met à jour une carte. Nom, description, famille et rareté s'appliquent tout de suite ;
+    le nombre d'exemplaires d'une édition limitée est différé au prochain minuit (hausse seule).
 
-    Les exemplaires déjà possédés restent dans les collections. Une carte qui devient légendaire
-    reçoit `stock` nouveaux exemplaires à tirer ; une légendaire qui change de rareté devient
-    illimitée.
+    Seuls les champs fournis changent. Le nom déjà pris est refusé (uq_creature_nom).
     """
     creature = get_creature(db, creature_id)
-    rarete = RARETE_OF[data.rarity]
-    _check_stock(rarete, data.stock)
-    if rarete == creature.rarete and rarete != Rarete.LEGENDAIRE:
-        raise field_error("VALIDATION_ERROR", "rarity", "La carte a déjà cette rareté.")
-    creature.rarete_suivante = rarete
-    creature.stock_suivant = data.stock
+    provided = data.model_fields_set
+    if "name" in provided and data.name is not None:
+        creature.nom = data.name.strip()
+    if "description" in provided:
+        creature.description = (data.description or "").strip() or None
+    if "family" in provided and data.family is not None:
+        creature.famille = data.family
+    if "rarity" in provided and data.rarity is not None:
+        _apply_rarity(db, creature, RARETE_OF[data.rarity], data.stock, "stock" in provided)
+    elif "stock" in provided and data.stock is not None:
+        # Rareté inchangée : on ne touche qu'au stock de l'édition limitée (hausse à minuit).
+        if creature.rarete != Rarete.LEGENDAIRE:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", "Seule une légendaire (édition limitée) a un nombre d'exemplaires."
+            )
+        _schedule_stock(db, creature, data.stock)
+    db.commit()  # nom déjà pris : uq_creature_nom (app.main : gestionnaire IntegrityError)
+    db.refresh(creature)
+    return creature
+
+
+def _apply_rarity(db: Session, creature: Creature, rarete: Rarete, stock: int | None, stock_given: bool) -> None:
+    """Change la rareté tout de suite. Vers une illimitée : stock effacé. Vers légendaire :
+    stock initial immédiat (obligatoire) si elle ne l'était pas ; si elle l'est déjà, une hausse
+    de stock est programmée au prochain minuit."""
+    if rarete != Rarete.LEGENDAIRE:
+        if stock_given and stock is not None:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", "Seule une légendaire (édition limitée) a un nombre d'exemplaires."
+            )
+        creature.rarete = rarete
+        creature.stock_total = creature.stock_restant = None
+        _clear_scheduled(creature)  # une illimitée n'a pas de changement de stock en attente
+        return
+
+    # Devient (ou reste) légendaire. `stock` = taille totale de l'édition limitée.
+    if creature.rarete != Rarete.LEGENDAIRE:
+        if stock is None:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", "Une légendaire est une édition limitée : indiquez le nombre d'exemplaires."
+            )
+        # Les exemplaires déjà possédés comptent dans l'édition : total = stock, tirables = stock - détenus.
+        held = db.scalar(select(func.coalesce(func.sum(Collection.quantite), 0)).where(Collection.creature_id == creature.id)) or 0
+        if stock < held:
+            raise field_error(
+                "VALIDATION_ERROR", "stock", f"{held} exemplaires sont déjà distribués : l'édition doit en compter au moins autant."
+            )
+        creature.rarete = Rarete.LEGENDAIRE
+        creature.stock_total = stock  # édition créée maintenant : stock immédiat
+        creature.stock_restant = stock - held
+        _clear_scheduled(creature)
+    elif stock_given and stock is not None:
+        _schedule_stock(db, creature, stock)  # déjà légendaire : seule une hausse, à minuit
+
+
+def _schedule_stock(db: Session, creature: Creature, new_total: int) -> None:
+    """Programme le nouveau total d'exemplaires au prochain minuit. Égal : annule l'attente ;
+    inférieur : refusé (le stock ne peut qu'augmenter)."""
+    current = creature.stock_total or 0
+    if new_total < current:
+        raise field_error("VALIDATION_ERROR", "stock", "Le nombre d'exemplaires ne peut qu'augmenter.")
+    if new_total == current:
+        _clear_scheduled(creature)  # pas de hausse : rien en attente
+        return
+    creature.stock_suivant = new_total
     creature.changement_le = next_midnight_day(db)
+
+
+def _clear_scheduled(creature: Creature) -> None:
+    creature.rarete_suivante = creature.stock_suivant = creature.changement_le = None
+
+
+def cancel_rarity_change(db: Session, creature_id: str) -> Creature:
+    """Annule la hausse de stock prévue au prochain minuit."""
+    creature = get_creature(db, creature_id)
+    _clear_scheduled(creature)
     db.commit()
     db.refresh(creature)
     return creature
 
 
-def cancel_rarity_change(db: Session, creature_id: str) -> Creature:
+# ── Upload de sprite ──────────────────────────────────────────────────────
+
+
+def upload_sprite(db: Session, creature_id: str, filename: str, data: bytes) -> Creature:
+    """Upload un PNG sur S3 sous sprites/<filename>, invalide CloudFront, met à jour creature.image."""
+    settings = get_settings()
+    if not settings.sprites_bucket or not settings.cloudfront_distribution_id:
+        raise BadRequest("L'upload de sprites n'est pas configuré sur ce serveur.")
+
+    if not _SPRITE_KEY_RE.match(f"sprites/{filename}"):
+        raise field_error("VALIDATION_ERROR", "file", "Le nom de fichier doit être en snake_case minuscules, extension .png.")
+
     creature = get_creature(db, creature_id)
-    creature.rarete_suivante = creature.stock_suivant = creature.changement_le = None
+    key = f"sprites/{filename}"
+
+    s3 = boto3.client("s3", region_name=settings.aws_region or "eu-north-1")
+    s3.put_object(
+        Bucket=settings.sprites_bucket,
+        Key=key,
+        Body=data,
+        ContentType="image/png",
+        CacheControl="public, max-age=31536000, immutable",
+    )
+
+    cf = boto3.client("cloudfront", region_name="us-east-1")
+    cf.create_invalidation(
+        DistributionId=settings.cloudfront_distribution_id,
+        InvalidationBatch={
+            "Paths": {"Quantity": 1, "Items": [f"/{key}"]},
+            "CallerReference": f"{creature_id}-{filename}",
+        },
+    )
+
+    creature.image = key
     db.commit()
     db.refresh(creature)
     return creature

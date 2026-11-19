@@ -7,9 +7,9 @@
  * validé ; retirer sa validation rouvre son tapis. Toute modification d'un tapis retire les deux
  * validations (règle du serveur) : on ne valide que ce que l'on voit.
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Problem, Trade, TradeItem } from '@creatura/shared/api/types'
+import type { Problem, Trade, TradeItem, TradeItemInput } from '@creatura/shared/api/types'
 import { errorMessage } from '@creatura/shared/api/types'
 import AsyncState from '@creatura/shared/ui/AsyncState.vue'
 import PixelIcon from '@creatura/shared/ui/PixelIcon.vue'
@@ -20,7 +20,7 @@ import TradeMat from '@/components/TradeMat.vue'
 import TradeChat from '@/components/TradeChat.vue'
 import TradeCardPicker from '@/components/TradeCardPicker.vue'
 import { useLeaveTrade } from '@/api/queries'
-import { seatsOf } from '@/composables/tradeSeats'
+import { abandonedByMe, seatsOf } from '@/composables/tradeSeats'
 import { useTradeRoom } from '@/composables/useTradeRoom'
 import { useAuthStore } from '@/stores/auth'
 
@@ -43,12 +43,28 @@ const room = useTradeRoom(() => props.id, {
       swapped.value = next.status === 'ACCEPTED'
       return
     }
-    if (previous.status === 'PENDING' && next.status === 'ACCEPTED') void celebrate()
-    else if (previous.status === 'PENDING' && next.status !== 'PENDING') {
+    if (previous.status !== 'PENDING' || next.status === 'PENDING') {
+      noticeChanges(previous, next)
+      return
+    }
+    if (next.status === 'ACCEPTED') {
+      void celebrate()
+      return
+    }
+    // Fin sans conclusion : abandon par l'un des deux joueurs, ou échec.
+    const byMe = abandonedByMe(next, meId.value)
+    if (byMe === null) {
+      toast('L’échange n’a pas pu aboutir. Aucune carte n’a bougé.', 'info')
+    } else if (!byMe) {
       toast(`${seatsOf(next, meId.value).theirs.player.pseudo} a abandonné l’échange.`, 'info')
-    } else noticeChanges(previous, next)
+    } else if (!leavingHere) {
+      // Abandonné depuis un autre onglet ou appareil (ici, le bouton affiche déjà son message).
+      toast('Vous avez abandonné l’échange.', 'info')
+    }
   },
   onError: (problem) => {
+    // Action refusée (ou carte devenue indisponible) : le tapis du serveur fait foi.
+    sentMat.value = null
     if (!room.connected.value) refused.value = problem
     else toast(problem.detail ?? problem.title, 'error', 6000)
   },
@@ -79,7 +95,9 @@ const status = computed(() => {
       return 'Échange conclu : les cartes ont changé de collection.'
     case 'REFUSED':
     case 'CANCELLED':
-      return 'Échange abandonné. Aucune carte n’a bougé.'
+      return abandonedByMe(trade.value, meId.value)
+        ? 'Vous avez abandonné l’échange. Aucune carte n’a bougé.'
+        : `${partner.value} a abandonné l’échange. Aucune carte n’a bougé.`
     case 'FAILED':
       return 'L’échange n’a pas pu aboutir. Aucune carte n’a bougé.'
   }
@@ -96,20 +114,51 @@ const status = computed(() => {
 const toInputs = (items: TradeItem[]) =>
   items.map((item) => ({ creatureId: item.creature.id, quantity: item.quantity }))
 
-function add(creatureId: string) {
-  const cards = seats.value?.mine.cards ?? []
-  const inputs = toInputs(cards)
-  const line = inputs.find((i) => i.creatureId === creatureId)
-  if (line) line.quantity++
-  else inputs.push({ creatureId, quantity: 1 })
+const matKey = (inputs: TradeItemInput[]) =>
+  inputs
+    .map((i) => `${i.creatureId}:${i.quantity}`)
+    .sort()
+    .join(',')
+
+/**
+ * Dernier tapis envoyé, pas encore confirmé par le serveur. Le serveur REMPLACE le tapis par la
+ * liste reçue : une carte posée juste après une autre doit partir de ce tapis-là, sinon elle
+ * effacerait la précédente. Oublié dès que le serveur renvoie ce tapis, ou refuse l'action.
+ */
+const sentMat = shallowRef<TradeItemInput[] | null>(null)
+
+watch(
+  () => seats.value?.mine.cards,
+  (cards) => {
+    if (sentMat.value && matKey(toInputs(cards ?? [])) === matKey(sentMat.value)) {
+      sentMat.value = null
+    }
+  },
+)
+
+/** Son tapis tel qu'il sera une fois les envois en cours confirmés. */
+function myMat(): TradeItemInput[] {
+  return (sentMat.value ?? toInputs(seats.value?.mine.cards ?? [])).map((i) => ({ ...i }))
+}
+
+function sendMat(inputs: TradeItemInput[]) {
+  sentMat.value = inputs
   room.setOffer(inputs)
 }
 
+function add(creatureId: string) {
+  const inputs = myMat()
+  const line = inputs.find((i) => i.creatureId === creatureId)
+  if (line) line.quantity++
+  else inputs.push({ creatureId, quantity: 1 })
+  sendMat(inputs)
+}
+
 function remove(creatureId: string) {
-  const inputs = toInputs(seats.value?.mine.cards ?? [])
+  const inputs = myMat()
     .map((i) => (i.creatureId === creatureId ? { ...i, quantity: i.quantity - 1 } : i))
     .filter((i) => i.quantity > 0)
-  room.setOffer(inputs)
+  sendMat(inputs)
 }
 
 function toggleReady() {
@@ -172,14 +221,18 @@ async function celebrate() {
 
 const leave = useLeaveTrade()
 const confirmLeave = ref(false)
+/** Abandon lancé depuis cet onglet : son message est affiché ici, pas celui de la salle. */
+let leavingHere = false
 
 async function abandon() {
   if (!trade.value || !seats.value) return
+  leavingHere = true // avant la requête : la salle peut annoncer la fin avant sa réponse
   try {
     await leave.mutateAsync({ id: trade.value.id, asProposer: seats.value.iAmProposer })
-    toast('Échange abandonné. Aucune carte n’a bougé.', 'info')
+    toast('Vous avez abandonné l’échange. Aucune carte n’a bougé.', 'info')
     await router.push({ name: 'trades' })
   } catch (e) {
+    leavingHere = false
     toast(errorMessage(e), 'error')
   } finally {
     confirmLeave.value = false

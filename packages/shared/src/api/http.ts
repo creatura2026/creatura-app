@@ -132,7 +132,32 @@ export function createHttpClient(session: SessionStore, baseUrl: string = API_BA
     post: <T>(path: string, body?: unknown, auth = true) =>
       request<T>('POST', path, { body, auth }),
     put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
-    del: <T>(path: string) => request<T>('DELETE', path, {}),
+    del: <T>(path: string, body?: unknown) => request<T>('DELETE', path, { body }),
+    patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body }),
+    /** Envoie un FormData (multipart) sans Content-Type, laissé au navigateur. */
+    async putForm<T>(path: string, form: FormData): Promise<T> {
+      const headers: Record<string, string> = { Accept: 'application/json' }
+      const token = session.read()?.accessToken
+      if (token) headers.Authorization = `Bearer ${token}`
+      let response: Response
+      try {
+        response = await fetch(`${baseUrl}${path}`, { method: 'PUT', headers, body: form })
+      } catch {
+        throw new Error('Serveur injoignable. Vérifiez votre connexion.')
+      }
+      if (response.status === 401 && (await refreshTokens())) {
+        const token2 = session.read()?.accessToken
+        if (token2) headers.Authorization = `Bearer ${token2}`
+        try {
+          response = await fetch(`${baseUrl}${path}`, { method: 'PUT', headers, body: form })
+        } catch {
+          throw new Error('Serveur injoignable. Vérifiez votre connexion.')
+        }
+      }
+      if (!response.ok) throw await toApiError(response)
+      return (await response.json()) as T
+    },
+    refresh: refreshTokens,
     session,
   }
 }
@@ -273,6 +298,15 @@ function authApi(http: HttpClient): AuthApi {
       await http.post('/auth/logout', refreshToken ? { refreshToken } : undefined).catch(() => {})
     },
     getMe: () => http.get('/me'),
+    async keepAlive() {
+      await http.refresh()
+    },
+    async changePassword(body) {
+      const tokens = await http.put<AuthTokens>('/me/password', body)
+      http.session.write(tokens)
+      return tokens
+    },
+    deleteAccount: (body) => http.del('/me', body),
   }
 }
 
@@ -299,6 +333,12 @@ export function createHttpPlayerApi(
     refuseTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/refuse`),
     cancelTrade: (tradeId) => http.post(`/trades/${id(tradeId)}/cancel`),
     joinTrade: (tradeId, onMessage) => joinTradeRoom(http, baseUrl, tradeId, onMessage),
+    resetPassword: (body) => http.post('/auth/password-reset', body, false),
+    createGift: (body) => http.post('/gifts', body),
+    listMyGifts: (query) => http.get('/gifts', query),
+    acceptGift: (giftId) => http.post(`/gifts/${id(giftId)}/accept`),
+    refuseGift: (giftId) => http.post(`/gifts/${id(giftId)}/refuse`),
+    cancelGift: (giftId) => http.post(`/gifts/${id(giftId)}/cancel`),
   }
 }
 
@@ -315,7 +355,24 @@ export function createHttpAdminApi(session: SessionStore): AdminApi {
     updateBoosterSettings: (body) => http.put('/admin/settings/booster', body),
     listAdminCreatures: () => http.get('/admin/creatures'),
     createAdminCreature: (body) => http.post('/admin/creatures', body),
-    scheduleRarityChange: (creatureId, body) => http.put(`/admin/creatures/${id(creatureId)}/rarity`, body),
+    updateCreature: (creatureId, body) => http.patch(`/admin/creatures/${id(creatureId)}`, body),
     cancelRarityChange: (creatureId) => http.del(`/admin/creatures/${id(creatureId)}/rarity`),
+    uploadSprite: (creatureId, file, filename) => {
+      const form = new FormData()
+      form.append('file', file, filename ? `${filename}.png` : file.name)
+      return http.putForm(`/admin/creatures/${id(creatureId)}/sprite`, form)
+    },
+    listAdminPlayers: (query) => http.get('/admin/players', query),
+    getAdminPlayer: (playerId, query) => http.get(`/admin/players/${id(playerId)}`, query),
+    listDeletionRequests: (query) => http.get('/admin/deletion-requests', query),
+    createDeletionRequest: (body) => http.post('/admin/deletion-requests', body),
+    approveDeletionRequest: (requestId) => http.post(`/admin/deletion-requests/${id(requestId)}/approve`),
+    rejectDeletionRequest: (requestId) => http.post(`/admin/deletion-requests/${id(requestId)}/reject`),
+    cancelDeletionRequest: (requestId) => http.post(`/admin/deletion-requests/${id(requestId)}/cancel`),
+    listAdmins: () => http.get('/admin/admins'),
+    createAdmin: (body) => http.post('/admin/admins', body),
+    deactivateAdmin: (adminId) => http.post(`/admin/admins/${id(adminId)}/deactivate`),
+    createPasswordResetLink: (playerId) =>
+      http.post(`/admin/players/${id(playerId)}/password-reset`),
   }
 }

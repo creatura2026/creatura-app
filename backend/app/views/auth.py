@@ -1,10 +1,22 @@
 """Authentification — UC-01, UC-02."""
 
 from fastapi import APIRouter, status
+from starlette.concurrency import run_in_threadpool
 
-from app.controllers import auth
+from app.controllers import account, auth, password_reset
 from app.dependencies import CurrentUser, DbSession
-from app.schemas.auth import AuthTokensOut, LoginIn, MeOut, RefreshIn, RegisterIn, UserOut
+from app.schemas.auth import (
+    AccountDeleteIn,
+    AuthTokensOut,
+    LoginIn,
+    MeOut,
+    PasswordChangeIn,
+    RefreshIn,
+    RegisterIn,
+    UserOut,
+)
+from app.schemas.password_reset import PasswordResetIn
+from app.views.trades import notify_room
 
 router = APIRouter(tags=["Authentification"])
 
@@ -36,7 +48,33 @@ def logout(_: CurrentUser, data: RefreshIn | None = None):
     """
 
 
+@router.post("/auth/password-reset", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(data: PasswordResetIn, db: DbSession):
+    """AS-75 (sans jeton d'accès) : nouveau mot de passe avec le jeton d'un lien généré par un
+    admin. Lien inconnu, expiré, déjà utilisé ou remplacé : 400 RESET_LINK_INVALID. Les sessions
+    ouvertes du joueur sont fermées."""
+    password_reset.reset_password(db, data.token, data.new_password)
+
+
+@router.put("/me/password", response_model=AuthTokensOut)
+def change_password(data: PasswordChangeIn, user: CurrentUser, db: DbSession):
+    """Change le mot de passe (l'actuel est demandé). Les autres sessions sont fermées ;
+    celle-ci reçoit de nouveaux jetons."""
+    return account.change_password(db, user, data.current_password, data.new_password)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(data: AccountDeleteIn, user: CurrentUser, db: DbSession):
+    """Supprime son compte (le mot de passe est demandé) : identifiants et collection effacés,
+    échanges en cours abandonnés, historique des autres joueurs anonymisé (« Joueur supprimé »).
+    Un administrateur ne peut le faire que s'il reste un autre administrateur (409 LAST_ADMIN)."""
+    abandoned = await run_in_threadpool(account.delete_account, db, user, data.password)
+    for trade_id in abandoned:
+        await notify_room(trade_id)
+
+
 @router.get("/me", response_model=MeOut)
 def me(user: CurrentUser, db: DbSession):
     """Profil du joueur connecté, progression de sa collection et disponibilité du booster."""
     return auth.me(db, user)
+

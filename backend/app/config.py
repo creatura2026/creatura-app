@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,7 +31,11 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-secret-change-me-in-production-please-0123456789"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 15
-    refresh_token_days: int = 7
+    # Expiration des sessions : sans action de l'utilisateur pendant ce temps, il est déconnecté.
+    # Le front l'applique à la seconde (avertissement 30 s avant) ; côté serveur, le jeton de
+    # rafraîchissement ne vit que cette durée plus une marge (security.py), renouvelé tant que
+    # l'utilisateur est actif.
+    session_idle_minutes: float = Field(default=20, gt=0)
 
     # Le nombre de cartes par booster est un réglage en base (table reglage), modifiable par l'admin.
     # Fuseau qui définit le « jour » du booster (calculé par Postgres, RDS étant en UTC).
@@ -42,6 +46,16 @@ class Settings(BaseSettings):
     # CDN des illustrations (CloudFront devant le bucket S3) : la clé stockée en base
     # (sprites/moss_puff.png) y est concaténée.
     image_base_url: str = "https://creatura.creasmaloud.dev"
+
+    # Upload de sprites par les admins via l'API : bucket S3 et distribution CloudFront.
+    # Sur EKS, le rôle Pod Identity du back porte les permissions (eks/rds.tf).
+    # Vide = fonctionnalité désactivée (dev local sans AWS).
+    sprites_bucket: str = ""
+    cloudfront_distribution_id: str = ""
+
+    # Adresse de l'appli joueur : base des liens de réinitialisation du mot de passe (AS-75),
+    # {player_app_url}/reinitialiser?jeton=…  En local : http://localhost:5173
+    player_app_url: str = "https://creatura.creasmaloud.dev"
 
     # Compte administrateur créé au démarrage s'il n'existe pas (mot de passe haché par le back).
     admin_login: str | None = None

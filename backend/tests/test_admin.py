@@ -1,6 +1,15 @@
 from datetime import date, timedelta
 
-from conftest import API, conclude_trade, give, not_first_booster, pass_midnight, problem, register_and_login, set_weights
+from conftest import (
+    API,
+    conclude_trade,
+    give,
+    not_first_booster,
+    pass_midnight,
+    problem,
+    register_and_login,
+    set_weights,
+)
 
 ADMIN_ROUTES = ("/admin/stats", "/admin/trades", "/admin/rarity-distribution", "/admin/settings/booster")
 

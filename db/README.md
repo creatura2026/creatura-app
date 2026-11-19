@@ -37,6 +37,8 @@ d'un fichier SQL, il faut **réinitialiser** pour la voir.
 |---|---|
 | `04_evolution_reglage_echec.sql` | Table `reglage` (cartes par booster) ; statut d'échange `ECHOUE` et colonne `motif_echec` |
 | `05_evolution_salle_echange.sql` | Salle d'échange : validations `proposeur_pret` / `destinataire_pret`, carte cherchée, table `echange_message` (discussion) |
+| `10_evolution_joueurs_admin.sql` | AS-71 : table `connexion`, comptes admin (créateur, mot de passe provisoire, désactivation), demandes de suppression de joueurs validées par un autre admin |
+| `12_evolution_reinitialisation_mdp.sql` | AS-75 : table `reinitialisation_mdp` (liens de réinitialisation du mot de passe : empreinte du jeton, 5 minutes, usage unique) |
 
 Pour les appliquer à une base locale déjà créée, sans perdre ses données :
 

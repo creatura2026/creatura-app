@@ -13,6 +13,7 @@ import {
   type CollectionProgress,
   type PlayerSummary,
   type Trade,
+  type Gift,
   type User,
 } from '@creatura/shared/api/types'
 import { clone, delay, normalize, paginate, problem, uuid } from '@creatura/shared/api/mock-utils'
@@ -44,6 +45,7 @@ const toUser = (u: MockUser): User => ({
   pseudo: u.pseudo,
   role: u.role,
   createdAt: u.createdAt,
+  mustChangePassword: false,
 })
 
 function progressOf(userId: string): CollectionProgress {
@@ -163,8 +165,71 @@ export function createMockPlayerApi({
         refreshToken: `refresh.${uuid()}`,
         tokenType: 'Bearer',
         expiresIn: 900,
+        sessionIdleSeconds: 1200,
         user: toUser(user),
       }
+    },
+
+    // Mode simulé : les jetons n'expirent pas, rien à renouveler.
+    async keepAlive() {},
+
+    async changePassword(body) {
+      await delay()
+      const db = loadDb()
+      const user = db.users.find((u) => u.id === currentUser().id)!
+      if (user.password !== body.currentPassword) {
+        throw problem('VALIDATION_ERROR', 'Mot de passe incorrect.', {
+          errors: [{ field: 'currentPassword', message: 'Mot de passe incorrect.' }],
+        })
+      }
+      if (body.newPassword === body.currentPassword) {
+        const message = 'Le nouveau mot de passe doit être différent de l’actuel.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'newPassword', message }] })
+      }
+      user.password = body.newPassword
+      saveDb()
+      return {
+        accessToken: getToken() ?? `mock.${uuid()}`,
+        refreshToken: `refresh.${uuid()}`,
+        tokenType: 'Bearer',
+        expiresIn: 900,
+        sessionIdleSeconds: 1200,
+        user: toUser(user),
+      }
+    },
+
+    async deleteAccount(body) {
+      await delay()
+      const db = loadDb()
+      const user = db.users.find((u) => u.id === currentUser().id)!
+      if (user.password !== body.password) {
+        throw problem('VALIDATION_ERROR', 'Mot de passe incorrect.', {
+          errors: [{ field: 'password', message: 'Mot de passe incorrect.' }],
+        })
+      }
+      // Version simplifiée du serveur : le compte disparaît, sa collection aussi.
+      db.users = db.users.filter((u) => u.id !== user.id)
+      delete db.collections[user.id]
+      for (const [token, id] of Object.entries(db.sessions))
+        if (id === user.id) delete db.sessions[token]
+      saveDb()
+    },
+
+    /** AS-75, mode simulé : seul le jeton « demo-lien » est valable (compte Dresseur). */
+    async resetPassword(body) {
+      await delay()
+      const user = loadDb().users.find((u) => u.login === 'demo')
+      if (body.token !== 'demo-lien' || !user)
+        throw problem(
+          'RESET_LINK_INVALID',
+          "Ce lien n'est plus valable. Demandez-en un nouveau à un administrateur.",
+        )
+      if (body.newPassword.length < 12) {
+        const message = 'Le mot de passe doit contenir au moins 12 caractères.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'newPassword', message }] })
+      }
+      user.password = body.newPassword
+      saveDb()
     },
 
     async logout() {
@@ -423,6 +488,113 @@ export function createMockPlayerApi({
       const trade = findTrade(tradeId)
       if (trade.proposer.id !== me.id) throw problem('FORBIDDEN', 'Seul le proposant peut annuler.')
       return close(trade, 'CANCELLED')
+    },
+
+    async createGift(body) {
+      await delay()
+      const me = currentUser()
+      if (body.recipientId === me.id)
+        throw problem('GIFT_WITH_SELF', 'Vous ne pouvez pas vous offrir une carte à vous-même.')
+      const recipient = loadDb().users.find((u) => u.id === body.recipientId && u.role === 'PLAYER')
+      if (!recipient) throw problem('NOT_FOUND', 'Ce joueur n’existe pas.')
+      const creature = toSummary(body.creatureId)
+      const quantity = body.quantity ?? 1
+      if (quantityOf(me.id, body.creatureId) < quantity) {
+        const message = 'Vous ne possédez pas assez d’exemplaires de cette carte.'
+        throw problem('VALIDATION_ERROR', message, { errors: [{ field: 'quantity', message }] })
+      }
+      if (
+        loadDb().gifts.some(
+          (g) =>
+            g.status === 'PENDING' &&
+            g.giver.id === me.id &&
+            g.recipient.id === recipient.id &&
+            g.creature.id === creature.id,
+        )
+      )
+        throw problem('GIFT_ALREADY_PENDING', 'Un don de cette carte à ce joueur est déjà en attente.')
+      const gift: Gift = {
+        id: uuid(),
+        status: 'PENDING',
+        giver: { id: me.id, pseudo: me.pseudo },
+        recipient: { id: recipient.id, pseudo: recipient.pseudo },
+        creature,
+        quantity,
+        createdAt: now().toISOString(),
+        decidedAt: null,
+        failureReason: null,
+      }
+      loadDb().gifts.push(gift)
+      saveDb()
+      return clone(gift)
+    },
+
+    async listMyGifts(query = {}) {
+      await delay()
+      const me = currentUser()
+      const role = query.role ?? 'all'
+      const items = loadDb()
+        .gifts.filter(
+          (g) =>
+            (role === 'all'
+              ? g.giver.id === me.id || g.recipient.id === me.id
+              : role === 'sent'
+                ? g.giver.id === me.id
+                : g.recipient.id === me.id) &&
+            (!query.status || g.status === query.status),
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      return clone(paginate(items, query.page, query.pageSize))
+    },
+
+    async acceptGift(giftId) {
+      await delay()
+      const me = currentUser()
+      const gift = loadDb().gifts.find((g) => g.id === giftId)
+      if (!gift) throw problem('NOT_FOUND', 'Ce don n’existe pas.')
+      if (gift.recipient.id !== me.id)
+        throw problem('FORBIDDEN', 'Seul le destinataire peut accepter ce don.')
+      if (gift.status !== 'PENDING') throw problem('GIFT_NOT_PENDING', 'Ce don a déjà été traité.')
+      if (quantityOf(gift.giver.id, gift.creature.id) < gift.quantity) {
+        gift.status = 'FAILED'
+        gift.failureReason = 'CARDS_UNAVAILABLE'
+        gift.decidedAt = now().toISOString()
+        saveDb()
+        return clone(gift)
+      }
+      addCards(gift.giver.id, gift.creature.id, -gift.quantity)
+      addCards(gift.recipient.id, gift.creature.id, gift.quantity)
+      gift.status = 'ACCEPTED'
+      gift.decidedAt = now().toISOString()
+      saveDb()
+      return clone(gift)
+    },
+
+    async refuseGift(giftId) {
+      await delay()
+      const me = currentUser()
+      const gift = loadDb().gifts.find((g) => g.id === giftId)
+      if (!gift) throw problem('NOT_FOUND', 'Ce don n’existe pas.')
+      if (gift.recipient.id !== me.id)
+        throw problem('FORBIDDEN', 'Seul le destinataire peut refuser ce don.')
+      if (gift.status !== 'PENDING') throw problem('GIFT_NOT_PENDING', 'Ce don a déjà été traité.')
+      gift.status = 'REFUSED'
+      gift.decidedAt = now().toISOString()
+      saveDb()
+      return clone(gift)
+    },
+
+    async cancelGift(giftId) {
+      await delay()
+      const me = currentUser()
+      const gift = loadDb().gifts.find((g) => g.id === giftId)
+      if (!gift) throw problem('NOT_FOUND', 'Ce don n’existe pas.')
+      if (gift.giver.id !== me.id) throw problem('FORBIDDEN', 'Seul le donneur peut annuler ce don.')
+      if (gift.status !== 'PENDING') throw problem('GIFT_NOT_PENDING', 'Ce don a déjà été traité.')
+      gift.status = 'CANCELLED'
+      gift.decidedAt = now().toISOString()
+      saveDb()
+      return clone(gift)
     },
 
     joinTrade(tradeId, onMessage) {

@@ -171,9 +171,9 @@ SELECT pg_temp.doit_echouer('date de décision sur un échange en attente refus�
     $q$UPDATE echange SET decide_le = now()
        WHERE id = '00000000-0000-0000-0000-0000000000e1'$q$,
     'ck_echange_decision');
-SELECT pg_temp.doit_echouer('suppression d''un joueur ayant des échanges refusée',
+SELECT pg_temp.doit_echouer('suppression directe d''un joueur ayant un échange en attente refusée',
     $q$DELETE FROM utilisateur WHERE identifiant = 'test_b'$q$,
-    'fk_echange_destinataire');
+    'ck_echange_joueurs');
 
 -- ---------------------------------------------------------------------------
 -- echange_ligne
@@ -280,6 +280,279 @@ SELECT pg_temp.doit_echouer('auteur sans date de modification refusé',
 SELECT pg_temp.doit_echouer('auteur inexistant refusé',
     $q$UPDATE reglage SET modifie_par = gen_random_uuid(), modifie_le = now()$q$,
     'fk_reglage_modifie_par');
+
+-- ---------------------------------------------------------------------------
+-- joueurs et administrateurs dans le dashboard (10_evolution_joueurs_admin.sql)
+-- Admins : TestAdmin (a1), TestAdmin2 (a2, créé par a1), TestAdmin3 (a3)
+-- Joueurs : TestC (c), TestD (d)
+-- ---------------------------------------------------------------------------
+UPDATE utilisateur SET id = '00000000-0000-0000-0000-0000000000a1' WHERE identifiant = 'test_admin';
+INSERT INTO utilisateur (id, pseudo, identifiant, mot_de_passe_hash, role, cree_par, mot_de_passe_provisoire)
+VALUES ('00000000-0000-0000-0000-0000000000a2', 'TestAdmin2', 'test_admin2', 'hash', 'ADMIN',
+        '00000000-0000-0000-0000-0000000000a1', true),
+       ('00000000-0000-0000-0000-0000000000a3', 'TestAdmin3', 'test_admin3', 'hash', 'ADMIN', NULL, false);
+INSERT INTO utilisateur (id, pseudo, identifiant, mot_de_passe_hash)
+VALUES ('00000000-0000-0000-0000-00000000000c', 'TestC', 'test_c', 'hash'),
+       ('00000000-0000-0000-0000-00000000000d', 'TestD', 'test_d', 'hash');
+DO $$ BEGIN RAISE NOTICE 'OK  admin créé par un autre admin, avec mot de passe provisoire'; END $$;
+
+SELECT pg_temp.doit_echouer('joueur avec un créateur refusé',
+    $q$UPDATE utilisateur SET cree_par = '00000000-0000-0000-0000-0000000000a1' WHERE identifiant = 'test_c'$q$,
+    'ck_utilisateur_compte_admin');
+SELECT pg_temp.doit_echouer('joueur désactivé refusé',
+    $q$UPDATE utilisateur SET desactive_le = now() WHERE identifiant = 'test_c'$q$,
+    'ck_utilisateur_compte_admin');
+
+-- Connexions : enregistrement et purge au-delà de 13 mois
+INSERT INTO connexion (utilisateur_id, le)
+VALUES ('00000000-0000-0000-0000-00000000000d', now() - interval '14 months'),
+       ('00000000-0000-0000-0000-00000000000d', now() - interval '12 months');
+SELECT creatura_enregistrer_connexion('00000000-0000-0000-0000-00000000000c');
+DO $$ BEGIN
+    ASSERT (SELECT count(*) FROM connexion WHERE utilisateur_id = '00000000-0000-0000-0000-00000000000c') = 1,
+        'KO  connexion enregistrée';
+    ASSERT (SELECT count(*) FROM connexion WHERE utilisateur_id = '00000000-0000-0000-0000-00000000000d') = 1,
+        'KO  connexions de plus de 13 mois effacées, les autres gardées';
+    RAISE NOTICE 'OK  connexion enregistrée, historique limité à 13 mois';
+END $$;
+SELECT pg_temp.doit_echouer('connexion d''un compte inexistant refusée',
+    $q$INSERT INTO connexion (utilisateur_id) VALUES (gen_random_uuid())$q$,
+    'fk_connexion_utilisateur');
+
+-- Échanges : un échange en attente a ses deux joueurs
+SELECT pg_temp.doit_echouer('échange en attente sans proposeur refusé',
+    $q$INSERT INTO echange (proposeur_id, destinataire_id)
+       VALUES (NULL, '00000000-0000-0000-0000-00000000000a')$q$,
+    'ck_echange_joueurs');
+SELECT pg_temp.doit_echouer('échange terminé sans aucun joueur refusé',
+    $q$INSERT INTO echange (proposeur_id, destinataire_id, statut, decide_le)
+       VALUES (NULL, NULL, 'ACCEPTE', now())$q$,
+    'ck_echange_joueurs');
+
+-- Demande de suppression : règles de création
+SELECT pg_temp.doit_echouer('validateur identique au demandeur refusé',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+       '00000000-0000-0000-0000-0000000000a1', ARRAY['00000000-0000-0000-0000-00000000000c']::uuid[])$q$,
+    'ck_demande_suppression_valideur');
+SELECT pg_temp.doit_echouer('validateur qui n''est pas admin refusé',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+       '00000000-0000-0000-0000-00000000000a', ARRAY['00000000-0000-0000-0000-00000000000c']::uuid[])$q$,
+    'ck_demande_suppression_valideur_actif');
+SELECT pg_temp.doit_echouer('demande par un joueur refusée',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-00000000000a',
+       '00000000-0000-0000-0000-0000000000a1', ARRAY['00000000-0000-0000-0000-00000000000c']::uuid[])$q$,
+    'ck_demande_suppression_demandeur');
+SELECT pg_temp.doit_echouer('demande sans joueur refusée',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+       '00000000-0000-0000-0000-0000000000a2', ARRAY[]::uuid[])$q$,
+    'ck_demande_suppression_nombre');
+SELECT pg_temp.doit_echouer('suppression d''un admin refusée',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+       '00000000-0000-0000-0000-0000000000a2', ARRAY['00000000-0000-0000-0000-0000000000a3']::uuid[])$q$,
+    'ck_demande_suppression_joueurs');
+
+-- Demande r1 : a1 demande TestC et TestD, a2 valide
+CREATE TEMP TABLE t_demande (nom text PRIMARY KEY, id uuid);
+INSERT INTO t_demande
+SELECT 'r1', creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+    '00000000-0000-0000-0000-0000000000a2',
+    ARRAY['00000000-0000-0000-0000-00000000000c', '00000000-0000-0000-0000-00000000000d']::uuid[],
+    'Comptes de test');
+DO $$ BEGIN
+    ASSERT (SELECT nombre_comptes = 2 AND statut = 'EN_ATTENTE' FROM demande_suppression
+            WHERE id = (SELECT id FROM t_demande WHERE nom = 'r1')),
+        'KO  demande créée en attente avec 2 comptes';
+    RAISE NOTICE 'OK  demande de suppression créée';
+END $$;
+SELECT pg_temp.doit_echouer('joueur déjà dans une demande en attente refusé',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a3',
+       '00000000-0000-0000-0000-0000000000a1', ARRAY['00000000-0000-0000-0000-00000000000c']::uuid[])$q$,
+    'ck_demande_suppression_deja_demandee');
+SELECT pg_temp.doit_echouer('validation par un autre admin que le validateur refusée',
+    $q$SELECT creatura_traiter_demande((SELECT id FROM t_demande WHERE nom = 'r1'),
+       '00000000-0000-0000-0000-0000000000a3', true)$q$,
+    'ck_demande_suppression_valideur_seul');
+SELECT pg_temp.doit_echouer('validation par le demandeur refusée',
+    $q$SELECT creatura_traiter_demande((SELECT id FROM t_demande WHERE nom = 'r1'),
+       '00000000-0000-0000-0000-0000000000a1', true)$q$,
+    'ck_demande_suppression_valideur_seul');
+SELECT pg_temp.doit_echouer('annulation par un autre admin que le demandeur refusée',
+    $q$SELECT creatura_annuler_demande((SELECT id FROM t_demande WHERE nom = 'r1'),
+       '00000000-0000-0000-0000-0000000000a2')$q$,
+    'ck_demande_suppression_demandeur_seul');
+
+-- Données de TestC et TestD avant validation :
+-- TestC possède 1 TestMoussou et 2 TestBrumel (légendaire : 2 exemplaires sortis du stock).
+-- Échanges : c1 en attente C→B, c2 accepté A→C (avec un message de chacun), c3 accepté C→D.
+INSERT INTO collection (utilisateur_id, creature_id, quantite)
+SELECT '00000000-0000-0000-0000-00000000000c', id, CASE nom WHEN 'TestBrumel' THEN 2 ELSE 1 END
+FROM creature WHERE nom IN ('TestMoussou', 'TestBrumel');
+UPDATE creature SET stock_restant = stock_restant - 2 WHERE nom = 'TestBrumel';
+INSERT INTO echange (id, proposeur_id, destinataire_id, statut, decide_le)
+VALUES ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-00000000000c',
+        '00000000-0000-0000-0000-00000000000b', 'EN_ATTENTE', NULL),
+       ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-00000000000a',
+        '00000000-0000-0000-0000-00000000000c', 'ACCEPTE', now()),
+       ('00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-00000000000c',
+        '00000000-0000-0000-0000-00000000000d', 'ACCEPTE', now());
+INSERT INTO echange_message (echange_id, auteur_id, texte)
+VALUES ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-00000000000c', 'Merci !'),
+       ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-00000000000a', 'Avec plaisir');
+
+DO $$
+DECLARE
+    stock_avant integer := (SELECT stock_restant FROM creature WHERE nom = 'TestBrumel');
+    r1 uuid := (SELECT id FROM t_demande WHERE nom = 'r1');
+BEGIN
+    PERFORM creatura_traiter_demande(r1, '00000000-0000-0000-0000-0000000000a2', true);
+    ASSERT (SELECT statut = 'VALIDEE' AND traite_le IS NOT NULL AND nombre_comptes = 2
+            FROM demande_suppression WHERE id = r1),
+        'KO  demande validée, nombre de comptes gardé';
+    ASSERT NOT EXISTS (SELECT 1 FROM demande_suppression_joueur WHERE demande_id = r1),
+        'KO  le journal ne garde pas les joueurs supprimés';
+    ASSERT NOT EXISTS (SELECT 1 FROM utilisateur WHERE identifiant IN ('test_c', 'test_d')),
+        'KO  comptes effacés';
+    ASSERT NOT EXISTS (SELECT 1 FROM echange WHERE id = '00000000-0000-0000-0000-0000000000c1'),
+        'KO  échange en attente effacé';
+    ASSERT (SELECT proposeur_id = '00000000-0000-0000-0000-00000000000a' AND destinataire_id IS NULL
+            FROM echange WHERE id = '00000000-0000-0000-0000-0000000000c2'),
+        'KO  échange terminé gardé pour l''autre joueur, place du joueur supprimé à NULL';
+    ASSERT NOT EXISTS (SELECT 1 FROM echange WHERE id = '00000000-0000-0000-0000-0000000000c3'),
+        'KO  échange entre deux joueurs supprimés effacé';
+    ASSERT (SELECT count(*) FROM echange_message WHERE echange_id = '00000000-0000-0000-0000-0000000000c2') = 1,
+        'KO  messages du joueur supprimé effacés, ceux de l''autre gardés';
+    ASSERT NOT EXISTS (SELECT 1 FROM collection WHERE utilisateur_id = '00000000-0000-0000-0000-00000000000c'),
+        'KO  collection effacée';
+    ASSERT NOT EXISTS (SELECT 1 FROM connexion
+                       WHERE utilisateur_id IN ('00000000-0000-0000-0000-00000000000c', '00000000-0000-0000-0000-00000000000d')),
+        'KO  connexions effacées';
+    ASSERT (SELECT stock_restant FROM creature WHERE nom = 'TestBrumel') = stock_avant + 2,
+        'KO  légendaires remises dans le stock';
+    RAISE NOTICE 'OK  demande validée : joueurs et leurs données effacés, échanges terminés gardés pour l''autre joueur';
+END $$;
+SELECT pg_temp.doit_echouer('demande déjà traitée refusée',
+    $q$SELECT creatura_traiter_demande((SELECT id FROM t_demande WHERE nom = 'r1'),
+       '00000000-0000-0000-0000-0000000000a2', false)$q$,
+    'ck_demande_suppression_en_attente');
+
+-- Refus, annulation, expiration : personne n'est supprimé
+INSERT INTO t_demande
+SELECT 'r2', creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+    '00000000-0000-0000-0000-0000000000a2', ARRAY['00000000-0000-0000-0000-00000000000b']::uuid[]);
+SELECT creatura_traiter_demande((SELECT id FROM t_demande WHERE nom = 'r2'), '00000000-0000-0000-0000-0000000000a2', false);
+INSERT INTO t_demande
+SELECT 'r3', creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+    '00000000-0000-0000-0000-0000000000a2', ARRAY['00000000-0000-0000-0000-00000000000b']::uuid[]);
+SELECT creatura_annuler_demande((SELECT id FROM t_demande WHERE nom = 'r3'), '00000000-0000-0000-0000-0000000000a1');
+INSERT INTO t_demande
+SELECT 'r4', creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+    '00000000-0000-0000-0000-0000000000a2', ARRAY['00000000-0000-0000-0000-00000000000b']::uuid[]);
+UPDATE demande_suppression SET cree_le = now() - interval '8 days' WHERE id = (SELECT id FROM t_demande WHERE nom = 'r4');
+DO $$ BEGIN
+    ASSERT (SELECT statut FROM demande_suppression WHERE id = (SELECT id FROM t_demande WHERE nom = 'r2')) = 'REFUSEE',
+        'KO  demande refusée';
+    ASSERT (SELECT statut FROM demande_suppression WHERE id = (SELECT id FROM t_demande WHERE nom = 'r3')) = 'ANNULEE',
+        'KO  demande annulée';
+    ASSERT creatura_expirer_demandes() = 1, 'KO  une demande de plus de 7 jours expire';
+    ASSERT (SELECT statut FROM demande_suppression WHERE id = (SELECT id FROM t_demande WHERE nom = 'r4')) = 'EXPIREE',
+        'KO  demande expirée';
+    ASSERT EXISTS (SELECT 1 FROM utilisateur WHERE identifiant = 'test_b'),
+        'KO  refus, annulation et expiration ne suppriment personne';
+    RAISE NOTICE 'OK  demande refusée, annulée ou expirée : aucun joueur supprimé';
+END $$;
+SELECT pg_temp.doit_echouer('demande expirée non validable',
+    $q$SELECT creatura_traiter_demande((SELECT id FROM t_demande WHERE nom = 'r4'),
+       '00000000-0000-0000-0000-0000000000a2', true)$q$,
+    'ck_demande_suppression_en_attente');
+
+-- Désactivation d'un admin par un autre admin
+INSERT INTO t_demande
+SELECT 'r5', creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+    '00000000-0000-0000-0000-0000000000a3', ARRAY['00000000-0000-0000-0000-00000000000b']::uuid[]);
+SELECT pg_temp.doit_echouer('un admin ne se désactive pas lui-même',
+    $q$SELECT creatura_desactiver_admin('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a3')$q$,
+    'ck_utilisateur_desactivation');
+SELECT pg_temp.doit_echouer('un joueur ne désactive pas un admin',
+    $q$SELECT creatura_desactiver_admin('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-00000000000a')$q$,
+    'ck_desactivation_auteur');
+SELECT pg_temp.doit_echouer('un joueur ne se désactive pas comme un admin',
+    $q$SELECT creatura_desactiver_admin('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-0000000000a1')$q$,
+    'ck_desactivation_cible');
+SELECT creatura_desactiver_admin('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a2');
+DO $$ BEGIN
+    ASSERT (SELECT desactive_le IS NOT NULL AND desactive_par = '00000000-0000-0000-0000-0000000000a2'
+            FROM utilisateur WHERE id = '00000000-0000-0000-0000-0000000000a3'),
+        'KO  admin désactivé, auteur noté';
+    ASSERT (SELECT statut FROM demande_suppression WHERE id = (SELECT id FROM t_demande WHERE nom = 'r5')) = 'ANNULEE',
+        'KO  demandes en attente de l''admin désactivé annulées';
+    ASSERT NOT creatura_admin_actif('00000000-0000-0000-0000-0000000000a3'), 'KO  admin désactivé inactif';
+    RAISE NOTICE 'OK  admin désactivé par un autre admin, ses demandes en attente annulées';
+END $$;
+-- Seuls a1 et a2 restent actifs (les admins des données de démo sont mis de côté)
+UPDATE utilisateur SET desactive_le = now()
+WHERE role = 'ADMIN' AND desactive_le IS NULL
+  AND id NOT IN ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a2');
+SELECT pg_temp.doit_echouer('au moins deux admins actifs restent',
+    $q$SELECT creatura_desactiver_admin('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000a1')$q$,
+    'ck_desactivation_minimum');
+SELECT pg_temp.doit_echouer('admin déjà désactivé',
+    $q$SELECT creatura_desactiver_admin('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1')$q$,
+    'ck_desactivation_cible');
+SELECT pg_temp.doit_echouer('admin désactivé non choisissable comme validateur',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+       '00000000-0000-0000-0000-0000000000a3', ARRAY['00000000-0000-0000-0000-00000000000b']::uuid[])$q$,
+    'ck_demande_suppression_valideur_actif');
+SELECT pg_temp.doit_echouer('un admin désactivé ne fait plus de demande',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a3',
+       '00000000-0000-0000-0000-0000000000a1', ARRAY['00000000-0000-0000-0000-00000000000b']::uuid[])$q$,
+    'ck_demande_suppression_demandeur');
+
+-- Compte supprimé par son titulaire (anonymisé, 09_evolution_gestion_compte.sql) : ignoré
+UPDATE utilisateur SET supprime_le = now() WHERE identifiant = 'test_b';
+SELECT pg_temp.doit_echouer('joueur ayant supprimé son compte non demandable',
+    $q$SELECT creatura_demander_suppression('00000000-0000-0000-0000-0000000000a1',
+       '00000000-0000-0000-0000-0000000000a2', ARRAY['00000000-0000-0000-0000-00000000000b']::uuid[])$q$,
+    'ck_demande_suppression_joueurs');
+UPDATE utilisateur SET supprime_le = now() WHERE id = '00000000-0000-0000-0000-0000000000a2';
+DO $$ BEGIN
+    ASSERT NOT creatura_admin_actif('00000000-0000-0000-0000-0000000000a2'),
+        'KO  un admin ayant supprimé son compte n''est plus actif';
+    RAISE NOTICE 'OK  admin ayant supprimé son compte : plus actif';
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- reinitialisation_mdp (12_evolution_reinitialisation_mdp.sql)
+-- ---------------------------------------------------------------------------
+INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash, cree_par)
+VALUES ('00000000-0000-0000-0000-00000000000a', repeat('a', 64), '00000000-0000-0000-0000-0000000000a1');
+DO $$ BEGIN
+    ASSERT (SELECT expire_le - cree_le FROM reinitialisation_mdp WHERE jeton_hash = repeat('a', 64))
+           = interval '5 minutes', 'KO  lien valable 5 minutes par défaut';
+    RAISE NOTICE 'OK  lien de réinitialisation créé, valable 5 minutes';
+END $$;
+SELECT pg_temp.doit_echouer('un seul lien en cours par joueur',
+    $q$INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash)
+       VALUES ('00000000-0000-0000-0000-00000000000a', repeat('b', 64))$q$,
+    'uq_reinitialisation_mdp_en_cours');
+SELECT pg_temp.doit_echouer('empreinte qui n''est pas un SHA-256 refusée',
+    $q$UPDATE reinitialisation_mdp SET jeton_hash = 'jeton-en-clair' WHERE jeton_hash = repeat('a', 64)$q$,
+    'ck_reinitialisation_mdp_hash');
+SELECT pg_temp.doit_echouer('lien utilisé et annulé à la fois refusé',
+    $q$UPDATE reinitialisation_mdp SET utilise_le = now(), annule_le = now() WHERE jeton_hash = repeat('a', 64)$q$,
+    'ck_reinitialisation_mdp_fin');
+SELECT pg_temp.doit_echouer('expiration avant la création refusée',
+    $q$UPDATE reinitialisation_mdp SET expire_le = cree_le - interval '1 minute' WHERE jeton_hash = repeat('a', 64)$q$,
+    'ck_reinitialisation_mdp_expiration');
+DO $$ BEGIN
+    UPDATE reinitialisation_mdp SET annule_le = now() WHERE jeton_hash = repeat('a', 64);
+    INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash)
+    VALUES ('00000000-0000-0000-0000-00000000000a', repeat('b', 64));
+    RAISE NOTICE 'OK  nouveau lien accepté une fois le précédent annulé';
+END $$;
+SELECT pg_temp.doit_echouer('même jeton deux fois refusé',
+    $q$INSERT INTO reinitialisation_mdp (utilisateur_id, jeton_hash, utilise_le)
+       VALUES ('00000000-0000-0000-0000-00000000000a', repeat('b', 64), now())$q$,
+    'uq_reinitialisation_mdp_jeton');
 
 ROLLBACK;
 \echo '>>> Tous les tests du schéma sont passés.'

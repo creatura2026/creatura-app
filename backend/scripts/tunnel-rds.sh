@@ -6,15 +6,20 @@
 #
 # Laisser tourner ; Ctrl+C pour fermer. Si l'infra est recréée, le bastion et l'adresse de la base
 # changent : BASTION_ID=… RDS_HOST=… scripts/tunnel-rds.sh
+#
+# Autre compte AWS (autre base) : donner son profil, il passe avant les clés des .env :
+#   AWS_PROFILE=creatura-equipe BASTION_ID=i-… RDS_HOST=… scripts/tunnel-rds.sh
 set -eu
 cd "$(dirname "$0")/.."
 
-BASTION_ID="${BASTION_ID:-i-0447e279b76d6ee7b}"
-RDS_HOST="${RDS_HOST:-creatura-db-ed4b478a0ca761f756222ce69e.ctm4owqmyomg.eu-north-1.rds.amazonaws.com}"
+BASTION_ID="${BASTION_ID:-i-089d34b2875cacf56}"
+RDS_HOST="${RDS_HOST:-creatura-db-20261113145712393300000001.czmcmo0s2yvz.eu-north-1.rds.amazonaws.com}"
 LOCAL_PORT="${LOCAL_PORT:-15432}"
 
-# Clé AWS du back : celle de .env.rds ou .env si elle y est, sinon la chaîne habituelle (aws configure).
+# Clé AWS : le profil AWS_PROFILE s'il est donné, sinon celle de .env / .env.rds, sinon la chaîne
+# habituelle (aws configure).
 for file in .env .env.rds; do
+  [ -n "${AWS_PROFILE:-}" ] && break
   [ -f "$file" ] || continue
   key=$(sed -n 's/^AWS_ACCESS_KEY_ID=//p' "$file")
   secret=$(sed -n 's/^AWS_SECRET_ACCESS_KEY=//p' "$file")

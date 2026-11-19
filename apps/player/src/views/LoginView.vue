@@ -2,8 +2,8 @@
 /** UC-02 · Se connecter et retrouver son profil. */
 import { ref } from 'vue'
 import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { toTypedSchema } from '@creatura/shared/forms'
 import { useRoute, useRouter } from 'vue-router'
 import { errorMessage } from '@creatura/shared/api/types'
 import FormField from '@creatura/shared/ui/FormField.vue'
@@ -16,11 +16,11 @@ import { useAuthStore } from '@/stores/auth'
 const schema = toTypedSchema(
   z.object({
     login: z
-      .string({ required_error: 'Saisissez votre identifiant.' })
+      .string({ error: 'Saisissez votre identifiant.' })
       .trim()
       .min(1, 'Saisissez votre identifiant.'),
     password: z
-      .string({ required_error: 'Saisissez votre mot de passe.' })
+      .string({ error: 'Saisissez votre mot de passe.' })
       .min(1, 'Saisissez votre mot de passe.'),
   }),
 )
@@ -35,7 +35,11 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const formError = ref<string | null>(
-  route.query.expired ? 'Votre session a expiré, reconnectez-vous.' : null,
+  route.query.expired === 'idle'
+    ? `Vous avez été déconnecté après ${route.query.minutes ?? '20'} min sans activité. Reconnectez-vous.`
+    : route.query.expired
+      ? 'Votre session a expiré, reconnectez-vous.'
+      : null,
 )
 
 const onSubmit = handleSubmit(async (values) => {
