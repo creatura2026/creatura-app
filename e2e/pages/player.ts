@@ -26,6 +26,10 @@ export class LandingPage {
 export class PlayerLoginPage extends LoginForm {
   async goto(query = '') {
     await this.page.goto(`/connexion${query}`)
+    // En dev, Vite compile les modules à la demande : on attend que le formulaire soit hydraté
+    // avant d'interagir. Sans ça, un envoi trop précoce contourne la validation Vue et le test est
+    // flaky en local (la CI, en build + retries, ne le voit pas).
+    await this.submit.waitFor({ state: 'visible' })
   }
 }
 
