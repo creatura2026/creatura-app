@@ -264,6 +264,19 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
+  # Interrupteur des tests e2e : la variable de dépôt SKIP_E2E=true désactive les jobs
+  # e2e-mock et e2e-stack (Settings → Secrets and variables → Actions → Variables).
+  # Ce job ne sert qu'à le signaler dans l'exécution, pour éviter un skip silencieux.
+  # ---------------------------------------------------------------------------
+  e2e-skip-notice:
+    name: E2E désactivés (SKIP_E2E)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && vars.SKIP_E2E == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "::notice title=Tests e2e désactivés::vars.SKIP_E2E=true — les jobs e2e-mock et e2e-stack sont sautés pour cette exécution."
+
+  # ---------------------------------------------------------------------------
   # Tests de bout en bout (e2e/) : site joueur et dashboard admin sur l'API
   # simulée. PR : Chromium. Push : Chromium, Firefox, WebKit et mobile.
   # Stratégie et scénarios : docs/tests/README.md
@@ -271,7 +284,7 @@ jobs:
   e2e-mock:
     name: E2E (API simulée)
     needs: detect
-    # Variable de dépôt SKIP_E2E=true pour désactiver tous les tests e2e (mock + stack).
+    # SKIP_E2E=true désactive ce job (voir e2e-skip-notice). La synthèse tolère l'état « skipped ».
     if: needs.detect.outputs.frontend == 'true' && vars.SKIP_E2E != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30

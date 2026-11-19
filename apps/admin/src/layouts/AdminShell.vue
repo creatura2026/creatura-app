@@ -53,7 +53,13 @@ const linkTo = (name: string) => ({ name, query: { du: route.query.du, au: route
     <header
       class="sticky top-0 z-30 flex h-14 items-center justify-between border-b-2 border-ink bg-ink px-4 text-cream lg:hidden"
     >
-      <BrandMark tone="light" />
+      <!-- Repère du contexte admin visible dès le haut de l'écran mobile (la nav est repliée). -->
+      <span class="flex min-w-0 items-center gap-2">
+        <BrandMark tone="light" />
+        <span class="truncate font-pixel text-[0.65rem] tracking-widest text-sun uppercase">
+          Administration
+        </span>
+      </span>
       <button
         type="button"
         class="flex size-11 cursor-pointer items-center justify-center border-2 border-cream/50"
