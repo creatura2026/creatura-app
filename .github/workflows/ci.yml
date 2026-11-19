@@ -552,7 +552,7 @@ jobs:
   e2e-mobile:
     name: E2E (application Android)
     needs: detect
-    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request'
+    if: needs.detect.outputs.frontend == 'true' && github.event_name != 'pull_request' && vars.SKIP_E2E != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
