@@ -11,7 +11,7 @@
  */
 import { test as base, expect } from '@playwright/test'
 
-import { expectAccessible } from './a11y.ts'
+import { expectAccessible, expectNoSpecCodes } from './a11y.ts'
 import { admins, type Account, type AdminName } from './accounts.ts'
 import {
   AccountPage,
@@ -87,7 +87,10 @@ export const test = base.extend<AdminFixtures>({
   },
 
   checkA11y: async ({ page }, use) => {
-    await use((options) => expectAccessible(page, options))
+    await use(async (options) => {
+      await expectAccessible(page, options)
+      await expectNoSpecCodes(page)
+    })
   },
 })
 

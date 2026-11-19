@@ -29,3 +29,12 @@ export async function expectAccessible(page: Page, options: { exclude?: string[]
 
   expect(blocking, `Violations d'accessibilité sur ${page.url()}`).toEqual([])
 }
+
+/**
+ * Aucune référence de spécification (« UC-12 », « AS-71 ») dans le texte affiché : ces codes
+ * servent au suivi du projet, pas aux joueurs ni aux administrateurs.
+ */
+export async function expectNoSpecCodes(page: Page) {
+  const text = await page.locator('body').innerText()
+  expect(text.match(/\b(?:UC|AS)-\d{1,3}\b/g) ?? [], `Codes de spécification sur ${page.url()}`).toEqual([])
+}

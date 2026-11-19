@@ -108,7 +108,6 @@ const maxGap = computed(() =>
               </tr>
             </tbody>
           </table>
-          <p class="mt-3 text-xs text-ink/80">Probabilités théoriques à valider au point client.</p>
         </div>
       </div>
     </AsyncState>

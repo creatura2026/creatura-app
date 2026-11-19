@@ -12,7 +12,7 @@
  */
 import { test as base, expect } from '@playwright/test'
 
-import { expectAccessible } from './a11y.ts'
+import { expectAccessible, expectNoSpecCodes } from './a11y.ts'
 import { players, type PlayerName } from './accounts.ts'
 import {
   BoosterPage,
@@ -93,7 +93,10 @@ export const test = base.extend<PlayerFixtures>({
   },
 
   checkA11y: async ({ page }, use) => {
-    await use((options) => expectAccessible(page, options))
+    await use(async (options) => {
+      await expectAccessible(page, options)
+      await expectNoSpecCodes(page)
+    })
   },
 })
 
