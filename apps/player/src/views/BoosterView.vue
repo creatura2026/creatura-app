@@ -287,7 +287,6 @@ async function keepFocus() {
     !active || active === document.body || (active instanceof HTMLButtonElement && active.disabled)
   if (!lost) return
   const next =
-    panel.value?.querySelector<HTMLElement>('[data-send-card]') ??
     grid.value?.querySelector<HTMLElement>('button:not(:disabled)') ??
     panel.value?.querySelector<HTMLElement>('[data-after-reveal]')
   next?.focus({ preventScroll: true })
@@ -379,7 +378,6 @@ const remaining = computed(() =>
                       v-for="(card, i) in booster.cards"
                       :key="`${booster.id}-${i}`"
                       class="booster-card"
-                      :class="{ 'pointer-events-none': revealedTop && i === flipped }"
                       :data-card-index="i"
                       :style="cardStyle(i)"
                     >
@@ -390,9 +388,10 @@ const remaining = computed(() =>
                           :intro="!bursting"
                           :compact="table.card.value.compact"
                           :revealed="!opened || i < flipped || (i === flipped && revealedTop)"
-                          :interactive="settled && !revealedTop && i === flipped"
+                          :interactive="settled && i === flipped"
                           :glow="settled && !revealedTop && i === flipped"
                           @reveal="reveal(i)"
+                          @send="sendToMat"
                         />
                       </div>
                     </li>
@@ -403,16 +402,7 @@ const remaining = computed(() =>
 
               <div class="flex shrink-0 flex-wrap justify-center gap-3">
                 <button
-                  v-if="revealedTop"
-                  type="button"
-                  class="btn btn-primary bg-white"
-                  data-send-card
-                  @click="sendToMat"
-                >
-                  Envoyer la carte sur le tapis
-                </button>
-                <button
-                  v-else-if="!allRevealed"
+                  v-if="!allRevealed"
                   type="button"
                   class="btn btn-primary bg-white"
                   @click="revealAll"
