@@ -855,7 +855,16 @@ jobs:
   release:
     name: Release et déploiement develop
     needs: [db, backend, frontend, images]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # On livre dès que le build est prêt, même si les e2e sont sautés (SKIP_E2E) ou ignorés : le
+    # `!cancelled()` retire le success() implicite, puis on exige seulement les jobs qui produisent
+    # la release (base, back, front, images).
+    if: >-
+      ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop'
+      && !cancelled()
+      && needs.db.result == 'success'
+      && needs.backend.result == 'success'
+      && needs.frontend.result == 'success'
+      && needs.images.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
