@@ -111,6 +111,7 @@ const pseudo = computed(() => me.value?.pseudo ?? auth.user?.pseudo ?? '')
         CREATURA — Projet d’intégration DLTQ 2026<template v-if="USE_MOCK_API">
           · Données fictives (API simulée)</template
         >
+        · <RouterLink to="/mentions-legales" class="underline">Mentions légales</RouterLink>
       </p>
     </footer>
 
