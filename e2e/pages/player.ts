@@ -75,18 +75,18 @@ export class HomePage {
 export class BoosterPage {
   readonly openButton: Locator
   readonly revealAll: Locator
+  readonly sendCard: Locator
   readonly cards: Locator
   readonly toCollection: Locator
   readonly nextBooster: Locator
-  readonly rates: Locator
 
   constructor(readonly page: Page) {
     this.openButton = page.getByRole('button', { name: 'Ouvrir sans déchirer' })
     this.revealAll = page.getByRole('button', { name: 'Tout révéler' })
+    this.sendCard = page.getByRole('button', { name: 'Envoyer la carte sur le tapis' })
     this.cards = page.getByRole('list', { name: 'Cartes du booster' }).getByRole('listitem')
     this.toCollection = page.getByRole('link', { name: 'Voir ma collection' })
     this.nextBooster = page.getByText(/Prochain booster dans /)
-    this.rates = page.getByRole('region', { name: 'Chance réelle par carte' }).getByRole('listitem')
   }
 
   async goto() {
@@ -95,9 +95,9 @@ export class BoosterPage {
 
   /** Ouvre le booster du jour (« Ouvrir sans déchirer ») : la pile est prête à révéler. */
   async open() {
-    // La mise en page bouge au chargement (probabilités, hauteur du cadre) : on attend qu'elle soit
-    // en place, sinon le clic peut tomber à côté du bouton.
-    await expect(this.rates).toHaveCount(4)
+    // La mise en page bouge au chargement (hauteur du cadre) : on attend que le bouton soit en
+    // place, sinon le clic peut tomber à côté.
+    await expect(this.openButton).toBeVisible()
     await expect(async () => {
       // Pendant une ouverture le bouton est désactivé : on ne reclique que si le clic précédent
       // n'a rien lancé (un second clic serait refusé : booster déjà ouvert).

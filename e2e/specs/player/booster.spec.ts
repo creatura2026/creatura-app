@@ -30,7 +30,6 @@ test.describe('booster du jour (P-04)', () => {
   }) => {
     await signIn('dresseur')
     await boosterPage.goto()
-    await expect(boosterPage.rates).toHaveCount(4)
     await expect(boosterPage.toCollection).toBeHidden()
 
     // Note, dans l'ordre, ce que l'écran affiche entre le clic et la pile à révéler.
@@ -52,6 +51,27 @@ test.describe('booster du jour (P-04)', () => {
     await boosterPage.open()
 
     await expect(page.locator('body')).toHaveAttribute('data-seen', 'pile')
+  })
+
+  test('le joueur retourne une carte puis choisit de l’envoyer sur le tapis', async ({
+    page,
+    signIn,
+    boosterPage,
+  }) => {
+    await signIn('dresseur')
+    await boosterPage.goto()
+    await boosterPage.open()
+
+    await expect(page.getByRole('heading', { name: 'Chance réelle par carte' })).toHaveCount(0)
+    const firstCard = boosterPage.cards.nth(0).locator('button')
+    await firstCard.click()
+
+    await expect(boosterPage.sendCard).toBeVisible()
+    await expect(firstCard).toHaveClass(/rotate-y-180/)
+    await boosterPage.sendCard.click()
+
+    await expect(boosterPage.sendCard).toBeHidden()
+    await expect(page.getByRole('button', { name: /^Retourner la carte 2,/ })).toBeEnabled()
   })
 
   test('un second booster est refusé le même jour', async ({ page, signIn, homePage, boosterPage }) => {
