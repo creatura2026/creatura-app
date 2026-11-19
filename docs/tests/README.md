@@ -476,7 +476,7 @@ Le test sur un vrai téléphone reste en recette manuelle (§ 17).
 
 | Domaine | Ce qu'on vérifie | Outil | Quand |
 |---|---|---|---|
-| Accessibilité | Aucune violation grave (WCAG 2.1 A et AA) sur chaque écran du site et du dashboard (`accessibilite.spec.ts`) | `@axe-core/playwright` | à chaque E2E simulé |
+| Accessibilité | Aucune violation grave (WCAG 2.1 A et AA) sur chaque écran du site et du dashboard (`accessibilite.spec.ts`), sous Chromium et WebKit : sous Firefox, l'analyse axe fait planter l'onglet sur les écrans chargés de cartes (booster, salle d'échange), un plantage du navigateur ; son résultat ne dépend pas du moteur | `@axe-core/playwright` | à chaque E2E simulé |
 | Compatibilité | Chromium, Firefox, WebKit ; viewports téléphone et tablette | Playwright | push sur `develop` |
 | Performance | 40 joueurs (connexion, accueil, catalogue, collection, booster) et 10 salles d'échange en WebSocket pendant 2 min ; seuils : < 1 % d'erreurs, 95 % des requêtes < 500 ms, entrée dans une salle < 1 s | k6 (`e2e/load/charge.js`) | nuit |
 | Performance front (à faire) | Poids des bundles, score Lighthouse de l'accueil | Lighthouse CI | — |
